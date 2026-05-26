@@ -793,6 +793,19 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   table td.hide-mobile {
     display: none !important;
   }
+
+  /* 手機版隱藏 AI 深度解讀的「即將推出」佔位按鈕跟說明文字,保留「顯示 AI 解讀資料」 */
+  .ai-deep .ai-btn-placeholder,
+  .ai-deep .note {
+    display: none !important;
+  }
+  /* 邊框與淡色背景一起拿掉,單獨保留按鈕看起來才不孤單 */
+  .ai-deep {
+    border: none;
+    background: transparent;
+    padding: 8px 0;
+    margin: 12px 0;
+  }
 }
 
 /* ============================================================
