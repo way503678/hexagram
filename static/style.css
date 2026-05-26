@@ -751,6 +751,48 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     margin: 20px 0 10px;
     text-align: center;
   }
+
+  /* ============================================================
+     管理頁 - 命盤清單(history_detail)手機版調整
+     ============================================================ */
+  /* 隱藏刪除欄(整欄消失,避免誤觸) */
+  table.history-table th.del-col,
+  table.history-table td.del-col {
+    display: none !important;
+  }
+
+  /* 動作欄:排盤 / 流年 改成換行排版,拿掉分隔線與箭頭 */
+  table.history-table td.action-cell {
+    padding: 8px 6px;
+  }
+  table.history-table td.action-cell .action-btn {
+    display: block;
+    padding: 8px 4px;
+    margin: 2px 0;
+    color: #a8281f;
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px dotted #d4bf8a;
+  }
+  table.history-table td.action-cell .action-btn:last-child {
+    border-bottom: none;
+  }
+  table.history-table td.action-cell .action-btn:hover {
+    background: rgba(168, 40, 31, 0.06);
+  }
+  /* 隱藏分隔符與箭頭 */
+  table.history-table td.action-cell .action-sep,
+  table.history-table td.action-cell .action-arrow {
+    display: none;
+  }
+
+  /* ============================================================
+     流年頁 - 流年總覽表隱藏「對流年生剋/合沖」兩欄
+     ============================================================ */
+  table th.hide-mobile,
+  table td.hide-mobile {
+    display: none !important;
+  }
 }
 
 /* ============================================================
