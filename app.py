@@ -6,6 +6,7 @@
   /                  首頁(landing page)
   /cast              時辰起卦(梅花易數)
   /manual            手動排卦(金錢卦/搖卦結果)
+  /manual/ai_prompt  手動排卦 AI 解讀 prompt 組裝(管理員專用,POST)
   /admin/login       管理員登入
   /admin/logout      登出
   /admin/history     管理:姓名清單
@@ -20,7 +21,7 @@ from datetime import datetime, timezone, timedelta
 
 from flask import (
     Flask, request, render_template, session, redirect, url_for, abort,
-    Response,
+    Response, jsonify,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -50,19 +51,56 @@ _ADMIN_PASSWORD_PLAIN = os.environ.get("ADMIN_PASSWORD", "admin")
 _ADMIN_PASSWORD_HASH = generate_password_hash(_ADMIN_PASSWORD_PLAIN)
 
 
+# ============================================================
+# AI 解讀 prompt 載入(啟動時讀進記憶體)
+# ============================================================
+def _load_manual_prompt():
+    """讀取手動排卦 AI 解讀 prompt v1。
+
+    從 docs/AI_INTERPRETER_MANUAL_PROMPT_v1.md 中擷取
+    「===== PROMPT 開始 =====」到「===== PROMPT 結束 =====」之間的純 prompt 內容。
+    """
+    candidates = [
+        os.path.join(os.path.dirname(__file__), "docs",
+                     "AI_INTERPRETER_MANUAL_PROMPT_v1.md"),
+        "/app/docs/AI_INTERPRETER_MANUAL_PROMPT_v1.md",
+    ]
+    for path in candidates:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                full = f.read()
+            start_marker = "===== PROMPT 開始 ====="
+            end_marker = "===== PROMPT 結束 ====="
+            si = full.find(start_marker)
+            ei = full.find(end_marker)
+            if si >= 0 and ei > si:
+                # 取兩個 marker「之間」的內容(含前一行 marker、不含後一行 marker)
+                core = full[si + len(start_marker): ei].strip()
+                return core
+            # 沒有 marker 就回傳整檔
+            return full.strip()
+        except Exception as e:
+            print(f"[AI prompt] 讀取失敗 {path}: {e}")
+    return None
+
+
+_MANUAL_AI_PROMPT = _load_manual_prompt()
+if _MANUAL_AI_PROMPT is None:
+    print("[AI prompt] 警告:找不到 docs/AI_INTERPRETER_MANUAL_PROMPT_v1.md,"
+          "AI 解讀功能會回傳 500。")
+
+
 def _now_utc_iso():
     """目前 UTC 時間的 ISO 字串(可序列化進 session)。"""
     return datetime.now(timezone.utc).isoformat()
 
 
 def _is_session_expired():
-    """檢查管理員 session 是否已逾時(超過 ADMIN_IDLE_TIMEOUT_MINUTES 未活動)。
-
-    回傳 True 代表已逾時,呼叫端應清掉 session 並要求重新登入。
-    """
+    """檢查管理員 session 是否已逾時(超過 ADMIN_IDLE_TIMEOUT_MINUTES 未活動)。"""
     last_iso = session.get("last_active")
     if not last_iso:
-        # 沒有 last_active(舊版 session)→ 視為逾時,強制重登
         return True
     try:
         last_dt = datetime.fromisoformat(last_iso)
@@ -73,16 +111,14 @@ def _is_session_expired():
 
 
 def login_required(view):
-    """裝飾器:要求已登入,並檢查 15 分鐘 idle timeout。"""
+    """裝飾器:要求已登入,並檢查 idle timeout。"""
     @wraps(view)
     def wrapper(*a, **kw):
         if not session.get("is_admin"):
             return redirect(url_for("admin_login", next=request.path))
-        # 檢查 idle timeout
         if _is_session_expired():
             session.clear()
             return redirect(url_for("admin_login", next=request.path, timeout=1))
-        # 滑動式更新:每次有活動就刷新 last_active
         session["last_active"] = _now_utc_iso()
         return view(*a, **kw)
     return wrapper
@@ -233,6 +269,105 @@ def manual():
         default_d=default_d, default_h=default_h,
         error=error,
     )
+
+
+# ============================================================
+# 公開(僅管理員):手動排卦 AI 解讀 prompt 組裝
+# ============================================================
+@app.route("/manual/ai_prompt", methods=["POST"])
+@login_required
+def manual_ai_prompt():
+    """組裝手動排卦 AI 解讀完整 prompt(prompt 系統指示 + 所問之事 + 卦象 JSON)。
+
+    POST body(JSON):
+      - question: 所問之事(必填)
+      - y, m, d, h: 排盤年月日時
+      - y0~y5: 六爻
+      - gender, aspect: 性別與問事類別
+
+    回傳 JSON:
+      - prompt: 完整 prompt 字串(可直接複製貼到 AI)
+      - error: 若有錯誤訊息
+    """
+    if _MANUAL_AI_PROMPT is None:
+        return jsonify({"error": "伺服器未載入 prompt 檔案,請聯絡管理員"}), 500
+
+    data = request.get_json(silent=True) or {}
+    question = (data.get("question") or "").strip()
+    if not question:
+        return jsonify({"error": "請輸入所問之事"}), 400
+    if len(question) > 500:
+        return jsonify({"error": "所問之事超過 500 字"}), 400
+
+    # 解析卦象參數
+    try:
+        y_i = int(data.get("y") or datetime.now().year)
+        m_i = int(data.get("m") or datetime.now().month)
+        d_i = int(data.get("d") or datetime.now().day)
+        h_i = int(data.get("h") or datetime.now().hour)
+    except (TypeError, ValueError):
+        return jsonify({"error": "日期時間格式錯誤"}), 400
+
+    yao_vals = data.get("yao_vals") or []
+    if len(yao_vals) != 6:
+        return jsonify({"error": "需要 6 個爻的資料"}), 400
+
+    try:
+        lines = []
+        moving = []
+        for i, v in enumerate(yao_vals):
+            parts = str(v).split(",")
+            if len(parts) != 2:
+                raise ValueError(f"第{i+1}爻格式錯誤:{v}")
+            lines.append(int(parts[0]))
+            moving.append(int(parts[1]))
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": f"爻格式錯誤:{e}"}), 400
+
+    gender = (data.get("gender") or "").strip().upper()
+    if gender not in ("M", "F"):
+        gender = ""
+    aspect = (data.get("aspect") or "all").strip().lower()
+    if aspect not in ("all", "love", "health", "work", "wealth"):
+        aspect = "all"
+
+    # 重新跑排盤,確保資料一致
+    try:
+        dt_obj = datetime(y_i, m_i, d_i, h_i, 0)
+        chart = cast_hexagram_manual(lines, moving, dt_obj)
+        aspects = analyze_chart_aspects(
+            chart, dt_obj,
+            gender=gender or None,
+            aspect_choice=aspect,
+        )
+    except Exception as e:
+        return jsonify({"error": f"排盤失敗:{type(e).__name__}: {e}"}), 500
+
+    # 組 JSON payload
+    chart_payload = {
+        "schema_version": 1,
+        "排盤時間": f"{y_i:04d}-{m_i:02d}-{d_i:02d} {h_i:02d}:00",
+        "性別": gender or None,
+        "問事類別": aspect,
+        "卦象": chart,
+        "四面向判讀": aspects,
+    }
+    chart_json_str = json.dumps(chart_payload, ensure_ascii=False, indent=2)
+
+    # 組完整 prompt
+    full_prompt = (
+        _MANUAL_AI_PROMPT
+        + "\n\n---\n\n"
+        + "【所問之事】\n"
+        + question
+        + "\n\n"
+        + "【卦象 JSON】\n"
+        + "```json\n"
+        + chart_json_str
+        + "\n```\n"
+    )
+
+    return jsonify({"prompt": full_prompt})
 
 
 # ============================================================
