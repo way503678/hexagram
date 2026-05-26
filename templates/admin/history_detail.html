@@ -29,10 +29,10 @@
         </td>
         <td>{{ ch.query_count }}</td>
         <td>{{ ch.created_at.strftime('%Y-%m-%d %H:%M') if ch.created_at else '' }}</td>
-        <td>
-          <a href="/cast?y={{ ch.year }}&m={{ ch.month }}&d={{ ch.day }}&h={{ ch.hour }}&name={{ ch.name|urlencode }}&view=1">排盤 →</a>
-          &nbsp;｜&nbsp;
-          <a href="/admin/history/{{ detail_name|urlencode }}/fortune?y={{ ch.year }}&m={{ ch.month }}&d={{ ch.day }}&h={{ ch.hour }}">流年 →</a>
+        <td class="action-cell">
+          <a class="action-btn" href="/cast?y={{ ch.year }}&m={{ ch.month }}&d={{ ch.day }}&h={{ ch.hour }}&name={{ ch.name|urlencode }}&view=1">排盤 <span class="action-arrow">→</span></a>
+          <span class="action-sep">&nbsp;｜&nbsp;</span>
+          <a class="action-btn" href="/admin/history/{{ detail_name|urlencode }}/fortune?y={{ ch.year }}&m={{ ch.month }}&d={{ ch.day }}&h={{ ch.hour }}">流年 <span class="action-arrow">→</span></a>
         </td>
         <td class="del-col">
           <form method="post"
