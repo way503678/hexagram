@@ -4,7 +4,7 @@
 {% block content %}
 <h1>手動排卦</h1>
 
-<form method="get" action="/manual">
+<form method="get" action="/manual" id="manualForm">
   <div class="dt-field" style="margin-bottom: 10px;">
     <span class="field">
       <input class="y" type="number" name="y" value="{{ y or default_y }}" min="1900" max="2100"> 年
@@ -24,18 +24,63 @@
     </span>
   </div>
 
-  <div class="yao-input">
-    {% for i in [5, 4, 3, 2, 1, 0] %}
-      {% set name = ['初','二','三','四','五','上'][i] %}
-      <label>{{ name }}爻</label>
-      <select name="y{{ i }}">
-        <option value="1,0" {% if yao_vals[i] == '1,0' %}selected{% endif %}>───　少陽(不動)</option>
-        <option value="0,0" {% if yao_vals[i] == '0,0' %}selected{% endif %}>─ ─　少陰(不動)</option>
-        <option value="1,1" {% if yao_vals[i] == '1,1' %}selected{% endif %}>─O─　老陽(動,變陰)</option>
-        <option value="0,1" {% if yao_vals[i] == '0,1' %}selected{% endif %}>─X─　老陰(動,變陽)</option>
-      </select>
-    {% endfor %}
+  {# ---- Tab 切換 ---- #}
+  <div class="mode-tabs">
+    <button type="button" class="mode-tab active" data-mode="coin">🪙 擲卦模式</button>
+    <button type="button" class="mode-tab" data-mode="manual">▼ 下拉模式</button>
   </div>
+
+  {# ---- 擲卦模式 ---- #}
+  <div class="mode-panel" id="panelCoin">
+    <div class="coin-instructions">
+      畫面由上到下依序為「上爻 → 初爻」。點下方按鈕擲銅板,依序填入。
+    </div>
+    <div class="coin-yao-list">
+      {# slot 0 在最上 = 上爻(y5);slot 5 在最下 = 初爻(y0) #}
+      {% for slot in range(6) %}
+        {% set ypos = 5 - slot %}
+        {% set ypos_name = ['初','二','三','四','五','上'][ypos] %}
+        <div class="coin-yao-row" data-slot="{{ slot }}" data-ypos="{{ ypos }}">
+          <span class="coin-yao-label">{{ ypos_name }}爻</span>
+          <span class="coin-display">
+            <span class="coin">?</span>
+            <span class="coin">?</span>
+            <span class="coin">?</span>
+          </span>
+          <span class="coin-symbol">—</span>
+          <span class="coin-name">未擲</span>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="coin-controls">
+      <button type="button" id="btnCast" class="coin-btn">擲第 1 爻(上爻)</button>
+      <button type="button" id="btnReset" class="coin-btn coin-btn-reset" style="display:none;">重新擲卦</button>
+    </div>
+    <div class="coin-legend">
+      三銅板:背 = 陽 / 字 = 陰　｜　三背 = 老陽(動) ｜ 三字 = 老陰(動) ｜ 兩背一字 = 少陽 ｜ 兩字一背 = 少陰
+    </div>
+  </div>
+
+  {# ---- 下拉模式 ---- #}
+  <div class="mode-panel" id="panelManual" style="display:none;">
+    <div class="yao-input">
+      {% for i in [5, 4, 3, 2, 1, 0] %}
+        {% set name = ['初','二','三','四','五','上'][i] %}
+        <label>{{ name }}爻</label>
+        <select data-ypos="{{ i }}" class="manual-select">
+          <option value="1,0" {% if yao_vals[i] == '1,0' %}selected{% endif %}>───　少陽(不動)</option>
+          <option value="0,0" {% if yao_vals[i] == '0,0' %}selected{% endif %}>─ ─　少陰(不動)</option>
+          <option value="1,1" {% if yao_vals[i] == '1,1' %}selected{% endif %}>─O─　老陽(動,變陰)</option>
+          <option value="0,1" {% if yao_vals[i] == '0,1' %}selected{% endif %}>─X─　老陰(動,變陽)</option>
+        </select>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ---- 真正送到後端的 hidden:y0~y5 ---- #}
+  {% for i in range(6) %}
+    <input type="hidden" name="y{{ i }}" id="hidden_y{{ i }}" value="{{ yao_vals[i] }}">
+  {% endfor %}
 
   {# ---- 性別 ---- #}
   <div class="manual-options" style="margin-top: 12px;">
@@ -146,4 +191,139 @@
     </div>
   {% endif %}
 {% endif %}
+
+<script>
+(function(){
+  // ---------- Tab 切換 ----------
+  var tabs = document.querySelectorAll('.mode-tab');
+  var panels = {
+    coin: document.getElementById('panelCoin'),
+    manual: document.getElementById('panelManual')
+  };
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){
+      tabs.forEach(function(x){ x.classList.remove('active'); });
+      this.classList.add('active');
+      var mode = this.dataset.mode;
+      Object.keys(panels).forEach(function(k){
+        panels[k].style.display = (k === mode) ? '' : 'none';
+      });
+    });
+  });
+
+  // ---------- 共用 hidden 同步 ----------
+  function setHidden(ypos, val) {
+    document.getElementById('hidden_y' + ypos).value = val;
+  }
+
+  // ---------- 下拉模式 ----------
+  document.querySelectorAll('.manual-select').forEach(function(sel){
+    sel.addEventListener('change', function(){
+      setHidden(this.dataset.ypos, this.value);
+    });
+  });
+
+  // ---------- 擲卦模式 ----------
+  // 金錢卦三銅板:每銅板背=陽(50%)、字=陰(50%)
+  // 三背 = 老陽動(1,1) / 兩背一字 = 少陽(1,0) / 兩字一背 = 少陰(0,0) / 三字 = 老陰動(0,1)
+  function tossOneCoin() {
+    return Math.random() < 0.5 ? 0 : 1;  // 0=字(陰), 1=背(陽)
+  }
+  function castOneYao() {
+    var coins = [tossOneCoin(), tossOneCoin(), tossOneCoin()];
+    var yang = coins[0] + coins[1] + coins[2];
+    var val, symbol, name;
+    if (yang === 0)      { val = '0,1'; symbol = '─ X ─'; name = '老陰(動)'; }
+    else if (yang === 1) { val = '1,0'; symbol = '─────'; name = '少陽';      }
+    else if (yang === 2) { val = '0,0'; symbol = '── ──'; name = '少陰';      }
+    else                 { val = '1,1'; symbol = '─ O ─'; name = '老陽(動)'; }
+    return { coins: coins, val: val, symbol: symbol, name: name };
+  }
+
+  var currentSlot = 0;
+  var btnCast = document.getElementById('btnCast');
+  var btnReset = document.getElementById('btnReset');
+  var yposNames = ['初','二','三','四','五','上'];
+
+  function updateCastButtonLabel() {
+    if (currentSlot >= 6) {
+      btnCast.style.display = 'none';
+      btnReset.style.display = '';
+      return;
+    }
+    var ypos = 5 - currentSlot;
+    btnCast.textContent = '擲第 ' + (currentSlot + 1) + ' 爻(' + yposNames[ypos] + '爻)';
+  }
+
+  function animateCoin(coinEl, finalValue, delay) {
+    return new Promise(function(resolve){
+      coinEl.classList.add('coin-flipping');
+      var flips = 0;
+      var interval = setInterval(function(){
+        coinEl.textContent = Math.random() < 0.5 ? '背' : '字';
+        flips++;
+        if (flips >= 6) {
+          clearInterval(interval);
+          coinEl.classList.remove('coin-flipping');
+          coinEl.textContent = finalValue === 1 ? '背' : '字';
+          coinEl.classList.add(finalValue === 1 ? 'coin-yang' : 'coin-yin');
+          resolve();
+        }
+      }, 60 + delay);
+    });
+  }
+
+  btnCast.addEventListener('click', function(){
+    if (currentSlot >= 6) return;
+    btnCast.disabled = true;
+    var slot = currentSlot;
+    var ypos = 5 - slot;
+    var row = document.querySelector('.coin-yao-row[data-slot="' + slot + '"]');
+    var coinEls = row.querySelectorAll('.coin');
+    coinEls.forEach(function(c){
+      c.classList.remove('coin-yang','coin-yin');
+      c.textContent = '?';
+    });
+    var result = castOneYao();
+    Promise.all([
+      animateCoin(coinEls[0], result.coins[0], 0),
+      animateCoin(coinEls[1], result.coins[1], 30),
+      animateCoin(coinEls[2], result.coins[2], 60)
+    ]).then(function(){
+      row.querySelector('.coin-symbol').textContent = result.symbol;
+      row.querySelector('.coin-name').textContent = result.name;
+      row.classList.add('coin-yao-done');
+      if (result.val === '1,1' || result.val === '0,1') {
+        row.classList.add('coin-yao-moving');
+      }
+      setHidden(ypos, result.val);
+      currentSlot++;
+      btnCast.disabled = false;
+      updateCastButtonLabel();
+    });
+  });
+
+  btnReset.addEventListener('click', function(){
+    currentSlot = 0;
+    document.querySelectorAll('.coin-yao-row').forEach(function(row){
+      row.classList.remove('coin-yao-done','coin-yao-moving');
+      row.querySelectorAll('.coin').forEach(function(c){
+        c.classList.remove('coin-yang','coin-yin');
+        c.textContent = '?';
+      });
+      row.querySelector('.coin-symbol').textContent = '—';
+      row.querySelector('.coin-name').textContent = '未擲';
+    });
+    // 重置 hidden 為預設少陽不動
+    for (var i = 0; i < 6; i++) {
+      setHidden(i, '1,0');
+    }
+    btnReset.style.display = 'none';
+    btnCast.style.display = '';
+    updateCastButtonLabel();
+  });
+
+  updateCastButtonLabel();
+})();
+</script>
 {% endblock %}
