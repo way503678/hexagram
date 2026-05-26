@@ -23,7 +23,7 @@ https://raw.githubusercontent.com/way503678/hexagram/main/fortune_engine.py
 
 ---
 
-## 全檔清單(38 個檔)
+## 全檔清單(39 個檔)
 
 ### Python 核心(根目錄,7 檔)
 
@@ -86,6 +86,12 @@ https://raw.githubusercontent.com/way503678/hexagram/main/fortune_engine.py
 | 檔案 | raw URL |
 |---|---|
 | style.css | https://raw.githubusercontent.com/way503678/hexagram/main/static/style.css |
+
+### 文件 docs/(1 檔,新增 2026-05-26)
+
+| 檔案 | raw URL |
+|---|---|
+| AI_INTERPRETER_MANUAL_PROMPT_v1.md(手動排卦 AI 解讀 prompt) | https://raw.githubusercontent.com/way503678/hexagram/main/docs/AI_INTERPRETER_MANUAL_PROMPT_v1.md |
 
 ### 部署相關(根目錄,8 檔)
 
@@ -171,37 +177,13 @@ https://raw.githubusercontent.com/way503678/hexagram/main/divination/core/yongsh
 https://raw.githubusercontent.com/way503678/hexagram/main/fortune_engine.py
 ```
 
-### 全檔(大改動 / 大重構時)
+### 改手動排卦 AI 解讀
 
 ```
-全檔給你:
-https://raw.githubusercontent.com/way503678/hexagram/main/app.py
-https://raw.githubusercontent.com/way503678/hexagram/main/db.py
-https://raw.githubusercontent.com/way503678/hexagram/main/core_data.py
-https://raw.githubusercontent.com/way503678/hexagram/main/hexagram_data.py
-https://raw.githubusercontent.com/way503678/hexagram/main/hexagram_engine.py
-https://raw.githubusercontent.com/way503678/hexagram/main/fortune_data.py
-https://raw.githubusercontent.com/way503678/hexagram/main/fortune_engine.py
-https://raw.githubusercontent.com/way503678/hexagram/main/divination/aspects/health.py
-https://raw.githubusercontent.com/way503678/hexagram/main/divination/aspects/love.py
-https://raw.githubusercontent.com/way503678/hexagram/main/divination/aspects/wealth.py
-https://raw.githubusercontent.com/way503678/hexagram/main/divination/aspects/work.py
-https://raw.githubusercontent.com/way503678/hexagram/main/divination/core/elements.py
-https://raw.githubusercontent.com/way503678/hexagram/main/divination/core/hidden.py
-https://raw.githubusercontent.com/way503678/hexagram/main/divination/core/signals.py
-https://raw.githubusercontent.com/way503678/hexagram/main/divination/core/traits.py
-https://raw.githubusercontent.com/way503678/hexagram/main/divination/core/trigger.py
-https://raw.githubusercontent.com/way503678/hexagram/main/divination/core/yongshen.py
-https://raw.githubusercontent.com/way503678/hexagram/main/static/style.css
-https://raw.githubusercontent.com/way503678/hexagram/main/templates/base.html
-https://raw.githubusercontent.com/way503678/hexagram/main/templates/landing.html
-https://raw.githubusercontent.com/way503678/hexagram/main/templates/cast.html
+來改手動排卦 AI 解讀:
+https://raw.githubusercontent.com/way503678/hexagram/main/docs/AI_INTERPRETER_MANUAL_PROMPT_v1.md
 https://raw.githubusercontent.com/way503678/hexagram/main/templates/manual.html
-https://raw.githubusercontent.com/way503678/hexagram/main/templates/_hexagram_table.html
-https://raw.githubusercontent.com/way503678/hexagram/main/templates/admin/login.html
-https://raw.githubusercontent.com/way503678/hexagram/main/templates/admin/history_list.html
-https://raw.githubusercontent.com/way503678/hexagram/main/templates/admin/history_detail.html
-https://raw.githubusercontent.com/way503678/hexagram/main/templates/admin/fortune.html
+https://raw.githubusercontent.com/way503678/hexagram/main/app.py
 ```
 
 ---
@@ -235,3 +217,4 @@ https://raw.githubusercontent.com/way503678/hexagram/main/templates/admin/fortun
 ---
 
 *產生於 2026-05-26,當新增/刪除檔案時請手動更新此檔。*
+*最後更新:2026-05-26 加入 docs/ 目錄與手動排卦 AI 解讀檔案。*
