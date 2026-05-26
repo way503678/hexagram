@@ -629,25 +629,9 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     color: #a8281f;
     font-weight: 700;
   }
-  /* 動爻最左邊(在 RTL 是視覺最右邊)六神格,加印章感 */
   table.hex-table tr.dong td:first-child {
-    position: relative;
     color: #a8281f;
     font-weight: 600;
-  }
-  table.hex-table tr.dong td:first-child::before {
-    content: '動';
-    position: absolute;
-    top: 50%;
-    left: 2px;
-    transform: translateY(-50%);
-    font-size: 9px;
-    background: #a8281f;
-    color: #fff;
-    padding: 1px 3px;
-    border-radius: 1px;
-    letter-spacing: 0;
-    line-height: 1;
   }
 
   /* 世 / 應 - 印章感小標籤 */
