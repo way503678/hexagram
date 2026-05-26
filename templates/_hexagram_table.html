@@ -22,32 +22,39 @@
 </div>
 
 {% set h_data = r['本卦'] %}
-<h2>本卦:{{ h_data['卦名'] }}({{ h_data['卦宮'] }}宮・{{ h_data['卦變'] }}・世爻五行 {{ h_data['世爻五行'] }})</h2>
-<div class="guaci">卦辭:{{ h_data['卦辭'] }}</div>
+<div class="hex-title">
+  <span class="hex-stamp">本卦</span>
+  <span class="hex-name">{{ h_data['卦名'] }}</span>
+  <div class="hex-sub">{{ h_data['卦宮'] }}宮　·　{{ h_data['卦變'] }}　·　世爻五行 {{ h_data['世爻五行'] }}</div>
+</div>
+<div class="guaci">卦辭　{{ h_data['卦辭'] }}</div>
 
-<table>
-  <tr>
-    <th>六神</th><th>爻象</th><th>干支</th><th>世應</th><th>六親</th><th>神煞</th>
-    <th class="narrow">動爻<br>干支</th>
-    <th class="narrow">動爻<br>六親</th>
-    <th class="fushen">伏神</th>
-  </tr>
-  {% for row in h_data['爻']|reverse %}
-    <tr class="{% if row['動爻'] %}dong{% endif %}">
-      <td>{{ row['六神'] }}</td>
-      <td class="yao">{{ row['爻象'] }}</td>
-      <td>{{ row['干支'] }}</td>
-      <td>
-        {% if row['世'] %}<span class="shi">世</span>{% endif %}
-        {% if row['應'] %}<span class="ying">應</span>{% endif %}
-      </td>
-      <td>{{ row['六親'] }}</td>
-      <td>{{ shen_span(row['神煞']) }}</td>
-      <td class="narrow">{% if row['動爻'] and row.get('動爻出去干支') %}{{ row['動爻出去干支'] }}{% endif %}</td>
-      <td class="narrow">{% if row['動爻'] and row.get('動爻出去六親') %}{{ row['動爻出去六親'] }}{% endif %}</td>
-      <td class="fushen">
-        {% for f in row['伏神'] %}<div>{{ f['六親'] }}{{ f['地支'] }}</div>{% endfor %}
-      </td>
+<div class="hex-table-wrap">
+  <table class="hex-table">
+    <tr>
+      <th>六神</th><th>爻象</th><th>干支</th><th>世應</th><th>六親</th><th>神煞</th>
+      <th class="narrow">動爻<br>干支</th>
+      <th class="narrow">動爻<br>六親</th>
+      <th class="fushen">伏神</th>
     </tr>
-  {% endfor %}
-</table>
+    {% for row in h_data['爻']|reverse %}
+      <tr class="{% if row['動爻'] %}dong{% endif %}">
+        <td>{{ row['六神'] }}</td>
+        <td class="yao">{{ row['爻象'] }}</td>
+        <td>{{ row['干支'] }}</td>
+        <td>
+          {% if row['世'] %}<span class="shi">世</span>{% endif %}
+          {% if row['應'] %}<span class="ying">應</span>{% endif %}
+        </td>
+        <td>{{ row['六親'] }}</td>
+        <td>{{ shen_span(row['神煞']) }}</td>
+        <td class="narrow">{% if row['動爻'] and row.get('動爻出去干支') %}{{ row['動爻出去干支'] }}{% endif %}</td>
+        <td class="narrow">{% if row['動爻'] and row.get('動爻出去六親') %}{{ row['動爻出去六親'] }}{% endif %}</td>
+        <td class="fushen">
+          {% for f in row['伏神'] %}<div>{{ f['六親'] }}{{ f['地支'] }}</div>{% endfor %}
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+  <div class="hex-scroll-hint">← 左右滑動可看完整資訊 →</div>
+</div>
