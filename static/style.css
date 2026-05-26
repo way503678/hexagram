@@ -1,5 +1,5 @@
 /* ================================================
-   手動排卦：擲卦模式 UI(Tab + 銅板 + 爻列)
+   手動排卦：擲卦模式 UI(Tab + 爻列)
    貼到 style.css 最後即可
    ================================================ */
 
@@ -62,14 +62,18 @@
 }
 .coin-yao-row {
   display: grid;
-  grid-template-columns: 3.5em 130px 1fr 6em;
+  grid-template-columns: 3.5em 1fr 6em;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: #fafaf4;
   border: 1px solid #e5e0d0;
   border-radius: 5px;
   transition: background 0.2s, border-color 0.2s;
+}
+.coin-yao-row.coin-yao-rolling {
+  background: #f5f0e0;
+  border-color: #c4a060;
 }
 .coin-yao-row.coin-yao-done {
   background: #fff;
@@ -84,50 +88,17 @@
   color: #555;
   text-align: right;
 }
-.coin-yao-row.coin-yao-done .coin-yao-label { color: #8b0000; }
-
-.coin-display {
-  display: inline-flex;
-  gap: 6px;
-}
-.coin {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #efe8d4;
-  color: #999;
-  font-size: 16px;
-  font-weight: bold;
-  border: 2px solid #c4a060;
-  transition: transform 0.06s, background 0.2s, color 0.2s;
-  font-family: "Songti TC", "Source Han Serif TC", "Noto Serif TC", serif;
-}
-.coin.coin-flipping {
-  transform: rotateY(180deg);
-}
-.coin.coin-yang {
-  background: linear-gradient(135deg, #d4a040 0%, #b8861e 100%);
-  color: #fff;
-  border-color: #8b6818;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-}
-.coin.coin-yin {
-  background: linear-gradient(135deg, #888 0%, #555 100%);
-  color: #fff;
-  border-color: #333;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-}
+.coin-yao-row.coin-yao-done .coin-yao-label,
+.coin-yao-row.coin-yao-moving .coin-yao-label { color: #8b0000; }
 
 .coin-symbol {
   font-family: monospace;
-  font-size: 20px;
+  font-size: 22px;
   color: #333;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
   text-align: center;
 }
+.coin-yao-row.coin-yao-rolling .coin-symbol { color: #999; }
 .coin-yao-row.coin-yao-moving .coin-symbol { color: #c87000; font-weight: bold; }
 
 .coin-name {
@@ -141,7 +112,7 @@
 .coin-controls {
   display: flex;
   justify-content: center;
-  margin: 12px 0 8px;
+  margin: 12px 0 4px;
 }
 .coin-btn {
   background: #8b0000;
@@ -157,18 +128,8 @@
 }
 .coin-btn:hover { background: #a00; }
 .coin-btn:disabled { background: #aaa; cursor: not-allowed; }
-.coin-btn-reset {
-  background: #6a5a3a;
-}
+.coin-btn-reset { background: #6a5a3a; }
 .coin-btn-reset:hover { background: #8a7a4a; }
-
-.coin-legend {
-  font-size: 12px;
-  color: #999;
-  text-align: center;
-  margin-top: 8px;
-  line-height: 1.6;
-}
 
 /* 手機版 */
 @media (max-width: 768px) {
@@ -176,29 +137,11 @@
   .coin-instructions { font-size: 16px; }
   .coin-yao-row {
     grid-template-columns: 3em 1fr;
-    grid-template-rows: auto auto;
-    gap: 6px 10px;
-    padding: 10px;
+    gap: 10px;
+    padding: 12px 14px;
   }
-  .coin-yao-label {
-    grid-row: 1 / span 2;
-    align-self: center;
-    font-size: 18px;
-  }
-  .coin-display {
-    grid-column: 2;
-    grid-row: 1;
-  }
-  .coin { width: 40px; height: 40px; font-size: 18px; }
-  .coin-symbol {
-    grid-column: 2;
-    grid-row: 2;
-    text-align: left;
-    font-size: 20px;
-  }
-  .coin-name {
-    display: none;  /* 手機版省空間,只看符號 */
-  }
+  .coin-yao-label { font-size: 18px; }
+  .coin-symbol { font-size: 24px; }
+  .coin-name { display: none; }
   .coin-btn { font-size: 18px; padding: 12px 24px; width: 100%; }
-  .coin-legend { font-size: 14px; }
 }
