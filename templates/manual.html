@@ -183,6 +183,238 @@
       </div>
     </div>
   {% endif %}
+
+  {# ---- AI 解讀按鈕(管理員專用)---- #}
+  {% if session.get('is_admin') %}
+    <div class="ai-deep">
+      <button type="button" class="ai-btn export-btn" id="manual-ai-btn">
+        🤖 AI 解讀此卦
+      </button>
+      <span class="note">輸入所問之事,產生完整 prompt 複製給 AI 解讀</span>
+    </div>
+  {% endif %}
+{% endif %}
+
+{# ---- AI 解讀 Modal(管理員專用)---- #}
+{% if r and session.get('is_admin') %}
+<div id="manual-ai-modal" class="ai-modal" style="display:none;">
+  <div class="ai-modal-content">
+    <div class="ai-modal-header">
+      <span id="manual-ai-modal-title">AI 解讀 — 輸入所問之事</span>
+      <button type="button" class="ai-modal-close" id="manual-ai-modal-close">✕</button>
+    </div>
+
+    {# 階段一:輸入問事 #}
+    <div class="ai-modal-body" id="manual-ai-stage-input">
+      <div style="width:100%;">
+        <label for="manual-ai-question" style="display:block; margin-bottom:6px; font-weight:600;">
+          所問之事(請描述你想問什麼):
+        </label>
+        <textarea id="manual-ai-question"
+                  placeholder="例如:我下週的面試會順利嗎?"
+                  maxlength="500"
+                  style="width:100%; min-height:120px; padding:10px;
+                         font-size:15px; border:1px solid #ddd;
+                         border-radius:4px; resize:vertical;
+                         box-sizing:border-box;"></textarea>
+        <div style="font-size:12px; color:#999; margin-top:4px;">
+          上限 500 字,儘量具體描述
+        </div>
+      </div>
+    </div>
+
+    {# 階段二:顯示 prompt #}
+    <div class="ai-modal-body" id="manual-ai-stage-output" style="display:none;">
+      <textarea id="manual-ai-output" readonly
+                style="width:100%; min-height:400px;
+                       font-family:'Consolas','Monaco',monospace;
+                       font-size:12px; padding:10px;
+                       border:1px solid #ddd; border-radius:4px;
+                       resize:vertical; box-sizing:border-box;"></textarea>
+    </div>
+
+    <div class="ai-modal-footer">
+      {# 階段一:產生按鈕 #}
+      <button type="button" class="ai-btn export-btn"
+              id="manual-ai-generate-btn"
+              style="margin-left:0;">
+        產生 Prompt
+      </button>
+      {# 階段二:複製 + 關閉 #}
+      <button type="button" class="ai-btn export-btn"
+              id="manual-ai-copy-btn"
+              style="margin-left:0; display:none;">
+        📋 複製到剪貼簿
+      </button>
+      <button type="button" class="ai-btn"
+              id="manual-ai-close-btn"
+              style="background:#888; cursor:pointer; opacity:1;
+                     margin-left:10px; display:none;">
+        關閉
+      </button>
+      <span id="manual-ai-status" class="note"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var openBtn = document.getElementById('manual-ai-btn');
+  var modal = document.getElementById('manual-ai-modal');
+  if (!openBtn || !modal) return;
+
+  var titleEl = document.getElementById('manual-ai-modal-title');
+  var stageInput = document.getElementById('manual-ai-stage-input');
+  var stageOutput = document.getElementById('manual-ai-stage-output');
+  var questionEl = document.getElementById('manual-ai-question');
+  var outputEl = document.getElementById('manual-ai-output');
+  var generateBtn = document.getElementById('manual-ai-generate-btn');
+  var copyBtn = document.getElementById('manual-ai-copy-btn');
+  var closeBtn = document.getElementById('manual-ai-close-btn');
+  var closeXBtn = document.getElementById('manual-ai-modal-close');
+  var statusEl = document.getElementById('manual-ai-status');
+
+  function resetToInputStage() {
+    titleEl.textContent = 'AI 解讀 — 輸入所問之事';
+    stageInput.style.display = '';
+    stageOutput.style.display = 'none';
+    generateBtn.style.display = '';
+    generateBtn.disabled = false;
+    generateBtn.textContent = '產生 Prompt';
+    copyBtn.style.display = 'none';
+    closeBtn.style.display = 'none';
+    statusEl.textContent = '';
+  }
+
+  function closeModal() {
+    modal.style.display = 'none';
+    resetToInputStage();
+  }
+
+  openBtn.addEventListener('click', function() {
+    resetToInputStage();
+    modal.style.display = 'flex';
+    setTimeout(function(){ questionEl.focus(); }, 50);
+  });
+
+  closeXBtn.addEventListener('click', closeModal);
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) closeModal();
+  });
+
+  generateBtn.addEventListener('click', function() {
+    var question = (questionEl.value || '').trim();
+    if (!question) {
+      statusEl.textContent = '請先輸入所問之事';
+      statusEl.style.color = '#a02020';
+      questionEl.focus();
+      return;
+    }
+    if (question.length > 500) {
+      statusEl.textContent = '所問之事超過 500 字';
+      statusEl.style.color = '#a02020';
+      return;
+    }
+    statusEl.textContent = '';
+    generateBtn.disabled = true;
+    generateBtn.textContent = '⏳ 產生中...';
+
+    // 從 hidden 取得六爻
+    var yaoVals = [];
+    for (var i = 0; i < 6; i++) {
+      var el = document.getElementById('hidden_y' + i);
+      yaoVals.push(el ? el.value : '1,0');
+    }
+    // 從 form 取得其他欄位
+    function getVal(name) {
+      var el = document.querySelector('[name="' + name + '"]');
+      return el ? el.value : '';
+    }
+    function getRadio(name) {
+      var els = document.querySelectorAll('[name="' + name + '"]');
+      for (var i = 0; i < els.length; i++) {
+        if (els[i].checked) return els[i].value;
+      }
+      return '';
+    }
+
+    var payload = {
+      question: question,
+      y: getVal('y'),
+      m: getVal('m'),
+      d: getVal('d'),
+      h: getVal('h'),
+      yao_vals: yaoVals,
+      gender: getRadio('gender'),
+      aspect: getRadio('aspect') || 'all'
+    };
+
+    fetch('/manual/ai_prompt', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    })
+    .then(function(res) {
+      return res.json().then(function(data){
+        return { ok: res.ok, data: data };
+      });
+    })
+    .then(function(r) {
+      if (!r.ok || r.data.error) {
+        throw new Error(r.data.error || ('HTTP ' + r.ok));
+      }
+      // 切到階段二
+      titleEl.textContent = 'AI 解讀 Prompt(複製貼到 ChatGPT / Claude / Gemini)';
+      stageInput.style.display = 'none';
+      stageOutput.style.display = '';
+      outputEl.value = r.data.prompt;
+      generateBtn.style.display = 'none';
+      copyBtn.style.display = '';
+      closeBtn.style.display = '';
+      statusEl.textContent = '';
+    })
+    .catch(function(err) {
+      statusEl.textContent = '產生失敗:' + err.message;
+      statusEl.style.color = '#a02020';
+      generateBtn.disabled = false;
+      generateBtn.textContent = '產生 Prompt';
+    });
+  });
+
+  copyBtn.addEventListener('click', function() {
+    outputEl.select();
+    var copied = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(outputEl.value).then(function() {
+          statusEl.textContent = '✓ 已複製';
+          statusEl.style.color = '#2d7a2d';
+          setTimeout(function(){ statusEl.textContent = ''; }, 2000);
+        });
+        copied = true;
+      }
+    } catch (e) {}
+    if (!copied) {
+      try {
+        var ok = document.execCommand('copy');
+        if (ok) {
+          statusEl.textContent = '✓ 已複製';
+          statusEl.style.color = '#2d7a2d';
+          setTimeout(function(){ statusEl.textContent = ''; }, 2000);
+        } else {
+          statusEl.textContent = '複製失敗,請手動全選';
+          statusEl.style.color = '#a02020';
+        }
+      } catch (e) {
+        statusEl.textContent = '複製失敗,請手動全選';
+        statusEl.style.color = '#a02020';
+      }
+    }
+  });
+})();
+</script>
 {% endif %}
 
 <script>
