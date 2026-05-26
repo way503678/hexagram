@@ -98,7 +98,7 @@
   <table>
     <tr>
       <th>爻</th><th>六神</th><th>世應</th><th>干支</th><th>六親</th>
-      <th>對流年<br>生剋</th><th>對流年<br>合沖</th>
+      <th class="hide-mobile">對流年<br>生剋</th><th class="hide-mobile">對流年<br>合沖</th>
       <th class="narrow">動爻變出<br>干支/六親</th>
       <th class="narrow">變出對流年<br>生剋/合沖</th>
     </tr>
@@ -112,8 +112,8 @@
         </td>
         <td>{{ r['干支'] }}</td>
         <td>{{ r['六親'] }}</td>
-        <td>{{ r['生剋'] }}</td>
-        <td>{% if r['合沖'] %}<b class="ji">{{ r['合沖'] }}</b>{% endif %}</td>
+        <td class="hide-mobile">{{ r['生剋'] }}</td>
+        <td class="hide-mobile">{% if r['合沖'] %}<b class="ji">{{ r['合沖'] }}</b>{% endif %}</td>
         <td class="narrow">
           {% if r['動爻出去'] %}
             {{ r['動爻出去']['干支'] }}<br>{{ r['動爻出去']['六親'] }}
