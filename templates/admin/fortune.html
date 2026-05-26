@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+{% block title %}{{ detail_name }} ・ {{ fortune_year }} 流年 — 命卦排盤{% endblock %}
+
+{% block content %}
+<h1>{{ detail_name }} ・ {{ fortune_year }} 流年</h1>
+<a href="/admin/history/{{ detail_name|urlencode }}" class="back-link">← 回 {{ detail_name }} 的命盤清單</a>
+
+{% if error %}
+  <p class="err">錯誤:{{ error }}</p>
+{% endif %}
+
+{% if fortune %}
+  {# ---- 原命盤摘要 ---- #}
+  <div class="meta">
+    <div>原命盤:{{ fortune['原命盤']['公曆'] }}　農曆:{{ fortune['原命盤']['農曆'] }}
+      {% if chart_gender == 'F' %}　<span class="gender-tag gender-f">♀ 女命</span>
+      {% elif chart_gender == 'M' %}　<span class="gender-tag gender-m">♂ 男命</span>
+      {% else %}　<span class="gender-tag gender-unk">性別未指定</span>
+      {% endif %}
+    </div>
+    <div class="sizhu">
+      {{ fortune['原命盤']['四柱']['年'] }}年・
+      {{ fortune['原命盤']['四柱']['月'] }}月・
+      {{ fortune['原命盤']['四柱']['日'] }}日・
+      {{ fortune['原命盤']['四柱']['時'] }}時
+    </div>
+    <div>
+      本卦:<b>{{ fortune['原命盤']['本卦']['卦名'] }}</b>
+      ({{ fortune['原命盤']['本卦']['卦宮'] }}宮・{{ fortune['原命盤']['本卦']['卦變'] }})
+      {% if fortune['原命盤'].get('變卦卦名') %}
+        　變卦:<b>{{ fortune['原命盤']['變卦卦名'] }}</b>
+      {% endif %}
+    </div>
+    <div>
+      世爻:第{{ fortune['原命盤']['本卦']['世爻index'] + 1 }}爻　
+      {{ fortune['原命盤']['本卦']['世爻地支'] }}({{ fortune['原命盤']['本卦']['世爻五行'] }})　
+      {{ fortune['原命盤']['本卦']['世爻六親'] }}
+    </div>
+  </div>
+
+  {# ---- 卦變總論(本卦/變卦涉及六沖卦或六合卦時才顯示)---- #}
+  {% if fortune['原命盤'].get('卦變總論') %}
+    {% set gc = fortune['原命盤']['卦變總論'] %}
+    <div class="gua-change gua-change-{{ gc['等級'] }}">
+      <div class="gua-change-title">
+        【{{ gc['標題'] }}】
+        {% if gc['本卦類型'] %}本卦為{{ gc['本卦類型'] }}{% endif %}
+        {% if gc['本卦類型'] and gc['變卦類型'] %} → {% endif %}
+        {% if gc['變卦類型'] %}變卦為{{ gc['變卦類型'] }}{% endif %}
+      </div>
+      <div class="gua-change-text">{{ gc['說明'] }}</div>
+    </div>
+  {% endif %}
+
+  {# ---- 年份選擇器 ---- #}
+  <form method="get" action="/admin/history/{{ detail_name|urlencode }}/fortune"
+        style="margin: 14px 0;">
+    <input type="hidden" name="y" value="{{ fortune_chart_args['y'] }}">
+    <input type="hidden" name="m" value="{{ fortune_chart_args['m'] }}">
+    <input type="hidden" name="d" value="{{ fortune_chart_args['d'] }}">
+    <input type="hidden" name="h" value="{{ fortune_chart_args['h'] }}">
+    <span class="field">
+      看流年:
+      <input class="y" type="number" name="year" value="{{ fortune_year }}"
+             min="1900" max="2200">
+    </span>
+    <button type="submit">查詢</button>
+    <span class="note" style="margin-left: 10px;">以立春為界</span>
+  </form>
+
+  {# ---- 流年區塊 ---- #}
+  {% set y = fortune['流年'] %}
+  <h2>流年總覽 ・ {{ y['干支'] }}年(立春 {{ y['立春日'] }} 起)</h2>
+  <div class="meta">
+    <div>太歲干支:<b>{{ y['干支'] }}</b>　五行:{{ y['五行'] }}</div>
+    <div>對世爻:
+      <b>{{ y['對世爻'] }}</b>
+      {% if y['對世爻合沖'] %}　<b class="ji">{{ y['對世爻合沖'] }}</b>{% endif %}
+    </div>
+    {% if y['主導爻'] %}
+      <div>本年當令:
+        {% for r in y['主導爻'] %}
+          <span class="dom-yao">{{ r['爻序名'] }}{{ r['六親'] }}{{ r['地支'] }}({{ r['當值'] }})</span>
+          {%- if not loop.last %}、{% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if y['引動伏神'] %}
+      <div>引動伏神:
+        {% for f in y['引動伏神'] %}
+          <span class="yuan">{{ f['爻序名'] }} {{ f['六親'] }}{{ f['地支'] }}</span>
+          {%- if not loop.last %}、{% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <table>
+    <tr>
+      <th>爻</th><th>六神</th><th>世應</th><th>干支</th><th>六親</th>
+      <th>對流年<br>生剋</th><th>對流年<br>合沖</th>
+      <th class="narrow">動爻變出<br>干支/六親</th>
+      <th class="narrow">變出對流年<br>生剋/合沖</th>
+    </tr>
+    {% for r in y['對六爻']|reverse %}
+      <tr class="{% if r['動爻'] %}dong{% endif %}">
+        <td>{{ r['爻序名'] }}</td>
+        <td>{{ r['六神'] }}</td>
+        <td>
+          {% if r['世'] %}<span class="shi">世</span>{% endif %}
+          {% if r['應'] %}<span class="ying">應</span>{% endif %}
+        </td>
+        <td>{{ r['干支'] }}</td>
+        <td>{{ r['六親'] }}</td>
+        <td>{{ r['生剋'] }}</td>
+        <td>{% if r['合沖'] %}<b class="ji">{{ r['合沖'] }}</b>{% endif %}</td>
+        <td class="narrow">
+          {% if r['動爻出去'] %}
+            {{ r['動爻出去']['干支'] }}<br>{{ r['動爻出去']['六親'] }}
+          {% endif %}
+        </td>
+        <td class="narrow">
+          {% if r['動爻出去'] %}
+            {{ r['動爻出去']['生剋'] }}<br>
+            {% if r['動爻出去']['合沖'] %}<b class="ji">{{ r['動爻出去']['合沖'] }}</b>{% endif %}
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+
+  {# ---- 流年斷語區塊 ---- #}
+  {% if fortune['斷語']['流年'] %}
+    <div class="remark-section">
+      <h3>流年解讀</h3>
+      {% for rm in fortune['斷語']['流年'] %}
+        <div class="remark remark-{{ rm['level'] }}">
+          <span class="remark-tag">{{ rm['level'] }}</span>{{ rm['text'] }}
+          {% if rm['sub'] %}
+            {% for s in rm['sub'] %}
+              <span class="sub">· {{ s }}</span>
+            {% endfor %}
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {# ---- 流年四面向(財運/健康/工作/感情) ---- #}
+  <div class="aspects-section">
+    <h3>流年四面向</h3>
+    <div class="aspects-grid">
+      {% for aspect_name, icon in [('財運','💰'),('健康','🏥'),('工作','💼'),('感情','❤')] %}
+        {% set items = fortune['四面向']['流年'].get(aspect_name, []) %}
+        <div class="aspect-card">
+          <div class="aspect-title">{{ icon }} {{ aspect_name }}</div>
+          {% if items %}
+            {% for rm in items %}
+              <div class="remark remark-{{ rm['level'] }}">
+                <span class="remark-tag">{{ rm['level'] }}</span>{{ rm['text'] }}
+                {% if rm['sub'] %}
+                  {% for s in rm['sub'] %}
+                    <span class="sub">· {{ s }}</span>
+                  {% endfor %}
+                {% endif %}
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="aspect-empty">(無特別事項)</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ---- AI 深度解讀按鈕(佔位,尚未啟用)/ 顯示 AI 資料 ---- #}
+  <div class="ai-deep">
+    <button type="button" class="ai-btn" disabled
+            title="即將推出:以 AI 整合命盤與流年資料,產生個人化深度解讀">
+      🤖 AI 深度解讀(即將推出)
+    </button>
+    {% if fortune_chart_args and fortune_chart_args.get('y') %}
+      <button type="button" class="ai-btn export-btn"
+              id="show-ai-data-btn"
+              data-url="{{ url_for('admin_fortune_export', name=detail_name,
+                                   y=fortune_chart_args['y'], m=fortune_chart_args['m'],
+                                   d=fortune_chart_args['d'], h=fortune_chart_args['h'],
+                                   year=fortune_year) }}"
+              title="顯示本盤的流年+12 流月+四面向訊號 JSON,複製給 AI 解讀測試用">
+        📋 顯示 AI 解讀資料
+      </button>
+    {% endif %}
+    <span class="note">未來可由 AI 整合所有訊號,給出更詳細的個人化分析</span>
+  </div>
+
+  {# ---- AI 資料 Modal ---- #}
+  <div id="ai-data-modal" class="ai-modal" style="display:none;">
+    <div class="ai-modal-content">
+      <div class="ai-modal-header">
+        <span>AI 解讀資料 (JSON)</span>
+        <button type="button" class="ai-modal-close" id="ai-modal-close">✕</button>
+      </div>
+      <div class="ai-modal-body">
+        <textarea id="ai-data-text" readonly></textarea>
+      </div>
+      <div class="ai-modal-footer">
+        <button type="button" class="ai-btn export-btn" id="ai-copy-btn">📋 複製到剪貼簿</button>
+        <span id="ai-copy-status" class="note"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var btn = document.getElementById('show-ai-data-btn');
+    var modal = document.getElementById('ai-data-modal');
+    var closeBtn = document.getElementById('ai-modal-close');
+    var textarea = document.getElementById('ai-data-text');
+    var copyBtn = document.getElementById('ai-copy-btn');
+    var status = document.getElementById('ai-copy-status');
+    if (!btn) return;
+
+    btn.addEventListener('click', function() {
+      var url = btn.getAttribute('data-url');
+      btn.disabled = true;
+      btn.textContent = '⏳ 載入中...';
+      fetch(url, {credentials: 'same-origin'})
+        .then(function(res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.text();
+        })
+        .then(function(text) {
+          textarea.value = text;
+          modal.style.display = 'flex';
+          status.textContent = '';
+          btn.disabled = false;
+          btn.textContent = '📋 顯示 AI 解讀資料';
+        })
+        .catch(function(err) {
+          alert('載入失敗:' + err.message);
+          btn.disabled = false;
+          btn.textContent = '📋 顯示 AI 解讀資料';
+        });
+    });
+
+    closeBtn.addEventListener('click', function() {
+      modal.style.display = 'none';
+    });
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) modal.style.display = 'none';
+    });
+
+    copyBtn.addEventListener('click', function() {
+      textarea.select();
+      try {
+        var ok = document.execCommand('copy');
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(textarea.value).then(function() {
+            status.textContent = '✓ 已複製';
+            setTimeout(function() { status.textContent = ''; }, 2000);
+          });
+        } else if (ok) {
+          status.textContent = '✓ 已複製';
+          setTimeout(function() { status.textContent = ''; }, 2000);
+        } else {
+          status.textContent = '複製失敗,請手動全選';
+        }
+      } catch (e) {
+        status.textContent = '複製失敗,請手動全選';
+      }
+    });
+  })();
+  </script>
+
+  {# ---- 流月區塊(預設折疊,點開展開)---- #}
+  <h2>流月(12 個月)</h2>
+  <div class="note">點月份名稱可展開/收合該月詳細分析。</div>
+
+  {% for m in fortune['流月'] %}
+    <details class="flow-month">
+      <summary>
+        <b>{{ m['月名'] }}({{ m['節氣'] }} {{ m['起始'] }})</b>
+        　{{ m['干支'] }}　
+        對世爻:<b>{{ m['對世爻'] }}</b>{% if m['對世爻合沖'] %}　<b class="ji">{{ m['對世爻合沖'] }}</b>{% endif %}
+        {% if m['主導爻'] %}
+          　|　當令:
+          {% for r in m['主導爻'] -%}
+            <span class="dom-yao">{{ r['六親'] }}{{ r['地支'] }}({{ r['當值'] }})</span>
+            {%- if not loop.last %}、{% endif %}
+          {%- endfor %}
+        {% endif %}
+        {% if m['引動伏神'] %}
+          　|　引動:
+          {% for f in m['引動伏神'] -%}
+            <span class="yuan">{{ f['六親'] }}{{ f['地支'] }}({{ f['爻序名'] }})</span>
+            {%- if not loop.last %}、{% endif %}
+          {%- endfor %}
+        {% endif %}
+      </summary>
+      <table>
+        <tr>
+          <th>爻</th><th>六神</th><th>世應</th><th>干支</th><th>六親</th>
+          <th>對流月<br>生剋</th><th>對流月<br>合沖</th>
+          <th class="narrow">動爻變出<br>干支/六親</th>
+          <th class="narrow">變出對流月<br>生剋/合沖</th>
+        </tr>
+        {% for r in m['對六爻']|reverse %}
+          <tr class="{% if r['動爻'] %}dong{% endif %}">
+            <td>{{ r['爻序名'] }}</td>
+            <td>{{ r['六神'] }}</td>
+            <td>
+              {% if r['世'] %}<span class="shi">世</span>{% endif %}
+              {% if r['應'] %}<span class="ying">應</span>{% endif %}
+            </td>
+            <td>{{ r['干支'] }}</td>
+            <td>{{ r['六親'] }}</td>
+            <td>{{ r['生剋'] }}</td>
+            <td>{% if r['合沖'] %}<b class="ji">{{ r['合沖'] }}</b>{% endif %}</td>
+            <td class="narrow">
+              {% if r['動爻出去'] %}
+                {{ r['動爻出去']['干支'] }}<br>{{ r['動爻出去']['六親'] }}
+              {% endif %}
+            </td>
+            <td class="narrow">
+              {% if r['動爻出去'] %}
+                {{ r['動爻出去']['生剋'] }}<br>
+                {% if r['動爻出去']['合沖'] %}<b class="ji">{{ r['動爻出去']['合沖'] }}</b>{% endif %}
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </table>
+      {% set mrs = fortune['斷語']['流月'].get(m['月名'], []) %}
+      {% if mrs %}
+        <div class="remark-section">
+          {% for rm in mrs %}
+            <div class="remark remark-{{ rm['level'] }}">
+              <span class="remark-tag">{{ rm['level'] }}</span>{{ rm['text'] }}
+              {% if rm['sub'] %}
+                {% for s in rm['sub'] %}
+                  <span class="sub">· {{ s }}</span>
+                {% endfor %}
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {# ---- 該月四面向 ---- #}
+      <div class="aspects-section">
+        <div class="aspects-grid">
+          {% for aspect_name, icon in [('財運','💰'),('健康','🏥'),('工作','💼'),('感情','❤')] %}
+            {% set items = fortune['四面向']['流月'].get(m['月名'], {}).get(aspect_name, []) %}
+            <div class="aspect-card">
+              <div class="aspect-title">{{ icon }} {{ aspect_name }}</div>
+              {% if items %}
+                {% for rm in items %}
+                  <div class="remark remark-{{ rm['level'] }}">
+                    <span class="remark-tag">{{ rm['level'] }}</span>{{ rm['text'] }}
+                    {% if rm['sub'] %}
+                      {% for s in rm['sub'] %}
+                        <span class="sub">· {{ s }}</span>
+                      {% endfor %}
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="aspect-empty">(無特別事項)</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </details>
+  {% endfor %}
+{% endif %}
+{% endblock %}

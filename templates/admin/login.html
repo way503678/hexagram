@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}管理員登入 — 命卦排盤{% endblock %}
+
+{% block content %}
+<h1>管理員登入</h1>
+<form method="post" action="/admin/login" class="login-form">
+  <input type="hidden" name="next" value="{{ next_url or '/admin/history' }}">
+  <input type="password" name="password" placeholder="輸入管理員密碼" required autofocus>
+  <button type="submit">登入</button>
+  {% if error %}<p class="err" style="margin-top: 10px;">{{ error }}</p>{% endif %}
+</form>
+{% endblock %}

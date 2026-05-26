@@ -1,0 +1,22 @@
+# 機密檔案,絕對不能進 GitHub
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+
+# 編輯器
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 部署相關(本機/伺服器才需要)
+deploy.sh.local
+
+# 日誌
+*.log

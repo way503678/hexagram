@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}歷史紀錄 — 命卦排盤{% endblock %}
+
+{% block content %}
+<h1>歷史紀錄 — 姓名清單</h1>
+<div class="note">共 {{ clients|length }} 位查詢者。點姓名查看該人所有命盤。</div>
+{% if clients %}
+  <table class="history-table">
+    <tr>
+      <th>姓名</th>
+      <th>命盤數</th>
+      <th>總查詢次數</th>
+      <th>最後查詢時間</th>
+    </tr>
+    {% for c in clients %}
+      <tr>
+        <td><a href="/admin/history/{{ c.name|urlencode }}">{{ c.name }}</a></td>
+        <td>{{ c.unique_charts }}</td>
+        <td>{{ c.total_queries }}</td>
+        <td>{{ c.last_query.strftime('%Y-%m-%d %H:%M') if c.last_query else '' }}</td>
+      </tr>
+    {% endfor %}
+  </table>
+{% else %}
+  <p>目前沒有任何紀錄。</p>
+{% endif %}
+{% endblock %}

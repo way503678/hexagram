@@ -1,0 +1,36 @@
+services:
+  hexagram:
+    build: .
+    image: hexagram:latest
+    container_name: hexagram
+    restart: unless-stopped
+    ports:
+      # 主機:容器   想改用其他主機 port 只改左邊，例如 "80:8080"
+      - "8080:8080"
+    environment:
+      TZ: Asia/Taipei
+      # PostgreSQL 連線資訊（連到外部既有的 postgres 容器）
+      PG_HOST: postgres
+      PG_PORT: "5432"
+      PG_USER: postgres
+      PG_PASSWORD: postgres
+      PG_DATABASE: hexagram
+      DB_ENABLED: "1"
+      # 管理員密碼（部署時請改成自己的）
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin}"
+      # Flask session 簽章用的金鑰（部署時請改成自己的）
+      SECRET_KEY: "${SECRET_KEY:-please-change-me-in-production}"
+    networks:
+      - default          # hexagram 自己的 default network
+      - postgres-net     # 連到 postgres 所在的外部 network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  postgres-net:
+    external: true
+    name: finance-apps_default

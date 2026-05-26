@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ detail_name }} 的命盤紀錄 — 命卦排盤{% endblock %}
+
+{% block content %}
+<h1>{{ detail_name }} 的命盤紀錄</h1>
+<a href="/admin/history" class="back-link">← 回姓名清單</a>
+{% if flash_msg %}
+  <div class="flash flash-{{ flash_kind or 'ok' }}">{{ flash_msg }}</div>
+{% endif %}
+{% if charts %}
+  <div class="note">共 {{ charts|length }} 個命盤。點「排盤」可重新看該命盤的詳細結果。</div>
+  <table class="history-table">
+    <tr>
+      <th>輸入日期時間</th>
+      <th>性別</th>
+      <th>查詢次數</th>
+      <th>最後查詢</th>
+      <th>動作</th>
+      <th class="del-col"></th>
+    </tr>
+    {% for ch in charts %}
+      <tr>
+        <td>{{ ch.year }}-{{ '%02d' % ch.month }}-{{ '%02d' % ch.day }} {{ '%02d' % ch.hour }}:00</td>
+        <td>
+          {% if ch.gender == 'F' %}<span class="gender-tag gender-f">♀</span>
+          {% elif ch.gender == 'M' %}<span class="gender-tag gender-m">♂</span>
+          {% else %}<span class="gender-tag gender-unk">—</span>
+          {% endif %}
+        </td>
+        <td>{{ ch.query_count }}</td>
+        <td>{{ ch.created_at.strftime('%Y-%m-%d %H:%M') if ch.created_at else '' }}</td>
+        <td>
+          <a href="/cast?y={{ ch.year }}&m={{ ch.month }}&d={{ ch.day }}&h={{ ch.hour }}&name={{ ch.name|urlencode }}&view=1">排盤 →</a>
+          &nbsp;｜&nbsp;
+          <a href="/admin/history/{{ detail_name|urlencode }}/fortune?y={{ ch.year }}&m={{ ch.month }}&d={{ ch.day }}&h={{ ch.hour }}">流年 →</a>
+        </td>
+        <td class="del-col">
+          <form method="post"
+                action="/admin/history/{{ detail_name|urlencode }}/delete/{{ ch.id }}"
+                style="display: inline; margin: 0;"
+                onsubmit="return confirm({{ ch.confirm_msg }});">
+            <button type="submit" class="del-btn" title="刪除這筆命盤" aria-label="刪除這筆命盤">🗑</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+{% else %}
+  <p>查無此人的命盤紀錄。</p>
+{% endif %}
+{% endblock %}

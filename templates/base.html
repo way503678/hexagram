@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}命卦排盤{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% block body %}
+  <button class="hamburger" onclick="toggleSidebar()" aria-label="選單">☰</button>
+  <div class="sidebar-backdrop" id="backdrop" onclick="toggleSidebar()"></div>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><a href="/" style="color:inherit;text-decoration:none;">命卦排盤</a></div>
+      <nav>
+        <a href="/cast" class="{% if mode == 'solar' %}active{% endif %}">時辰起卦</a>
+        <a href="/manual" class="{% if mode == 'manual' %}active{% endif %}">手動排卦</a>
+        {% if session.get('is_admin') %}
+          <a href="/admin/history" class="{% if mode.startswith('admin') %}active{% endif %}">歷史紀錄</a>
+        {% endif %}
+      </nav>
+      <div class="auth-area">
+        {% if session.get('is_admin') %}
+          <span class="logged-in">✓ 已登入管理員</span>
+          <a href="/admin/logout">登出</a>
+        {% else %}
+          <a href="/admin/login">管理登入</a>
+        {% endif %}
+      </div>
+    </aside>
+
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <script>
+    function toggleSidebar() {
+      var sb = document.getElementById('sidebar');
+      var bd = document.getElementById('backdrop');
+      sb.classList.toggle('open');
+      bd.classList.toggle('show');
+    }
+  </script>
+{% endblock %}
+</body>
+</html>

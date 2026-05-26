@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}手動排卦 — 命卦排盤{% endblock %}
+
+{% block content %}
+<h1>手動排卦</h1>
+
+<form method="get" action="/manual">
+  <div class="dt-field" style="margin-bottom: 10px;">
+    <span class="field">
+      <input class="y" type="number" name="y" value="{{ y or default_y }}" min="1900" max="2100"> 年
+    </span>
+    <span class="field">
+      <input class="md" type="number" name="m" value="{{ m or default_m }}" min="1" max="12"> 月
+    </span>
+    <span class="field">
+      <input class="md" type="number" name="d" value="{{ d or default_d }}" min="1" max="31"> 日
+    </span>
+    <span class="field">
+      <select class="h" name="h">
+        {% for hv in range(24) %}
+          <option value="{{ hv }}" {% if (h is not none) and (h|int == hv) %}selected{% endif %}>{{ '%02d' % hv }}</option>
+        {% endfor %}
+      </select> 時
+    </span>
+  </div>
+
+  <div class="yao-input">
+    {% for i in [5, 4, 3, 2, 1, 0] %}
+      {% set name = ['初','二','三','四','五','上'][i] %}
+      <label>{{ name }}爻</label>
+      <select name="y{{ i }}">
+        <option value="1,0" {% if yao_vals[i] == '1,0' %}selected{% endif %}>───　少陽(不動)</option>
+        <option value="0,0" {% if yao_vals[i] == '0,0' %}selected{% endif %}>─ ─　少陰(不動)</option>
+        <option value="1,1" {% if yao_vals[i] == '1,1' %}selected{% endif %}>─O─　老陽(動,變陰)</option>
+        <option value="0,1" {% if yao_vals[i] == '0,1' %}selected{% endif %}>─X─　老陰(動,變陽)</option>
+      </select>
+    {% endfor %}
+  </div>
+
+  {# ---- 性別 ---- #}
+  <div class="manual-options" style="margin-top: 12px;">
+    <div class="opt-row">
+      <span class="opt-label">性別：</span>
+      <label class="opt-item">
+        <input type="radio" name="gender" value="" {% if not gender %}checked{% endif %}> 不指定
+      </label>
+      <label class="opt-item">
+        <input type="radio" name="gender" value="M" {% if gender == 'M' %}checked{% endif %}> 男
+      </label>
+      <label class="opt-item">
+        <input type="radio" name="gender" value="F" {% if gender == 'F' %}checked{% endif %}> 女
+      </label>
+    </div>
+
+    {# ---- 問事類別 ---- #}
+    <div class="opt-row">
+      <span class="opt-label">問事類別：</span>
+      <label class="opt-item">
+        <input type="radio" name="aspect" value="all" {% if aspect_choice == 'all' %}checked{% endif %}> 全部
+      </label>
+      <label class="opt-item">
+        <input type="radio" name="aspect" value="love" {% if aspect_choice == 'love' %}checked{% endif %}> 感情
+      </label>
+      <label class="opt-item">
+        <input type="radio" name="aspect" value="health" {% if aspect_choice == 'health' %}checked{% endif %}> 健康
+      </label>
+      <label class="opt-item">
+        <input type="radio" name="aspect" value="work" {% if aspect_choice == 'work' %}checked{% endif %}> 工作
+      </label>
+      <label class="opt-item">
+        <input type="radio" name="aspect" value="wealth" {% if aspect_choice == 'wealth' %}checked{% endif %}> 財運
+      </label>
+    </div>
+  </div>
+
+  <div style="margin-top: 10px;">
+    <button type="submit">排盤</button>
+  </div>
+</form>
+
+{% if error %}<p class="err">錯誤:{{ error }}</p>{% endif %}
+
+{% if r %}
+  {% include "_hexagram_table.html" %}
+
+  {# ---- 變卦結論（卦變總論） ---- #}
+  {% if r['卦變總論'] %}
+    <div class="manual-conclusion">
+      <h3>變卦結論</h3>
+      <div class="conclusion-card conclusion-{{ r['卦變總論']['等級'] }}">
+        <div class="conclusion-title">{{ r['卦變總論']['標題'] }}</div>
+        <div class="conclusion-desc">{{ r['卦變總論']['說明'] }}</div>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ---- 四面向判讀 ---- #}
+  {% if aspects %}
+    <div class="manual-aspects">
+      <h3>四面向判讀</h3>
+      <div class="manual-aspects-meta">
+        當值地支：<strong>{{ aspects['當值地支'] }}</strong>（依日辰）
+        ｜對世爻：{{ aspects['對世爻'] }} / {{ aspects['對世爻合沖'] or '—' }}
+        {% if aspects['主導爻'] %}
+          ｜主導爻：
+          {% for r in aspects['主導爻'] %}
+            {{ r['爻序名'] }}{{ r['六親'] }}({{ r['當值'] }}){% if not loop.last %}、{% endif %}
+          {% endfor %}
+        {% endif %}
+      </div>
+
+      {% if aspects['引動伏神'] %}
+        <div class="manual-aspects-meta">
+          引動伏神：
+          {% for f in aspects['引動伏神'] %}
+            {{ f['爻序名'] }}{{ f['六親'] }}({{ f['地支'] }}){% if not loop.last %}、{% endif %}
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="aspects-grid">
+        {% set aspect_order = [('感情','❤'),('健康','🏥'),('工作','💼'),('財運','💰')] %}
+        {% for aspect_name, icon in aspect_order %}
+          {% if aspect_name in aspects['四面向'] %}
+            {% set items = aspects['四面向'][aspect_name] %}
+            <div class="aspect-card">
+              <div class="aspect-title">{{ icon }} {{ aspect_name }}</div>
+              {% if items %}
+                {% for rm in items %}
+                  <div class="remark remark-{{ rm['level'] }}">
+                    <span class="remark-tag">{{ rm['level'] }}</span>{{ rm['text'] }}
+                    {% if rm['sub'] %}
+                      {% for s in rm['sub'] %}
+                        <span class="sub">· {{ s }}</span>
+                      {% endfor %}
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="aspect-empty">(無特別事項)</div>
+              {% endif %}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+{% endif %}
+{% endblock %}

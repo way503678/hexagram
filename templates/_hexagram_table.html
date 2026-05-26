@@ -1,0 +1,53 @@
+{# 排盤結果表格(本卦)— cast 與 manual 共用 #}
+{# 參數:r = 排盤結果 dict #}
+
+{% macro shen_span(s) -%}
+  {%- if s == '元神' -%}<span class="yuan">元神</span>
+  {%- elif s == '忌神' -%}<span class="ji">忌神</span>
+  {%- elif s == '仇神' -%}<span class="chou">仇神</span>
+  {%- endif -%}
+{%- endmacro %}
+
+<div class="meta">
+  {% if r['公曆'] %}
+    <div>公曆:{{ r['公曆'] }}　　農曆:{{ r['農曆'] }}</div>
+    <div class="sizhu">
+      {{ r['四柱']['年'] }}年・{{ r['四柱']['月'] }}月・{{ r['四柱']['日'] }}日・{{ r['四柱']['時'] }}時
+    </div>
+  {% else %}
+    <div class="sizhu">(未指定日期,未排四柱/六神)</div>
+  {% endif %}
+  <div>動爻:{{ r['動爻']['描述'] }}</div>
+  <div>卦象:<b>{{ r['本卦']['卦名'] }}</b> 之 <b>{{ r['變卦']['卦名'] }}</b></div>
+</div>
+
+{% set h_data = r['本卦'] %}
+<h2>本卦:{{ h_data['卦名'] }}({{ h_data['卦宮'] }}宮・{{ h_data['卦變'] }}・世爻五行 {{ h_data['世爻五行'] }})</h2>
+<div class="guaci">卦辭:{{ h_data['卦辭'] }}</div>
+
+<table>
+  <tr>
+    <th>六神</th><th>爻象</th><th>干支</th><th>世應</th><th>六親</th><th>神煞</th>
+    <th class="narrow">動爻<br>干支</th>
+    <th class="narrow">動爻<br>六親</th>
+    <th class="fushen">伏神</th>
+  </tr>
+  {% for row in h_data['爻']|reverse %}
+    <tr class="{% if row['動爻'] %}dong{% endif %}">
+      <td>{{ row['六神'] }}</td>
+      <td class="yao">{{ row['爻象'] }}</td>
+      <td>{{ row['干支'] }}</td>
+      <td>
+        {% if row['世'] %}<span class="shi">世</span>{% endif %}
+        {% if row['應'] %}<span class="ying">應</span>{% endif %}
+      </td>
+      <td>{{ row['六親'] }}</td>
+      <td>{{ shen_span(row['神煞']) }}</td>
+      <td class="narrow">{% if row['動爻'] and row.get('動爻出去干支') %}{{ row['動爻出去干支'] }}{% endif %}</td>
+      <td class="narrow">{% if row['動爻'] and row.get('動爻出去六親') %}{{ row['動爻出去六親'] }}{% endif %}</td>
+      <td class="fushen">
+        {% for f in row['伏神'] %}<div>{{ f['六親'] }}{{ f['地支'] }}</div>{% endfor %}
+      </td>
+    </tr>
+  {% endfor %}
+</table>

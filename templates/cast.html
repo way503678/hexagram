@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}時辰起卦 — 命卦排盤{% endblock %}
+
+{% block content %}
+<h1>時辰起卦(梅花易數)</h1>
+
+<form method="get" action="/cast">
+  <div style="margin-bottom: 8px;">
+    <span class="field">
+      姓名 <input type="text" name="name" value="{{ client_name or '' }}"
+                   placeholder="必填" required
+                   style="width: 10em; text-align: left; padding: 6px;">
+    </span>
+    <span class="field gender-field">
+      性別
+      <label><input type="radio" name="gender" value="F"
+        {% if (gender or '') == 'F' %}checked{% endif %}>女</label>
+      <label><input type="radio" name="gender" value="M"
+        {% if (gender or '') == 'M' %}checked{% endif %}>男</label>
+    </span>
+  </div>
+  <span class="field">
+    <input class="y" type="number" name="y" value="{{ y or default_y }}" min="1900" max="2100" required> 年
+  </span>
+  <span class="field">
+    <input class="md" type="number" name="m" value="{{ m or default_m }}" min="1" max="12" required> 月
+  </span>
+  <span class="field">
+    <input class="md" type="number" name="d" value="{{ d or default_d }}" min="1" max="31" required> 日
+  </span>
+  <span class="field">
+    <select class="h" name="h" required>
+      {% for hv in range(24) %}
+        <option value="{{ hv }}" {% if (h is not none) and (h|int == hv) %}selected{% endif %}>{{ '%02d' % hv }}</option>
+      {% endfor %}
+    </select> 時
+  </span>
+  <button type="submit">起卦</button>
+  <div class="note">時辰以 00:00 換日(23:00 仍算當天);年月柱以節氣分界。</div>
+</form>
+
+{% if error %}<p class="err">錯誤:{{ error }}</p>{% endif %}
+
+{% if r %}
+  {% include "_hexagram_table.html" %}
+{% endif %}
+{% endblock %}
