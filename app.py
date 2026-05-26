@@ -16,7 +16,7 @@
 import os
 import json
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from flask import (
     Flask, request, render_template, session, redirect, url_for, abort,
@@ -42,17 +42,48 @@ app.config["SECRET_KEY"] = os.environ.get(
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
+# 管理員 idle timeout(分鐘):超過此時間未活動則自動登出
+ADMIN_IDLE_TIMEOUT_MINUTES = int(os.environ.get("ADMIN_IDLE_TIMEOUT_MINUTES", "15"))
+
 # 管理員密碼:以環境變數設定。預設 "admin",部署時務必改掉。
 _ADMIN_PASSWORD_PLAIN = os.environ.get("ADMIN_PASSWORD", "admin")
 _ADMIN_PASSWORD_HASH = generate_password_hash(_ADMIN_PASSWORD_PLAIN)
 
 
+def _now_utc_iso():
+    """目前 UTC 時間的 ISO 字串(可序列化進 session)。"""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _is_session_expired():
+    """檢查管理員 session 是否已逾時(超過 ADMIN_IDLE_TIMEOUT_MINUTES 未活動)。
+
+    回傳 True 代表已逾時,呼叫端應清掉 session 並要求重新登入。
+    """
+    last_iso = session.get("last_active")
+    if not last_iso:
+        # 沒有 last_active(舊版 session)→ 視為逾時,強制重登
+        return True
+    try:
+        last_dt = datetime.fromisoformat(last_iso)
+    except ValueError:
+        return True
+    now = datetime.now(timezone.utc)
+    return (now - last_dt) > timedelta(minutes=ADMIN_IDLE_TIMEOUT_MINUTES)
+
+
 def login_required(view):
-    """裝飾器:要求已登入。否則導去登入頁。"""
+    """裝飾器:要求已登入,並檢查 15 分鐘 idle timeout。"""
     @wraps(view)
     def wrapper(*a, **kw):
         if not session.get("is_admin"):
             return redirect(url_for("admin_login", next=request.path))
+        # 檢查 idle timeout
+        if _is_session_expired():
+            session.clear()
+            return redirect(url_for("admin_login", next=request.path, timeout=1))
+        # 滑動式更新:每次有活動就刷新 last_active
+        session["last_active"] = _now_utc_iso()
         return view(*a, **kw)
     return wrapper
 
@@ -214,6 +245,7 @@ def admin_login():
         if check_password_hash(_ADMIN_PASSWORD_HASH, password):
             session.permanent = False
             session["is_admin"] = True
+            session["last_active"] = _now_utc_iso()
             next_url = request.form.get("next", "/admin/history")
             if not next_url.startswith("/"):
                 next_url = "/admin/history"
@@ -222,15 +254,20 @@ def admin_login():
             "admin/login.html", mode="admin_login", error="密碼不正確"
         )
 
+    # GET:檢查是否從逾時跳轉而來
     next_url = request.args.get("next", "/admin/history")
+    timeout = request.args.get("timeout") == "1"
     return render_template(
-        "admin/login.html", mode="admin_login", next_url=next_url
+        "admin/login.html", mode="admin_login",
+        next_url=next_url,
+        timeout=timeout,
+        timeout_minutes=ADMIN_IDLE_TIMEOUT_MINUTES,
     )
 
 
 @app.route("/admin/logout", methods=["GET"])
 def admin_logout():
-    session.pop("is_admin", None)
+    session.clear()
     return redirect(url_for("landing"))
 
 
