@@ -220,6 +220,11 @@ def manual():
     if aspect not in ("all", "love", "health", "work", "wealth"):
         aspect = "all"
 
+    # 所問之事(管理員先填、擲卦後保留供 AI 解讀使用)
+    question = (_get_field("question", "") or "").strip()
+    if len(question) > 500:
+        question = question[:500]
+
     yao_vals = []
     has_yao_input = False
     for i in range(6):
@@ -273,6 +278,7 @@ def manual():
         aspects=aspects_result,
         gender=gender,
         aspect_choice=aspect,
+        question=question,
         y=y or str(default_y), m=m or str(default_m),
         d=d or str(default_d), h=(h if h != "" else str(default_h)),
         default_y=default_y, default_m=default_m,
