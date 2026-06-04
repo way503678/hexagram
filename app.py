@@ -124,12 +124,19 @@ def login_required(view):
     return wrapper
 
 
+def _get_field(name, default=""):
+    """從 POST form 或 GET query 取單一欄位(POST 優先)。"""
+    if request.method == "POST":
+        return request.form.get(name, default)
+    return request.args.get(name, default)
+
+
 def _parse_dt_args():
-    """從 query string 取年月日時,缺者以現在補齊。"""
-    y = request.args.get("y", "").strip()
-    m = request.args.get("m", "").strip()
-    d = request.args.get("d", "").strip()
-    h = request.args.get("h", "").strip()
+    """從 form/query 取年月日時,缺者以現在補齊。"""
+    y = _get_field("y", "").strip()
+    m = _get_field("m", "").strip()
+    d = _get_field("d", "").strip()
+    h = _get_field("h", "").strip()
     now = datetime.now()
     default_y, default_m, default_d, default_h = now.year, now.month, now.day, now.hour
     return y, m, d, h, default_y, default_m, default_d, default_h
@@ -197,23 +204,26 @@ def cast():
 
 # ============================================================
 # 公開:手動排卦
+# 同時接受 GET / POST:
+#   - POST(表單送出):從 request.form 取參數,網址保持乾淨的 /manual
+#   - GET(直接開頁):從 request.args 取參數,維持向下相容
 # ============================================================
-@app.route("/manual", methods=["GET"])
+@app.route("/manual", methods=["GET", "POST"])
 def manual():
     y, m, d, h, default_y, default_m, default_d, default_h = _parse_dt_args()
 
     # 性別 & 問事類別
-    gender = request.args.get("gender", "").strip().upper()
+    gender = _get_field("gender", "").strip().upper()
     if gender not in ("M", "F"):
         gender = ""
-    aspect = request.args.get("aspect", "all").strip().lower()
+    aspect = _get_field("aspect", "all").strip().lower()
     if aspect not in ("all", "love", "health", "work", "wealth"):
         aspect = "all"
 
     yao_vals = []
     has_yao_input = False
     for i in range(6):
-        v = request.args.get(f"y{i}", "")
+        v = _get_field(f"y{i}", "")
         if v:
             has_yao_input = True
         yao_vals.append(v or "1,0")
