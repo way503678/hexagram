@@ -4,7 +4,7 @@
 {% block content %}
 <h1>手動排卦</h1>
 
-<form method="get" action="/manual" id="manualForm">
+<form method="post" action="/manual" id="manualForm">
   <div class="dt-field" style="margin-bottom: 10px;">
     <span class="field">
       <input class="y" type="number" name="y" value="{{ y or default_y }}" min="1900" max="2100"> 年
@@ -109,6 +109,16 @@
         <input type="radio" name="aspect" value="wealth" {% if aspect_choice == 'wealth' %}checked{% endif %}> 財運
       </label>
     </div>
+
+    {# ---- AI 解讀按鈕(管理員專用,與問事類別同層)---- #}
+    {% if session.get('is_admin') %}
+      <div class="opt-row ai-deep" style="margin-top: 8px;">
+        <button type="button" class="ai-btn export-btn" id="manual-ai-btn">
+          🤖 AI 解讀此卦
+        </button>
+        <span class="note">輸入所問之事,產生完整 prompt 複製給 AI 解讀</span>
+      </div>
+    {% endif %}
   </div>
 
   <div style="margin-top: 10px;">
@@ -183,20 +193,10 @@
       </div>
     </div>
   {% endif %}
-
-  {# ---- AI 解讀按鈕(管理員專用)---- #}
-  {% if session.get('is_admin') %}
-    <div class="ai-deep">
-      <button type="button" class="ai-btn export-btn" id="manual-ai-btn">
-        🤖 AI 解讀此卦
-      </button>
-      <span class="note">輸入所問之事,產生完整 prompt 複製給 AI 解讀</span>
-    </div>
-  {% endif %}
 {% endif %}
 
-{# ---- AI 解讀 Modal(管理員專用)---- #}
-{% if r and session.get('is_admin') %}
+{# ---- AI 解讀 Modal(管理員專用,排盤前後皆可用)---- #}
+{% if session.get('is_admin') %}
 <div id="manual-ai-modal" class="ai-modal" style="display:none;">
   <div class="ai-modal-content">
     <div class="ai-modal-header">
@@ -292,6 +292,13 @@
   }
 
   openBtn.addEventListener('click', function() {
+    // 防呆:還沒擲卦/選爻就點 AI,擋下並提示。
+    // 用 window.__manualHasCast 旗標(由下方主 script 維護),
+    // 不靠爻值判斷,純乾卦全靜也能正常產生 prompt。
+    if (!window.__manualHasCast) {
+      alert('請先擲卦或在下拉模式選擇爻象,再產生 AI 解讀。');
+      return;
+    }
     resetToInputStage();
     modal.style.display = 'flex';
     setTimeout(function(){ questionEl.focus(); }, 50);
@@ -419,6 +426,11 @@
 
 <script>
 (function(){
+  // ---------- 擲卦旗標(防呆用)----------
+  // 只要使用者「擲過任一爻」或「在下拉模式選過爻」就設為 true,
+  // 重置時歸 false。AI 按鈕靠這個判斷,不看爻值,純乾全靜也算有效。
+  window.__manualHasCast = false;
+
   // ---------- Tab 切換 ----------
   var tabs = document.querySelectorAll('.mode-tab');
   var panels = {
@@ -445,6 +457,7 @@
   document.querySelectorAll('.manual-select').forEach(function(sel){
     sel.addEventListener('change', function(){
       setHidden(this.dataset.ypos, this.value);
+      window.__manualHasCast = true;  // 主動選過爻 → 視為已排卦
     });
   });
 
@@ -510,6 +523,7 @@
           row.classList.add('coin-yao-moving');
         }
         setHidden(ypos, result.val);
+        window.__manualHasCast = true;  // 擲過任一爻 → 視為已排卦
         currentSlot++;
         btnCast.disabled = false;
         updateCastButtonLabel();
@@ -528,6 +542,7 @@
     for (var i = 0; i < 6; i++) {
       setHidden(i, '1,0');
     }
+    window.__manualHasCast = false;  // 重置 → 回到未排卦狀態
     btnReset.style.display = 'none';
     btnCast.style.display = '';
     updateCastButtonLabel();
