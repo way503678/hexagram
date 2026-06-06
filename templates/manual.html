@@ -30,6 +30,25 @@
     <button type="button" class="mode-tab" data-mode="manual">▼ 下拉模式</button>
   </div>
 
+  {# ---- 性別(移至所問之事上方)---- #}
+  <div class="manual-options" style="margin-top: 12px;">
+    <div class="opt-row">
+      <span class="opt-label">性別：</span>
+      <label class="opt-item">
+        <input type="radio" name="gender" value="" {% if not gender %}checked{% endif %}> 不指定
+      </label>
+      <label class="opt-item">
+        <input type="radio" name="gender" value="M" {% if gender == 'M' %}checked{% endif %}> 男
+      </label>
+      <label class="opt-item">
+        <input type="radio" name="gender" value="F" {% if gender == 'F' %}checked{% endif %}> 女
+      </label>
+    </div>
+  </div>
+
+  {# ---- 問事類別固定 all(原 radio 已移除)---- #}
+  <input type="hidden" name="aspect" value="all">
+
   {# ---- 所問之事(管理員專用,先填再擲卦)---- #}
   {% if session.get('is_admin') %}
     <div class="manual-question-box" style="margin: 10px 0; padding: 10px;
@@ -94,42 +113,6 @@
   {% for i in range(6) %}
     <input type="hidden" name="y{{ i }}" id="hidden_y{{ i }}" value="{{ yao_vals[i] }}">
   {% endfor %}
-
-  {# ---- 性別 ---- #}
-  <div class="manual-options" style="margin-top: 12px;">
-    <div class="opt-row">
-      <span class="opt-label">性別：</span>
-      <label class="opt-item">
-        <input type="radio" name="gender" value="" {% if not gender %}checked{% endif %}> 不指定
-      </label>
-      <label class="opt-item">
-        <input type="radio" name="gender" value="M" {% if gender == 'M' %}checked{% endif %}> 男
-      </label>
-      <label class="opt-item">
-        <input type="radio" name="gender" value="F" {% if gender == 'F' %}checked{% endif %}> 女
-      </label>
-    </div>
-
-    {# ---- 問事類別 ---- #}
-    <div class="opt-row">
-      <span class="opt-label">問事類別：</span>
-      <label class="opt-item">
-        <input type="radio" name="aspect" value="all" {% if aspect_choice == 'all' %}checked{% endif %}> 全部
-      </label>
-      <label class="opt-item">
-        <input type="radio" name="aspect" value="love" {% if aspect_choice == 'love' %}checked{% endif %}> 感情
-      </label>
-      <label class="opt-item">
-        <input type="radio" name="aspect" value="health" {% if aspect_choice == 'health' %}checked{% endif %}> 健康
-      </label>
-      <label class="opt-item">
-        <input type="radio" name="aspect" value="work" {% if aspect_choice == 'work' %}checked{% endif %}> 工作
-      </label>
-      <label class="opt-item">
-        <input type="radio" name="aspect" value="wealth" {% if aspect_choice == 'wealth' %}checked{% endif %}> 財運
-      </label>
-    </div>
-  </div>
 
   <div style="margin-top: 10px;">
     <button type="submit">排盤</button>
