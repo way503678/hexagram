@@ -314,34 +314,25 @@ def manual():
 _AI_READING_MODEL = os.environ.get("AI_READING_MODEL", "claude-sonnet-4-6")
 
 
-def _build_manual_reading(data):
-    """從 POST data 解析、重排盤、組出 (系統規則文字, 問事+卦象JSON文字)。
+def _compute_chart(data):
+    """從 data 解析日期/六爻/問事類別 → 重排盤,組出可序列化的卦象 payload。
 
-    回傳 (system_text, user_text, err):
-      成功 → err 為 None;system_text 為規則(適合當可快取的 system),
-             user_text 為「所問之事 + 卦象 JSON」(每次不同)。
-      失敗 → (None, None, (error_dict, status_code))。
+    回傳 (chart_payload, err):
+      成功 → err 為 None;chart_payload 為含「卦象/旬空/對六爻」的 dict。
+      失敗 → (None, (error_dict, status_code))。
+    純確定性運算(不呼叫任何外部 API),供網頁解讀與 REST API 共用。
     """
-    if _MANUAL_AI_PROMPT is None:
-        return None, None, ({"error": "伺服器未載入 prompt 檔案,請聯絡管理員"}, 500)
-
-    question = (data.get("question") or "").strip()
-    if not question:
-        return None, None, ({"error": "請輸入所問之事"}, 400)
-    if len(question) > 500:
-        return None, None, ({"error": "所問之事超過 500 字"}, 400)
-
     try:
         y_i = int(data.get("y") or datetime.now().year)
         m_i = int(data.get("m") or datetime.now().month)
         d_i = int(data.get("d") or datetime.now().day)
         h_i = int(data.get("h") or datetime.now().hour)
     except (TypeError, ValueError):
-        return None, None, ({"error": "日期時間格式錯誤"}, 400)
+        return None, ({"error": "日期時間格式錯誤"}, 400)
 
     yao_vals = data.get("yao_vals") or []
     if len(yao_vals) != 6:
-        return None, None, ({"error": "需要 6 個爻的資料"}, 400)
+        return None, ({"error": "需要 6 個爻的資料"}, 400)
 
     try:
         lines = []
@@ -353,7 +344,7 @@ def _build_manual_reading(data):
             lines.append(int(parts[0]))
             moving.append(int(parts[1]))
     except (ValueError, TypeError) as e:
-        return None, None, ({"error": f"爻格式錯誤:{e}"}, 400)
+        return None, ({"error": f"爻格式錯誤:{e}"}, 400)
 
     aspect = (data.get("aspect") or "all").strip().lower()
     if aspect not in ("all", "love", "health", "work", "wealth"):
@@ -366,7 +357,7 @@ def _build_manual_reading(data):
             chart, dt_obj, gender=None, aspect_choice=aspect,
         )
     except Exception as e:
-        return None, None, ({"error": f"排盤失敗:{type(e).__name__}: {e}"}, 500)
+        return None, ({"error": f"排盤失敗:{type(e).__name__}: {e}"}, 500)
 
     # 旬空(空亡):由日干支查表得出,純確定值,直接餵給 AI 免自算
     _GAN = "甲乙丙丁戊己庚辛壬癸"
@@ -393,6 +384,30 @@ def _build_manual_reading(data):
         "旬空": xun_kong,
         "對六爻": liu_yao,
     }
+    return chart_payload, None
+
+
+def _build_manual_reading(data):
+    """從 POST data 解析、重排盤、組出 (系統規則文字, 問事+卦象JSON文字)。
+
+    回傳 (system_text, user_text, err):
+      成功 → err 為 None;system_text 為規則(適合當可快取的 system),
+             user_text 為「所問之事 + 卦象 JSON」(每次不同)。
+      失敗 → (None, None, (error_dict, status_code))。
+    """
+    if _MANUAL_AI_PROMPT is None:
+        return None, None, ({"error": "伺服器未載入 prompt 檔案,請聯絡管理員"}, 500)
+
+    question = (data.get("question") or "").strip()
+    if not question:
+        return None, None, ({"error": "請輸入所問之事"}, 400)
+    if len(question) > 500:
+        return None, None, ({"error": "所問之事超過 500 字"}, 400)
+
+    chart_payload, err = _compute_chart(data)
+    if err:
+        return None, None, err
+
     chart_json_str = json.dumps(
         chart_payload, ensure_ascii=False, separators=(",", ":")
     )
@@ -401,6 +416,36 @@ def _build_manual_reading(data):
         + "\n\n【卦象 JSON】\n```json\n" + chart_json_str + "\n```\n"
     )
     return _MANUAL_AI_PROMPT, user_text, None
+
+
+# ============================================================
+# REST API (給 iOS app;JSON 進出。排盤確定性、免費、免登入)
+# ============================================================
+@app.route("/api/v1/health", methods=["GET"])
+def api_health():
+    """健康檢查 / app 連線測試。"""
+    return jsonify({"status": "ok", "service": "hexagram", "version": 1})
+
+
+@app.route("/api/v1/chart", methods=["POST"])
+def api_chart():
+    """排盤:日期時間 + 六爻 → 卦象 JSON(確定性、免費、免登入)。
+
+    請求 JSON:
+      {"y":2026,"m":6,"d":15,"h":16,
+       "yao_vals":["1,0","0,0","1,1","0,1","1,0","0,0"],
+       "aspect":"all"}
+      yao_vals:由初爻到上爻共 6 個,每項 "陰陽,動否"
+               (陰陽 1=陽 0=陰;動否 1=動 0=不動)。
+      y/m/d/h 省略時以伺服器當下時間補上。
+    回傳:含「卦象 / 旬空 / 對六爻」的 chart_payload。
+    """
+    data = request.get_json(silent=True) or {}
+    payload, err = _compute_chart(data)
+    if err:
+        body, code = err
+        return jsonify(body), code
+    return jsonify(payload)
 
 
 def _call_claude_reading(system_text, user_text):
