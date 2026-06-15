@@ -20,6 +20,8 @@ services:
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin}"
       # Flask session 簽章用的金鑰（部署時請改成自己的）
       SECRET_KEY: "${SECRET_KEY:-please-change-me-in-production}"
+      # Claude API 金鑰（值放在 .env，不進 git；此處僅引用變數）
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
     networks:
       - default          # hexagram 自己的 default network
       - postgres-net     # 連到 postgres 所在的外部 network
