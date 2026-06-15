@@ -73,11 +73,18 @@ def _load_manual_prompt():
                 full = f.read()
             start_marker = "===== PROMPT 開始 ====="
             end_marker = "===== PROMPT 結束 ====="
-            si = full.find(start_marker)
-            ei = full.find(end_marker)
+            # 只比對「獨立成行」的 marker,避開說明文字裡同時提到兩個 marker 的句子
+            lines = full.splitlines()
+            si = ei = -1
+            for i, ln in enumerate(lines):
+                if si < 0 and ln.strip() == start_marker:
+                    si = i
+                elif si >= 0 and ln.strip() == end_marker:
+                    ei = i
+                    break
             if si >= 0 and ei > si:
-                # 取兩個 marker「之間」的內容(含前一行 marker、不含後一行 marker)
-                core = full[si + len(start_marker): ei].strip()
+                # 取兩個 marker「之間」的內容(不含 marker 本身)
+                core = "\n".join(lines[si + 1: ei]).strip()
                 return core
             # 沒有 marker 就回傳整檔
             return full.strip()
@@ -368,7 +375,10 @@ def manual_ai_prompt():
         "卦象": chart,
         "四面向判讀": aspects,
     }
-    chart_json_str = json.dumps(chart_payload, ensure_ascii=False, indent=2)
+    # 用 compact 分隔符,移除縮排空白以節省 AI token(資料內容不變)
+    chart_json_str = json.dumps(
+        chart_payload, ensure_ascii=False, separators=(",", ":")
+    )
 
     # 組完整 prompt
     full_prompt = (
