@@ -293,8 +293,36 @@
     modal.style.display = 'flex';
     outEl.textContent = '';
     statusEl.style.color = '#666';
-    statusEl.textContent = '⏳ AI 解盤中(將扣 1 點)…';
+    statusEl.textContent = '⏳ 連線中(將扣 1 點)…';
     openBtn.disabled = true;
+
+    function setBalance(b){
+      var balEl = document.getElementById('member-balance');
+      if (balEl && b != null) balEl.textContent = b;
+    }
+
+    // 解析 SSE 串流:event: <type>\ndata: <json>\n\n
+    function handleEvent(block){
+      var ev = 'message', dataStr = '';
+      block.split('\n').forEach(function(line){
+        if (line.indexOf('event:') === 0) ev = line.slice(6).trim();
+        else if (line.indexOf('data:') === 0) dataStr += line.slice(5).trim();
+      });
+      if (!dataStr) return;
+      var d;
+      try { d = JSON.parse(dataStr); } catch (e) { return; }
+      if (ev === 'delta' && d.t != null) {
+        if (!outEl.dataset.started) { outEl.dataset.started = '1'; statusEl.textContent = '解讀中…'; }
+        outEl.textContent += d.t;
+        outEl.scrollTop = outEl.scrollHeight;
+      } else if (ev === 'done') {
+        statusEl.textContent = '';
+        setBalance(d.balance);
+      } else if (ev === 'error') {
+        statusEl.style.color = '#a02020';
+        statusEl.textContent = d.error || '解讀產生失敗,已退還 1 點';
+      }
+    }
 
     fetch('/manual/ai_reading', {
       method: 'POST', credentials: 'same-origin',
@@ -303,30 +331,44 @@
     })
     .then(function(res){
       var ct = res.headers.get('Content-Type') || '';
-      if (res.redirected || res.url.indexOf('/admin/login') !== -1 || ct.indexOf('application/json') === -1) {
+      if (res.redirected || res.url.indexOf('/admin/login') !== -1) {
         throw {handled:true, msg:'登入已逾時,請重新登入後再試'};
       }
-      return res.json().then(function(d){ return {status: res.status, data: d}; });
-    })
-    .then(function(r){
-      if (r.status === 402) {
-        throw {handled:true, msg:(r.data.error||'點數不足') + '(目前 ' + (r.data.balance!=null?r.data.balance:'?') + ' 點,請至會員中心儲值)'};
+      // 前置檢查失敗(扣點前)會回一般 JSON,不是串流
+      if (ct.indexOf('text/event-stream') === -1) {
+        return res.json().then(function(d){
+          if (res.status === 402) {
+            throw {handled:true, msg:(d.error||'點數不足') + '(目前 ' + (d.balance!=null?d.balance:'?') + ' 點,請至會員中心儲值)'};
+          }
+          throw {handled:true, msg:(d.error || ('HTTP ' + res.status))};
+        });
       }
-      if (r.status !== 200 || r.data.error) {
-        throw {handled:true, msg:(r.data.error || ('HTTP ' + r.status))};
+      // 讀取串流
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = '';
+      function pump(){
+        return reader.read().then(function(r){
+          if (r.done) {
+            if (buf.trim()) handleEvent(buf);
+            return;
+          }
+          buf += decoder.decode(r.value, {stream:true});
+          var parts = buf.split('\n\n');
+          buf = parts.pop();
+          parts.forEach(handleEvent);
+          return pump();
+        });
       }
-      outEl.textContent = r.data.reading;
-      statusEl.textContent = '';
-      var balEl = document.getElementById('member-balance');
-      if (balEl && r.data.balance != null) balEl.textContent = r.data.balance;
+      return pump();
     })
     .catch(function(err){
-      outEl.textContent = '';
+      if (!outEl.dataset.started) outEl.textContent = '';
       statusEl.style.color = '#a02020';
       statusEl.textContent = (err && err.handled) ? err.msg
         : ('失敗:' + (err && err.message ? err.message : err));
     })
-    .then(function(){ openBtn.disabled = false; });
+    .then(function(){ openBtn.disabled = false; delete outEl.dataset.started; });
   });
 })();
 </script>

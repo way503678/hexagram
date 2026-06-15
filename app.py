@@ -21,7 +21,7 @@ from datetime import datetime, timezone, timedelta
 
 from flask import (
     Flask, request, render_template, session, redirect, url_for, abort,
-    Response, jsonify,
+    Response, jsonify, stream_with_context,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -429,6 +429,30 @@ def _call_claude_reading(system_text, user_text):
     return text
 
 
+def _stream_claude_reading(system_text, user_text):
+    """串流版:逐段 yield Claude(預設 Sonnet 4.6)的解讀文字。
+
+    與 _call_claude_reading 相同的 system(可快取規則)/user(問事+JSON),
+    但用 messages.stream 邊生成邊吐 token,讓前端即時顯示、不必枯等整篇。
+    生成失敗丟例外(由呼叫端決定退點)。
+    """
+    import anthropic
+    client = anthropic.Anthropic()  # 讀環境變數 ANTHROPIC_API_KEY
+    with client.messages.stream(
+        model=_AI_READING_MODEL,
+        max_tokens=4096,
+        system=[{
+            "type": "text",
+            "text": system_text,
+            "cache_control": {"type": "ephemeral"},  # 規則固定,開快取省 token
+        }],
+        messages=[{"role": "user", "content": user_text}],
+    ) as stream:
+        for chunk in stream.text_stream:
+            if chunk:
+                yield chunk
+
+
 @app.route("/manual/ai_prompt", methods=["POST"])
 @login_required
 def manual_ai_prompt():
@@ -445,7 +469,14 @@ def manual_ai_prompt():
 @app.route("/manual/ai_reading", methods=["POST"])
 @login_required
 def manual_ai_reading():
-    """AI 解盤:扣 1 點 → 呼叫 Claude 即時產生解讀。任何失敗都自動退點。"""
+    """AI 解盤:扣 1 點 → 串流(SSE)即時產生解讀。任何失敗都自動退點。
+
+    回應為 text/event-stream,事件:
+      event: delta  data:{"t": "..."}     逐段解讀文字
+      event: done   data:{"balance": n}   生成完成、附最新餘額
+      event: error  data:{"error": "..."} 生成失敗(已退點)
+    扣點等前置檢查若失敗,仍回傳一般 JSON + 對應狀態碼(前端據 Content-Type 區分)。
+    """
     user = current_user()
     if not user:
         return jsonify({"error": "請先登入會員"}), 401
@@ -466,15 +497,34 @@ def manual_ai_reading():
             }), 402
         return jsonify({"error": "系統忙線,請稍後再試"}), 503
 
-    # 呼叫 AI;失敗一律退回剛扣的 1 點
-    try:
-        reading = _call_claude_reading(system_text, user_text)
-    except Exception as e:
-        db.add_points(user["id"], 1, "refund", ref="ai_reading_failed")
-        app.logger.warning("AI reading failed (%s: %s)", type(e).__name__, e)
-        return jsonify({"error": "解讀產生失敗,已退還 1 點,請稍後再試"}), 502
+    uid = user["id"]
 
-    return jsonify({"reading": reading, "balance": bal})
+    def _sse(event, payload):
+        return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    def generate():
+        got_any = False
+        try:
+            for chunk in _stream_claude_reading(system_text, user_text):
+                got_any = True
+                yield _sse("delta", {"t": chunk})
+            if not got_any:
+                raise RuntimeError("AI 回傳空內容")
+            yield _sse("done", {"balance": bal})
+        except Exception as e:  # 串流途中任何失敗都退回剛扣的 1 點
+            db.add_points(uid, 1, "refund", ref="ai_reading_failed")
+            app.logger.warning("AI reading stream failed (%s: %s)",
+                               type(e).__name__, e)
+            yield _sse("error", {
+                "error": "解讀產生失敗,已退還 1 點,請稍後再試",
+            })
+
+    headers = {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",  # 若前方有 nginx,關閉其緩衝以確保即時串流
+    }
+    return Response(stream_with_context(generate()), headers=headers)
 
 
 # ============================================================
