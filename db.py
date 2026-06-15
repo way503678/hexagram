@@ -124,6 +124,52 @@ END$$;
 """
 
 
+# ============================================================
+# 點數系統:會員、點數帳本、綠界訂單
+#   - users.points_balance:可快速讀取、可加鎖的餘額(扣點用)
+#   - point_ledger:每筆增減的稽核帳本(餘額異動的真相來源)
+#   - payment_orders:綠界儲值訂單
+#   身分採可插拔設計:auth_provider('admin'/'line'/'google'/'email'...) + auth_id
+# ============================================================
+POINTS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id             SERIAL PRIMARY KEY,
+    auth_provider  TEXT NOT NULL,
+    auth_id        TEXT NOT NULL,
+    display_name   TEXT,
+    email          TEXT,
+    points_balance INTEGER NOT NULL DEFAULT 0,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (auth_provider, auth_id)
+);
+
+CREATE TABLE IF NOT EXISTS point_ledger (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    delta       INTEGER NOT NULL,
+    balance_after INTEGER NOT NULL,
+    reason      TEXT NOT NULL,
+    ref         TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_point_ledger_user
+    ON point_ledger (user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS payment_orders (
+    id                SERIAL PRIMARY KEY,
+    merchant_trade_no TEXT NOT NULL UNIQUE,
+    user_id           INTEGER NOT NULL REFERENCES users(id),
+    amount            INTEGER NOT NULL,
+    points            INTEGER NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'pending',
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    paid_at           TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_user
+    ON payment_orders (user_id, created_at DESC);
+"""
+
+
 def init_db():
     """應用啟動時呼叫一次，確保 table 存在。失敗會印警告但不中斷。"""
     if not DB_ENABLED:
@@ -137,6 +183,7 @@ def init_db():
             with c.cursor() as cur:
                 cur.execute(SCHEMA)
                 cur.execute(MIGRATE)
+                cur.execute(POINTS_SCHEMA)
         log.info("DB ready: %s@%s/%s",
                  PG_CONF["user"], PG_CONF["host"], PG_CONF["dbname"])
         return True
@@ -329,3 +376,164 @@ def get_chart_gender(name, y, m, d, h):
     except Exception as e:
         log.warning("DB get_chart_gender failed (%s: %s)", type(e).__name__, e)
         return None
+
+
+# ============================================================
+# 點數系統操作
+# 注意:點數涉及金流,錯誤「不」靜默吞掉成功——失敗一律回明確的失敗值,
+#       讓呼叫端能拒絕出解讀(避免免費贈送)或重試儲值。
+# ============================================================
+def get_or_create_user(auth_provider, auth_id, display_name=None, email=None):
+    """依 (auth_provider, auth_id) 取得或建立會員。回傳 dict 或 None(DB 失敗)。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return None
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO users (auth_provider, auth_id, display_name, email)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (auth_provider, auth_id)
+                    DO UPDATE SET
+                        display_name = COALESCE(EXCLUDED.display_name, users.display_name),
+                        email        = COALESCE(EXCLUDED.email, users.email)
+                    RETURNING id, auth_provider, auth_id, display_name, email, points_balance, created_at
+                    """,
+                    (str(auth_provider), str(auth_id), display_name, email),
+                )
+                r = cur.fetchone()
+        return {
+            "id": r[0], "auth_provider": r[1], "auth_id": r[2],
+            "display_name": r[3], "email": r[4],
+            "points_balance": r[5], "created_at": r[6],
+        }
+    except Exception as e:
+        log.warning("DB get_or_create_user failed (%s: %s)", type(e).__name__, e)
+        return None
+
+
+def get_user(user_id):
+    """依 id 取得會員(含餘額)。回傳 dict 或 None。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return None
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, auth_provider, auth_id, display_name, email,
+                           points_balance, created_at
+                    FROM users WHERE id = %s
+                    """,
+                    (int(user_id),),
+                )
+                r = cur.fetchone()
+        if not r:
+            return None
+        return {
+            "id": r[0], "auth_provider": r[1], "auth_id": r[2],
+            "display_name": r[3], "email": r[4],
+            "points_balance": r[5], "created_at": r[6],
+        }
+    except Exception as e:
+        log.warning("DB get_user failed (%s: %s)", type(e).__name__, e)
+        return None
+
+
+def add_points(user_id, points, reason, ref=None):
+    """
+    加點(儲值成功 / 管理員調整)。餘額與帳本在同一交易內更新。
+    回傳 (success: bool, new_balance: int|None)。
+    """
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return (False, None)
+    try:
+        n = int(points)
+    except (TypeError, ValueError):
+        return (False, None)
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    "UPDATE users SET points_balance = points_balance + %s "
+                    "WHERE id = %s RETURNING points_balance",
+                    (n, int(user_id)),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise RuntimeError(f"user {user_id} not found")
+                bal = row[0]
+                cur.execute(
+                    "INSERT INTO point_ledger (user_id, delta, balance_after, reason, ref) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (int(user_id), n, bal, str(reason), ref),
+                )
+        return (True, bal)
+    except Exception as e:
+        log.warning("DB add_points failed (%s: %s)", type(e).__name__, e)
+        return (False, None)
+
+
+def try_deduct_point(user_id, n=1, reason="divination", ref=None):
+    """
+    原子扣點:餘額足夠才扣,否則不動。餘額與帳本同一交易更新。
+    回傳 (ok: bool, new_balance: int|None, msg: str)。
+      ok=False 且 msg='insufficient' 表示點數不足;
+      ok=False 且 msg='error'        表示 DB 失敗(呼叫端應拒絕出解讀)。
+    """
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return (False, None, "error")
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return (False, None, "error")
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                # 條件式 UPDATE:餘額不足時 rowcount=0,不會扣成負數
+                cur.execute(
+                    "UPDATE users SET points_balance = points_balance - %s "
+                    "WHERE id = %s AND points_balance >= %s "
+                    "RETURNING points_balance",
+                    (n, int(user_id), n),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    return (False, None, "insufficient")
+                bal = row[0]
+                cur.execute(
+                    "INSERT INTO point_ledger (user_id, delta, balance_after, reason, ref) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (int(user_id), -n, bal, str(reason), ref),
+                )
+        return (True, bal, "ok")
+    except Exception as e:
+        log.warning("DB try_deduct_point failed (%s: %s)", type(e).__name__, e)
+        return (False, None, "error")
+
+
+def list_ledger(user_id, limit=50):
+    """列出某會員的點數異動紀錄(新到舊)。回傳 list of dict。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return []
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT delta, balance_after, reason, ref, created_at
+                    FROM point_ledger WHERE user_id = %s
+                    ORDER BY created_at DESC LIMIT %s
+                    """,
+                    (int(user_id), int(limit)),
+                )
+                rows = cur.fetchall()
+        return [
+            {"delta": r[0], "balance_after": r[1], "reason": r[2],
+             "ref": r[3], "created_at": r[4]}
+            for r in rows
+        ]
+    except Exception as e:
+        log.warning("DB list_ledger failed (%s: %s)", type(e).__name__, e)
+        return []
