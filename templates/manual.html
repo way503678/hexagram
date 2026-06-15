@@ -34,12 +34,6 @@
     </span>
   </div>
 
-  {# ---- Tab 切換 ---- #}
-  <div class="mode-tabs">
-    <button type="button" class="mode-tab active" data-mode="coin">🪙 擲卦模式</button>
-    <button type="button" class="mode-tab" data-mode="manual">▼ 下拉模式</button>
-  </div>
-
   {# ---- 問事類別固定 all(原 radio 已移除)---- #}
   <input type="hidden" name="aspect" value="all">
 
@@ -84,22 +78,6 @@
     <div class="coin-controls">
       <button type="button" id="btnCast" class="coin-btn">擲第 1 爻(初爻)</button>
       <button type="button" id="btnReset" class="coin-btn coin-btn-reset" style="display:none;">重新擲卦</button>
-    </div>
-  </div>
-
-  {# ---- 下拉模式 ---- #}
-  <div class="mode-panel" id="panelManual" style="display:none;">
-    <div class="yao-input">
-      {% for i in [5, 4, 3, 2, 1, 0] %}
-        {% set name = ['初','二','三','四','五','上'][i] %}
-        <label>{{ name }}爻</label>
-        <select data-ypos="{{ i }}" class="manual-select">
-          <option value="1,0" {% if yao_vals[i] == '1,0' %}selected{% endif %}>───　少陽(不動)</option>
-          <option value="0,0" {% if yao_vals[i] == '0,0' %}selected{% endif %}>─ ─　少陰(不動)</option>
-          <option value="1,1" {% if yao_vals[i] == '1,1' %}selected{% endif %}>─O─　老陽(動,變陰)</option>
-          <option value="0,1" {% if yao_vals[i] == '0,1' %}selected{% endif %}>─X─　老陰(動,變陽)</option>
-        </select>
-      {% endfor %}
     </div>
   </div>
 
@@ -540,34 +518,10 @@
     });
   }
 
-  // ---------- Tab 切換 ----------
-  var tabs = document.querySelectorAll('.mode-tab');
-  var panels = {
-    coin: document.getElementById('panelCoin'),
-    manual: document.getElementById('panelManual')
-  };
-  tabs.forEach(function(t){
-    t.addEventListener('click', function(){
-      tabs.forEach(function(x){ x.classList.remove('active'); });
-      this.classList.add('active');
-      var mode = this.dataset.mode;
-      Object.keys(panels).forEach(function(k){
-        panels[k].style.display = (k === mode) ? '' : 'none';
-      });
-    });
-  });
-
   // ---------- 共用 hidden 同步 ----------
   function setHidden(ypos, val) {
     document.getElementById('hidden_y' + ypos).value = val;
   }
-
-  // ---------- 下拉模式 ----------
-  document.querySelectorAll('.manual-select').forEach(function(sel){
-    sel.addEventListener('change', function(){
-      setHidden(this.dataset.ypos, this.value);
-    });
-  });
 
   // ---------- 擲卦模式 ----------
   // 金錢卦三銅板:每銅板背=陽(50%)、字=陰(50%)
