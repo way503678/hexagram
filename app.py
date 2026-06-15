@@ -496,6 +496,17 @@ def api_cast():
         payload = _enrich_chart_payload(chart, dt_obj, aspect)
     except Exception as e:
         return jsonify({"error": f"起卦失敗:{type(e).__name__}: {e}"}), 500
+
+    # 姓名/性別:有填姓名就存進歷史紀錄(與網頁 /cast 一致;失敗不影響回應)
+    name = (data.get("name") or "").strip()
+    gender = (data.get("gender") or "").strip().upper()
+    if name:
+        try:
+            db.log_divination(name, y_i, m_i, d_i, h_i,
+                              gender=gender if gender in ("M", "F") else None)
+        except Exception as e:
+            app.logger.warning("log_divination failed (%s: %s)",
+                               type(e).__name__, e)
     return jsonify(payload)
 
 
