@@ -43,6 +43,20 @@ app.config["SECRET_KEY"] = os.environ.get(
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
+
+@app.after_request
+def _api_cors(resp):
+    """為 /api/ 與 /manual/ai_reading 加上 CORS 標頭。
+
+    原生 app 不受瀏覽器 CORS 限制,但 Expo web 預覽(localhost)會跨網域呼叫,
+    需要這些標頭。開放 * 沒問題:排盤 API 免費且純運算,解盤仍需登入。
+    """
+    if request.path.startswith("/api/") or request.path == "/manual/ai_reading":
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return resp
+
 # 管理員 idle timeout(分鐘):超過此時間未活動則自動登出
 ADMIN_IDLE_TIMEOUT_MINUTES = int(os.environ.get("ADMIN_IDLE_TIMEOUT_MINUTES", "15"))
 
