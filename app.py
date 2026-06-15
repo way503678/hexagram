@@ -374,7 +374,6 @@ def manual_ai_prompt():
     chart_payload = {
         "schema_version": 1,
         "排盤時間": f"{y_i:04d}-{m_i:02d}-{d_i:02d} {h_i:02d}:00",
-        "性別": gender or None,
         "問事類別": aspect,
         "卦象": chart,
         "對六爻": aspects.get("對六爻", []),

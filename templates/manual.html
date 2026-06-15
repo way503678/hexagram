@@ -4,7 +4,16 @@
 {% block content %}
 <h1>手動排卦</h1>
 
-<form method="post" action="/manual" id="manualForm">
+{% if r %}
+  <button type="button" id="toggleFormBtn"
+          style="margin-bottom:10px; padding:6px 14px; cursor:pointer;
+                 border:1px solid #ccc; border-radius:6px; background:#f3f3f3;
+                 font-size:14px;">
+    ▼ 展開排盤設定
+  </button>
+{% endif %}
+
+<form method="post" action="/manual" id="manualForm"{% if r %} style="display:none;"{% endif %}>
   <div class="dt-field" style="margin-bottom: 10px;">
     <span class="field">
       <input class="y" type="number" name="y" value="{{ y or default_y }}" min="1900" max="2100"> 年
@@ -28,22 +37,6 @@
   <div class="mode-tabs">
     <button type="button" class="mode-tab active" data-mode="coin">🪙 擲卦模式</button>
     <button type="button" class="mode-tab" data-mode="manual">▼ 下拉模式</button>
-  </div>
-
-  {# ---- 性別(移至所問之事上方)---- #}
-  <div class="manual-options" style="margin-top: 12px;">
-    <div class="opt-row">
-      <span class="opt-label">性別：</span>
-      <label class="opt-item">
-        <input type="radio" name="gender" value="" {% if not gender %}checked{% endif %}> 不指定
-      </label>
-      <label class="opt-item">
-        <input type="radio" name="gender" value="M" {% if gender == 'M' %}checked{% endif %}> 男
-      </label>
-      <label class="opt-item">
-        <input type="radio" name="gender" value="F" {% if gender == 'F' %}checked{% endif %}> 女
-      </label>
-    </div>
   </div>
 
   {# ---- 問事類別固定 all(原 radio 已移除)---- #}
@@ -296,7 +289,6 @@
       d: getVal('d'),
       h: getVal('h'),
       yao_vals: yaoVals,
-      gender: getRadio('gender'),
       aspect: getRadio('aspect') || 'all'
     };
 
@@ -376,6 +368,31 @@
 
 <script>
 (function(){
+  // ---------- 排盤前驗證:所問之事必填 ----------
+  var manualForm = document.getElementById('manualForm');
+  if (manualForm) {
+    manualForm.addEventListener('submit', function(e){
+      var qEl = document.getElementById('manual-question');
+      // 問題欄為管理員專用,存在時才驗證
+      if (qEl && !(qEl.value || '').trim()) {
+        e.preventDefault();
+        alert('請先填寫「所問之事」再排盤。');
+        qEl.scrollIntoView({behavior:'smooth', block:'center'});
+        qEl.focus();
+      }
+    });
+  }
+
+  // ---------- 排盤設定收合(有結果時預設收起,保持畫面乾淨)----------
+  var toggleFormBtn = document.getElementById('toggleFormBtn');
+  if (toggleFormBtn && manualForm) {
+    toggleFormBtn.addEventListener('click', function(){
+      var isHidden = manualForm.style.display === 'none';
+      manualForm.style.display = isHidden ? '' : 'none';
+      toggleFormBtn.textContent = isHidden ? '▲ 收合排盤設定' : '▼ 展開排盤設定';
+    });
+  }
+
   // ---------- Tab 切換 ----------
   var tabs = document.querySelectorAll('.mode-tab');
   var panels = {
