@@ -187,7 +187,17 @@
       <button type="button" class="ai-btn export-btn" id="manual-ai-btn">
         🤖 產生 AI 解讀 Prompt
       </button>
-      <span class="note">結合上方「所問之事」與此卦象,複製後貼給 AI</span>
+      <button type="button" class="ai-btn export-btn" id="manual-reading-btn"
+              style="background:#6b2d8b; margin-left:8px;">
+        🔮 AI 解盤（扣 1 點）
+      </button>
+      <div class="note" style="margin-top:6px;">
+        「產生 Prompt」複製貼到自己的 AI；「AI 解盤」扣 1 點即時出解讀。
+        {% if member %}
+          ｜剩餘 <strong id="member-balance">{{ member.points_balance }}</strong> 點
+          ｜<a href="/member">會員中心</a>
+        {% endif %}
+      </div>
     </div>
   {% endif %}
 {% endif %}
@@ -227,6 +237,99 @@
     </div>
   </div>
 </div>
+
+{# ---- AI 解盤結果 Modal(扣點即時解讀)---- #}
+<div id="manual-reading-modal" class="ai-modal" style="display:none;">
+  <div class="ai-modal-content">
+    <div class="ai-modal-header">
+      <span>🔮 AI 解盤結果</span>
+      <button type="button" class="ai-modal-close" id="manual-reading-close-x">✕</button>
+    </div>
+    <div class="ai-modal-body">
+      <div id="manual-reading-output"
+           style="white-space:pre-wrap; word-break:break-word; line-height:1.7;
+                  font-size:15px; padding:12px; border:1px solid #eee;
+                  border-radius:6px; min-height:200px; max-height:60vh;
+                  overflow:auto; background:#fff;"></div>
+    </div>
+    <div class="ai-modal-footer">
+      <button type="button" class="ai-btn" id="manual-reading-close-btn"
+              style="background:#888; cursor:pointer; opacity:1; margin-left:0;">關閉</button>
+      <span id="manual-reading-status" class="note"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var openBtn = document.getElementById('manual-reading-btn');
+  var modal = document.getElementById('manual-reading-modal');
+  if (!openBtn || !modal) return;
+  var outEl = document.getElementById('manual-reading-output');
+  var statusEl = document.getElementById('manual-reading-status');
+
+  function closeM(){ modal.style.display = 'none'; }
+  document.getElementById('manual-reading-close-x').addEventListener('click', closeM);
+  document.getElementById('manual-reading-close-btn').addEventListener('click', closeM);
+  modal.addEventListener('click', function(e){ if (e.target === modal) closeM(); });
+
+  function getVal(name){ var el = document.querySelector('[name="'+name+'"]'); return el ? el.value : ''; }
+
+  openBtn.addEventListener('click', function(){
+    var qEl = document.getElementById('manual-question');
+    var question = qEl ? (qEl.value || '').trim() : '';
+    if (!question) {
+      alert('請先在上方「所問之事」填寫要問的問題,再進行 AI 解盤。');
+      if (qEl) { qEl.scrollIntoView({behavior:'smooth', block:'center'}); qEl.focus(); }
+      return;
+    }
+    var yaoVals = [];
+    for (var i = 0; i < 6; i++) { var el = document.getElementById('hidden_y'+i); yaoVals.push(el ? el.value : '1,0'); }
+    var payload = {
+      question: question, y: getVal('y'), m: getVal('m'),
+      d: getVal('d'), h: getVal('h'), yao_vals: yaoVals, aspect: 'all'
+    };
+
+    modal.style.display = 'flex';
+    outEl.textContent = '';
+    statusEl.style.color = '#666';
+    statusEl.textContent = '⏳ AI 解盤中(將扣 1 點)…';
+    openBtn.disabled = true;
+
+    fetch('/manual/ai_reading', {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    })
+    .then(function(res){
+      var ct = res.headers.get('Content-Type') || '';
+      if (res.redirected || res.url.indexOf('/admin/login') !== -1 || ct.indexOf('application/json') === -1) {
+        throw {handled:true, msg:'登入已逾時,請重新登入後再試'};
+      }
+      return res.json().then(function(d){ return {status: res.status, data: d}; });
+    })
+    .then(function(r){
+      if (r.status === 402) {
+        throw {handled:true, msg:(r.data.error||'點數不足') + '(目前 ' + (r.data.balance!=null?r.data.balance:'?') + ' 點,請至會員中心儲值)'};
+      }
+      if (r.status !== 200 || r.data.error) {
+        throw {handled:true, msg:(r.data.error || ('HTTP ' + r.status))};
+      }
+      outEl.textContent = r.data.reading;
+      statusEl.textContent = '';
+      var balEl = document.getElementById('member-balance');
+      if (balEl && r.data.balance != null) balEl.textContent = r.data.balance;
+    })
+    .catch(function(err){
+      outEl.textContent = '';
+      statusEl.style.color = '#a02020';
+      statusEl.textContent = (err && err.handled) ? err.msg
+        : ('失敗:' + (err && err.message ? err.message : err));
+    })
+    .then(function(){ openBtn.disabled = false; });
+  });
+})();
+</script>
 
 <script>
 (function() {

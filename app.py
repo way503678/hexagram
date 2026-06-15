@@ -131,6 +131,18 @@ def login_required(view):
     return wrapper
 
 
+def current_user():
+    """回傳目前登入會員 dict(含 points_balance)或 None。
+
+    ★ 暫時實作:管理員 session 對應到一個 'admin' 測試會員。
+      日後接上正式登入(LINE/Google/Email...)後,只要改這個函式的取得來源,
+      其餘扣點 / 會員頁 / AI 解盤都不用動。
+    """
+    if session.get("is_admin"):
+        return db.get_or_create_user("admin", "admin", display_name="管理員(測試)")
+    return None
+
+
 def _get_field(name, default=""):
     """從 POST form 或 GET query 取單一欄位(POST 優先)。"""
     if request.method == "POST":
@@ -281,6 +293,7 @@ def manual():
     return render_template(
         "manual.html",
         mode="manual",
+        member=current_user(),
         r=result, yao_vals=yao_vals,
         aspects=aspects_result,
         gender=gender,
@@ -297,43 +310,38 @@ def manual():
 # ============================================================
 # 公開(僅管理員):手動排卦 AI 解讀 prompt 組裝
 # ============================================================
-@app.route("/manual/ai_prompt", methods=["POST"])
-@login_required
-def manual_ai_prompt():
-    """組裝手動排卦 AI 解讀完整 prompt(prompt 系統指示 + 所問之事 + 卦象 JSON)。
+# AI 解盤使用的模型(可由環境變數覆寫)
+_AI_READING_MODEL = os.environ.get("AI_READING_MODEL", "claude-sonnet-4-6")
 
-    POST body(JSON):
-      - question: 所問之事(必填)
-      - y, m, d, h: 排盤年月日時
-      - y0~y5: 六爻
-      - gender, aspect: 性別與問事類別
 
-    回傳 JSON:
-      - prompt: 完整 prompt 字串(可直接複製貼到 AI)
-      - error: 若有錯誤訊息
+def _build_manual_reading(data):
+    """從 POST data 解析、重排盤、組出 (系統規則文字, 問事+卦象JSON文字)。
+
+    回傳 (system_text, user_text, err):
+      成功 → err 為 None;system_text 為規則(適合當可快取的 system),
+             user_text 為「所問之事 + 卦象 JSON」(每次不同)。
+      失敗 → (None, None, (error_dict, status_code))。
     """
     if _MANUAL_AI_PROMPT is None:
-        return jsonify({"error": "伺服器未載入 prompt 檔案,請聯絡管理員"}), 500
+        return None, None, ({"error": "伺服器未載入 prompt 檔案,請聯絡管理員"}, 500)
 
-    data = request.get_json(silent=True) or {}
     question = (data.get("question") or "").strip()
     if not question:
-        return jsonify({"error": "請輸入所問之事"}), 400
+        return None, None, ({"error": "請輸入所問之事"}, 400)
     if len(question) > 500:
-        return jsonify({"error": "所問之事超過 500 字"}), 400
+        return None, None, ({"error": "所問之事超過 500 字"}, 400)
 
-    # 解析卦象參數
     try:
         y_i = int(data.get("y") or datetime.now().year)
         m_i = int(data.get("m") or datetime.now().month)
         d_i = int(data.get("d") or datetime.now().day)
         h_i = int(data.get("h") or datetime.now().hour)
     except (TypeError, ValueError):
-        return jsonify({"error": "日期時間格式錯誤"}), 400
+        return None, None, ({"error": "日期時間格式錯誤"}, 400)
 
     yao_vals = data.get("yao_vals") or []
     if len(yao_vals) != 6:
-        return jsonify({"error": "需要 6 個爻的資料"}), 400
+        return None, None, ({"error": "需要 6 個爻的資料"}, 400)
 
     try:
         lines = []
@@ -345,29 +353,22 @@ def manual_ai_prompt():
             lines.append(int(parts[0]))
             moving.append(int(parts[1]))
     except (ValueError, TypeError) as e:
-        return jsonify({"error": f"爻格式錯誤:{e}"}), 400
+        return None, None, ({"error": f"爻格式錯誤:{e}"}, 400)
 
-    gender = (data.get("gender") or "").strip().upper()
-    if gender not in ("M", "F"):
-        gender = ""
     aspect = (data.get("aspect") or "all").strip().lower()
     if aspect not in ("all", "love", "health", "work", "wealth"):
         aspect = "all"
 
-    # 重新跑排盤,確保資料一致
     try:
         dt_obj = datetime(y_i, m_i, d_i, h_i, 0)
         chart = cast_hexagram_manual(lines, moving, dt_obj)
         aspects = analyze_chart_aspects(
-            chart, dt_obj,
-            gender=gender or None,
-            aspect_choice=aspect,
+            chart, dt_obj, gender=None, aspect_choice=aspect,
         )
     except Exception as e:
-        return jsonify({"error": f"排盤失敗:{type(e).__name__}: {e}"}), 500
+        return None, None, ({"error": f"排盤失敗:{type(e).__name__}: {e}"}, 500)
 
-    # 旬空(空亡):由日干支查表得出,純確定值。直接餵給 AI 免自算,
-    # 避免模型(尤其較小模型)把空亡算錯——這是 AI 自算卦理時最常出錯的一項。
+    # 旬空(空亡):由日干支查表得出,純確定值,直接餵給 AI 免自算
     _GAN = "甲乙丙丁戊己庚辛壬癸"
     _ZHI = "子丑寅卯辰巳午未申酉戌亥"
     _gz = chart.get("日干支", "")
@@ -377,18 +378,13 @@ def manual_ai_prompt():
         xun_kong = [_ZHI[(_base + 10) % 12], _ZHI[(_base + 11) % 12]]
     _kong_set = set(xun_kong)
 
-    # 在對六爻每爻標記是否空亡(依本卦該爻地支)
     liu_yao = []
     for _e in (aspects.get("對六爻", []) or []):
         _e2 = dict(_e)
         _e2["空亡"] = _e.get("地支") in _kong_set
         liu_yao.append(_e2)
 
-    # 組 JSON payload
-    # 擲卦模式只保留「對六爻」的生剋/旺衰素材(臨值、月生月剋、合沖等)與「旬空」,
-    # 移除四面向判讀其餘內容(四面向解讀文字、主導爻等):
-    #   1. 省 token   2. 由 AI 依規則自行取用神、判旺衰,避免疊床架屋
-    #   3. 避免四面向文字夾帶的內部標籤([主用神]等)外洩給 AI
+    # 只保留「對六爻」旺衰素材與「旬空」(省 token、避免內部標籤外洩、由 AI 自行取用神)
     chart_payload = {
         "schema_version": 1,
         "排盤時間": f"{y_i:04d}-{m_i:02d}-{d_i:02d} {h_i:02d}:00",
@@ -397,25 +393,112 @@ def manual_ai_prompt():
         "旬空": xun_kong,
         "對六爻": liu_yao,
     }
-    # 用 compact 分隔符,移除縮排空白以節省 AI token(資料內容不變)
     chart_json_str = json.dumps(
         chart_payload, ensure_ascii=False, separators=(",", ":")
     )
-
-    # 組完整 prompt
-    full_prompt = (
-        _MANUAL_AI_PROMPT
-        + "\n\n---\n\n"
-        + "【所問之事】\n"
-        + question
-        + "\n\n"
-        + "【卦象 JSON】\n"
-        + "```json\n"
-        + chart_json_str
-        + "\n```\n"
+    user_text = (
+        "【所問之事】\n" + question
+        + "\n\n【卦象 JSON】\n```json\n" + chart_json_str + "\n```\n"
     )
+    return _MANUAL_AI_PROMPT, user_text, None
 
+
+def _call_claude_reading(system_text, user_text):
+    """呼叫 Claude(預設 Sonnet 4.6)即時產生解讀。
+
+    system_text(規則)當作可快取 system;user_text(問事+JSON)當 user 訊息。
+    成功回傳解讀文字;失敗丟例外(由呼叫端決定退點)。
+    """
+    import anthropic
+    client = anthropic.Anthropic()  # 讀環境變數 ANTHROPIC_API_KEY
+    resp = client.messages.create(
+        model=_AI_READING_MODEL,
+        max_tokens=4096,
+        system=[{
+            "type": "text",
+            "text": system_text,
+            "cache_control": {"type": "ephemeral"},  # 規則固定,開快取省 token
+        }],
+        messages=[{"role": "user", "content": user_text}],
+    )
+    text = "\n".join(
+        b.text for b in resp.content if getattr(b, "type", "") == "text"
+    ).strip()
+    if not text:
+        raise RuntimeError("AI 回傳空內容")
+    return text
+
+
+@app.route("/manual/ai_prompt", methods=["POST"])
+@login_required
+def manual_ai_prompt():
+    """組裝可攜帶 prompt(規則 + 所問之事 + 卦象 JSON),供管理員複製貼到自己的 AI。"""
+    data = request.get_json(silent=True) or {}
+    system_text, user_text, err = _build_manual_reading(data)
+    if err:
+        body, code = err
+        return jsonify(body), code
+    full_prompt = system_text + "\n\n---\n\n" + user_text
     return jsonify({"prompt": full_prompt})
+
+
+@app.route("/manual/ai_reading", methods=["POST"])
+@login_required
+def manual_ai_reading():
+    """AI 解盤:扣 1 點 → 呼叫 Claude 即時產生解讀。任何失敗都自動退點。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "請先登入會員"}), 401
+
+    data = request.get_json(silent=True) or {}
+    system_text, user_text, err = _build_manual_reading(data)
+    if err:
+        body, code = err
+        return jsonify(body), code
+
+    # 先原子扣點(餘額不足直接擋)
+    ok, bal, msg = db.try_deduct_point(user["id"], 1, "divination")
+    if not ok:
+        if msg == "insufficient":
+            return jsonify({
+                "error": "點數不足,請先儲值",
+                "balance": user.get("points_balance", 0),
+            }), 402
+        return jsonify({"error": "系統忙線,請稍後再試"}), 503
+
+    # 呼叫 AI;失敗一律退回剛扣的 1 點
+    try:
+        reading = _call_claude_reading(system_text, user_text)
+    except Exception as e:
+        db.add_points(user["id"], 1, "refund", ref="ai_reading_failed")
+        app.logger.warning("AI reading failed (%s: %s)", type(e).__name__, e)
+        return jsonify({"error": "解讀產生失敗,已退還 1 點,請稍後再試"}), 502
+
+    return jsonify({"reading": reading, "balance": bal})
+
+
+# ============================================================
+# 會員頁面:會員資料 + 剩餘點數 + 點數異動紀錄
+# ============================================================
+@app.route("/member", methods=["GET"])
+@login_required
+def member():
+    user = current_user()
+    ledger = db.list_ledger(user["id"]) if user else []
+    return render_template("member.html", mode="member", user=user, ledger=ledger)
+
+
+@app.route("/member/test_topup", methods=["POST"])
+@login_required
+def member_test_topup():
+    """[暫時/測試用] 管理員幫自己加 10 測試點數。綠界儲值串好後移除。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "未登入"}), 401
+    ok, bal = db.add_points(user["id"], 10, "test_topup")
+    if not ok:
+        return jsonify({"error": "加點失敗"}), 500
+    return jsonify({"balance": bal})
 
 
 # ============================================================
