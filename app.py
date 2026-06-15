@@ -367,13 +367,17 @@ def manual_ai_prompt():
         return jsonify({"error": f"排盤失敗:{type(e).__name__}: {e}"}), 500
 
     # 組 JSON payload
+    # 擲卦模式只保留「對六爻」的生剋/旺衰素材(臨值、月生月剋、合沖等),
+    # 移除四面向判讀其餘內容(四面向解讀文字、主導爻等):
+    #   1. 省 token   2. 由 AI 依規則自行取用神、判旺衰,避免疊床架屋
+    #   3. 避免四面向文字夾帶的內部標籤([主用神]等)外洩給 AI
     chart_payload = {
         "schema_version": 1,
         "排盤時間": f"{y_i:04d}-{m_i:02d}-{d_i:02d} {h_i:02d}:00",
         "性別": gender or None,
         "問事類別": aspect,
         "卦象": chart,
-        "四面向判讀": aspects,
+        "對六爻": aspects.get("對六爻", []),
     }
     # 用 compact 分隔符,移除縮排空白以節省 AI token(資料內容不變)
     chart_json_str = json.dumps(
