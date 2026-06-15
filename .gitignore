@@ -16,7 +16,9 @@ __pycache__/
 .DS_Store
 
 # 部署相關(本機/伺服器才需要)
+deploy.sh
 deploy.sh.local
+publish.sh
 
 # 日誌
 *.log
