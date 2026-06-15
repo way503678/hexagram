@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}時辰起卦 — 命卦排盤{% endblock %}
+{% block title %}命盤排卦 — 命卦排盤{% endblock %}
 
 {% block content %}
-<h1>時辰起卦(梅花易數)</h1>
+<h1>命盤排卦</h1>
 
 <form method="get" action="/cast">
   <div style="margin-bottom: 8px;">
@@ -19,6 +19,7 @@
         {% if (gender or '') == 'M' %}checked{% endif %}>男</label>
     </span>
   </div>
+  <div style="margin: 8px 0 4px;">出生時間</div>
   <span class="field">
     <input class="y" type="number" name="y" value="{{ y or default_y }}" min="1900" max="2100" required> 年
   </span>
@@ -35,7 +36,7 @@
       {% endfor %}
     </select> 時
   </span>
-  <button type="submit">起卦</button>
+  <button type="submit">排命盤</button>
   <div class="note">時辰以 00:00 換日(23:00 仍算當天);年月柱以節氣分界。</div>
 </form>
 
