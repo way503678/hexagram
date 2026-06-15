@@ -314,6 +314,12 @@
       body: JSON.stringify(payload)
     })
     .then(function(res) {
+      // session 逾時時,後端會 302 轉到登入頁,回來的是 HTML 而非 JSON
+      var ct = res.headers.get('Content-Type') || '';
+      if (res.redirected || res.url.indexOf('/admin/login') !== -1 ||
+          ct.indexOf('application/json') === -1) {
+        throw new Error('登入已逾時,請重新登入後再按一次');
+      }
       return res.json().then(function(data){
         return { ok: res.ok, data: data };
       });
