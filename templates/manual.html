@@ -187,12 +187,13 @@
       <button type="button" class="ai-btn export-btn" id="manual-ai-btn">
         🤖 產生 AI 解讀 Prompt
       </button>
+      {# 🔮 AI 解盤暫時隱藏(避免誤按);要還原把 display:none 拿掉即可 #}
       <button type="button" class="ai-btn export-btn" id="manual-reading-btn"
-              style="background:#6b2d8b; margin-left:8px;">
+              style="background:#6b2d8b; margin-left:8px; display:none;">
         🔮 AI 解盤（扣 1 點）
       </button>
       <div class="note" style="margin-top:6px;">
-        「產生 Prompt」複製貼到自己的 AI；「AI 解盤」扣 1 點即時出解讀。
+        「產生 Prompt」複製貼到自己的 AI。
         {% if member %}
           ｜剩餘 <strong id="member-balance">{{ member.points_balance }}</strong> 點
           ｜<a href="/member">會員中心</a>
