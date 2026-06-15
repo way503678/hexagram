@@ -367,11 +367,21 @@ def _compute_chart(data):
     try:
         dt_obj = datetime(y_i, m_i, d_i, h_i, 0)
         chart = cast_hexagram_manual(lines, moving, dt_obj)
-        aspects = analyze_chart_aspects(
-            chart, dt_obj, gender=None, aspect_choice=aspect,
-        )
+        chart_payload = _enrich_chart_payload(chart, dt_obj, aspect)
     except Exception as e:
         return None, ({"error": f"排盤失敗:{type(e).__name__}: {e}"}, 500)
+    return chart_payload, None
+
+
+def _enrich_chart_payload(chart, dt_obj, aspect):
+    """卦象 + 排盤時間 → 算 aspects/旬空/對六爻,組出可序列化 payload。
+
+    手動排卦與時辰起卦共用,確保 app 兩種模式拿到的卦象結構一致。
+    可能丟例外(由呼叫端決定錯誤回應)。
+    """
+    aspects = analyze_chart_aspects(
+        chart, dt_obj, gender=None, aspect_choice=aspect,
+    )
 
     # 旬空(空亡):由日干支查表得出,純確定值,直接餵給 AI 免自算
     _GAN = "甲乙丙丁戊己庚辛壬癸"
@@ -389,16 +399,14 @@ def _compute_chart(data):
         _e2["空亡"] = _e.get("地支") in _kong_set
         liu_yao.append(_e2)
 
-    # 只保留「對六爻」旺衰素材與「旬空」(省 token、避免內部標籤外洩、由 AI 自行取用神)
-    chart_payload = {
+    return {
         "schema_version": 1,
-        "排盤時間": f"{y_i:04d}-{m_i:02d}-{d_i:02d} {h_i:02d}:00",
+        "排盤時間": dt_obj.strftime("%Y-%m-%d %H:00"),
         "問事類別": aspect,
         "卦象": chart,
         "旬空": xun_kong,
         "對六爻": liu_yao,
     }
-    return chart_payload, None
 
 
 def _build_manual_reading(data):
@@ -459,6 +467,35 @@ def api_chart():
     if err:
         body, code = err
         return jsonify(body), code
+    return jsonify(payload)
+
+
+@app.route("/api/v1/cast", methods=["POST"])
+def api_cast():
+    """時辰起卦:給定日期時間 → 依時辰自動起卦(免費、免登入)。
+
+    請求 JSON:{"y":2026,"m":6,"d":15,"h":16,"aspect":"all"}(省略時間以當下補)。
+    回傳:與 /api/v1/chart 相同結構的 chart_payload(卦象/旬空/對六爻)。
+    """
+    data = request.get_json(silent=True) or {}
+    try:
+        y_i = int(data.get("y") or datetime.now().year)
+        m_i = int(data.get("m") or datetime.now().month)
+        d_i = int(data.get("d") or datetime.now().day)
+        h_i = int(data.get("h") or datetime.now().hour)
+    except (TypeError, ValueError):
+        return jsonify({"error": "日期時間格式錯誤"}), 400
+
+    aspect = (data.get("aspect") or "all").strip().lower()
+    if aspect not in ("all", "love", "health", "work", "wealth"):
+        aspect = "all"
+
+    try:
+        dt_obj = datetime(y_i, m_i, d_i, h_i, 0)
+        chart = cast_hexagram(dt_obj)
+        payload = _enrich_chart_payload(chart, dt_obj, aspect)
+    except Exception as e:
+        return jsonify({"error": f"起卦失敗:{type(e).__name__}: {e}"}), 500
     return jsonify(payload)
 
 
