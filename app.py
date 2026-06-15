@@ -462,6 +462,23 @@ def api_chart():
     return jsonify(payload)
 
 
+@app.route("/api/v1/prompt", methods=["POST"])
+def api_prompt():
+    """組裝 AI 解讀 Prompt(規則 + 所問之事 + 卦象 JSON),供使用者複製到自己的 AI。
+
+    請求 JSON:與 /api/v1/chart 相同,另加 question(所問之事,必填)。
+    免費、免登入、不呼叫 Claude(只是把可攜帶 prompt 組好回傳)。
+    回傳:{"prompt": "..."}。
+    """
+    data = request.get_json(silent=True) or {}
+    system_text, user_text, err = _build_manual_reading(data)
+    if err:
+        body, code = err
+        return jsonify(body), code
+    full_prompt = system_text + "\n\n---\n\n" + user_text
+    return jsonify({"prompt": full_prompt})
+
+
 def _call_claude_reading(system_text, user_text):
     """呼叫 Claude(預設 Sonnet 4.6)即時產生解讀。
 
