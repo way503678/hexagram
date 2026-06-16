@@ -185,7 +185,107 @@ def day_info(year, month, day):
         "jieqi_time": jq_time,
         "day_zibai": zb,
         "day_zibai_name": ZIBAI_NAMES[zb],
+        "擇日": day_zeri(year, month, day),
         "year_zibai": (lambda v: {"n": v, "name": ZIBAI_NAMES[v]})(year_zibai(year)),
+    }
+
+
+# ============================================================
+# 擇日(建除十二神 + 神煞,標準公有規則,中性用詞)
+# ============================================================
+_JIANCHU = ["建", "除", "滿", "平", "定", "執", "破", "危", "成", "收", "開", "閉"]
+
+# 建除各神:(吉凶等級, 宜忌白話)
+_JIANCHU_INFO = {
+    "建": ("凶", "月建日,氣旺剛猛;宜出行、謀事,忌動土、安葬、開倉。"),
+    "除": ("小吉", "除舊布新;宜祭祀、解除、療病、出行,小事可用。"),
+    "滿": ("凶", "滿則招損;宜祭祀、納采,忌嫁娶、就醫、動土。"),
+    "平": ("平", "平平之日;宜舖路、平整,餘事平常。"),
+    "定": ("吉", "安定;宜嫁娶、定盟、入學、上樑,忌訴訟、出行。"),
+    "執": ("小吉", "執持;宜造作、捕捉、立契,忌出行、移徙。"),
+    "破": ("大凶", "月破日,諸事不宜,惟宜破屋、療病、求醫。"),
+    "危": ("凶", "危日;凡事宜謹慎,忌登高、行船、冒險。"),
+    "成": ("大吉", "成就;宜嫁娶、開市、入學、修造、立業。"),
+    "收": ("平", "收成;宜收藏、納財、捕捉,忌出行、安葬。"),
+    "開": ("吉", "開通;宜開市、入學、修造、出行,忌安葬。"),
+    "閉": ("凶", "閉塞;宜築堤、埋葬,忌開市、出行、就醫。"),
+}
+
+_LEVEL_RANK = {"大凶": 0, "凶": 1, "平": 2, "小吉": 3, "吉": 4, "大吉": 5}
+
+# 三煞:日支三合局 -> 煞方;坐向忌事模板
+_SANSHA_OPP = {"東": "西", "南": "北", "西": "東", "北": "南"}
+
+
+def _sansha_dir(dz):
+    if dz in (8, 0, 4):   # 申子辰
+        return "南"
+    if dz in (2, 6, 10):  # 寅午戌
+        return "北"
+    if dz in (5, 9, 1):   # 巳酉丑
+        return "東"
+    return "西"           # 亥卯未
+
+
+def _tianshe(tg, dz, mdz):
+    """天赦日:春戊寅、夏甲午、秋戊申、冬甲子(季別依月建支)。"""
+    if mdz in (2, 3, 4):    # 春(寅卯辰月)
+        return (tg, dz) == (4, 2)   # 戊寅
+    if mdz in (5, 6, 7):    # 夏
+        return (tg, dz) == (0, 6)   # 甲午
+    if mdz in (8, 9, 10):   # 秋
+        return (tg, dz) == (4, 8)   # 戊申
+    return (tg, dz) == (0, 0)       # 冬 甲子
+
+
+def _yuede_gan(mdz):
+    """月德天干 index(寅午戌→丙、申子辰→壬、亥卯未→甲、巳酉丑→庚)。"""
+    if mdz in (2, 6, 10):
+        return 2   # 丙
+    if mdz in (8, 0, 4):
+        return 8   # 壬
+    if mdz in (11, 3, 7):
+        return 0   # 甲
+    return 6       # 庚
+
+
+def day_zeri(year, month, day):
+    """單日擇日資料(建除 + 神煞 + 吉凶宜忌,中性用詞)。"""
+    sd = sxtwl.fromSolar(year, month, day)
+    dg, mg = sd.getDayGZ(), sd.getMonthGZ()
+    tg, dz, mdz = dg.tg, dg.dz, mg.dz
+
+    jc = _JIANCHU[(dz - mdz) % 12]
+    base_level, base_text = _JIANCHU_INFO[jc]
+    level, text = base_level, base_text
+    shen = []
+
+    # 吉神覆蓋(優先於建除):天赦、月德
+    if _tianshe(tg, dz, mdz):
+        shen.append("天赦")
+        level, text = "大吉", "天赦日,百無禁忌;宜修造、嫁娶、開市、出行、入宅。"
+    elif tg == _yuede_gan(mdz):
+        shen.append("月德")
+        level, text = "大吉", "月德,百事大吉。"
+    elif jc == "破":
+        shen.append("月破")
+    elif jc == "建":
+        shen.append("月建")
+
+    sdir = _sansha_dir(dz)
+    opp = _SANSHA_OPP[sdir]
+    return {
+        "建除": jc,
+        "正沖生肖": SHENGXIAO[(dz + 6) % 12],
+        "三煞方位": sdir,
+        "三煞註": (
+            f"三煞在{sdir},{sdir}方忌修造、增建、興工、動土、開井、開池;"
+            f"坐{sdir}向{opp}的房子,不宜入宅、安神位、開市、奠基、破土、啟建、上樑、修造。"
+        ),
+        "神煞": shen,
+        "吉凶": level,
+        "吉凶分": _LEVEL_RANK[level],
+        "宜忌": text,
     }
 
 
