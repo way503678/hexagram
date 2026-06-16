@@ -25,6 +25,8 @@
   .cell-pop .pop-bh { color:#222; background:#f6f1e8; border-radius:6px; padding:6px 8px; margin-bottom:6px; line-height:1.6; }
   .cell-pop .pop-r { color:#444; }
   .cell-pop .pop-r b { color:#888; font-weight:600; margin-right:4px; }
+  .cell-pop .yi,.cell-pop .ji { display:inline-block; color:#fff; font-weight:700; width:18px; text-align:center; border-radius:3px; margin-right:5px; }
+  .cell-pop .yi { background:#2e7d32; } .cell-pop .ji { background:#c0392b; }
   .cell.empty { background:#faf8f4; }
   .cell-top { display:flex; justify-content:space-between; align-items:flex-start; }
   .dnum { font-size:18px; font-weight:800; color:#333; }
@@ -108,8 +110,9 @@
       <div class="cell-pop">
         <div class="pop-h">{{ day.solar }}　{{ day.day_gz }}日　<b class="{{ jl }}">{{ z['吉凶'] }}</b></div>
         <div class="pop-bh">{{ z['白話'] }}</div>
+        <div class="pop-r"><span class="yi">宜</span>{{ z['宜']|join('、') }}</div>
+        <div class="pop-r"><span class="ji">忌</span>{{ z['忌']|join('、') }}</div>
         <div class="pop-r"><b>建除</b>{{ z['建除'] }}日　<b>日紫白</b>{{ day.day_zibai_name }}</div>
-        <div class="pop-r"><b>宜忌</b>{{ z['宜忌'] }}</div>
         <div class="pop-r"><b>正沖</b>生肖屬{{ z['正沖生肖'] }}</div>
         <div class="pop-r">{{ z['三煞註'] }}</div>
       </div>
