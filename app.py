@@ -510,6 +510,34 @@ def api_cast():
     return jsonify(payload)
 
 
+@app.route("/api/v1/almanac/month", methods=["GET"])
+def api_almanac_month():
+    """萬年曆整月資料(免費、免登入)。?y=2026&m=6"""
+    from divination import almanac
+    try:
+        y = int(request.args.get("y") or datetime.now().year)
+        m = int(request.args.get("m") or datetime.now().month)
+        if not (1 <= m <= 12) or not (1900 <= y <= 2100):
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": "年月格式錯誤"}), 400
+    return jsonify(almanac.month_info(y, m))
+
+
+@app.route("/api/v1/almanac/day", methods=["GET"])
+def api_almanac_day():
+    """萬年曆單日資料(免費、免登入)。?y=2026&m=6&d=16"""
+    from divination import almanac
+    try:
+        y = int(request.args.get("y") or datetime.now().year)
+        m = int(request.args.get("m") or datetime.now().month)
+        d = int(request.args.get("d") or datetime.now().day)
+        datetime(y, m, d)  # 驗證合法日期
+    except (TypeError, ValueError):
+        return jsonify({"error": "日期格式錯誤"}), 400
+    return jsonify(almanac.day_info(y, m, d))
+
+
 @app.route("/api/v1/prompt", methods=["POST"])
 def api_prompt():
     """組裝 AI 解讀 Prompt(規則 + 所問之事 + 卦象 JSON),供使用者複製到自己的 AI。
