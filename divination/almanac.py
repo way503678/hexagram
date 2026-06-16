@@ -332,6 +332,38 @@ def _donggong_level(text):
     return "平"
 
 
+_BAIHUA_LEVEL = {
+    "大吉": "今天是好日子,適合做重要的事——開工、結婚、開市、出遠門都不錯。",
+    "吉": "今天運勢不錯,一般事情都可以進行。",
+    "小吉": "今天還算順,平常事可做;真正的大事挑更好的日子更穩。",
+    "平": "今天平平,沒特別好壞,照常作息即可。",
+    "凶": "今天不太順,容易有波折,重要的事(開工、結婚、搬家、簽約)建議改天。",
+    "大凶": "今天大凶,諸事不宜,重要的事務必避開,改別的日子。",
+}
+_BAIHUA_SHEN = {
+    "天赦": "難得的天赦日,百無禁忌。",
+    "月德": "有月德貴人,容易逢凶化吉。",
+    "天德": "有天德貴人,逢凶化吉。",
+    "月破": "月破日,最忌開工、結婚、簽約等大事。",
+    "正四廢": "正四廢日,百事不宜。",
+    "天地轉煞": "氣機反逆,大事先緩一緩。",
+    "往亡": "往亡日,忌出遠門、赴任、求財。",
+    "朱雀勾絞": "要防口舌、官司、是非。",
+    "小紅沙": "紅沙日,易破財、惹官非。",
+    "月建": "月建日,氣勢過旺,動土、嫁娶先避。",
+}
+
+
+def _baihua(level, shen, sdir):
+    parts = [_BAIHUA_LEVEL.get(level, "")]
+    for s in shen:
+        if s in _BAIHUA_SHEN:
+            parts.append(_BAIHUA_SHEN[s])
+            break  # 取最主要的一個神煞提示
+    parts.append(f"另外這天三煞在{sdir}方,該方位不宜動土、修造。")
+    return "".join(parts)
+
+
 def day_zeri(year, month, day):
     """單日擇日資料(董公原典判詞 + 建除/神煞 + 三煞/正沖)。"""
     sd = sxtwl.fromSolar(year, month, day)
@@ -407,6 +439,7 @@ def day_zeri(year, month, day):
         "吉凶": level,
         "吉凶分": _LEVEL_RANK[level],
         "宜忌": text,
+        "白話": _baihua(level, shen, sdir),
     }
 
 
