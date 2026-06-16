@@ -195,19 +195,19 @@ def day_info(year, month, day):
 # ============================================================
 _JIANCHU = ["建", "除", "滿", "平", "定", "執", "破", "危", "成", "收", "開", "閉"]
 
-# 建除各神:(吉凶等級, 宜忌白話)
+# 建除各神:(吉凶等級, 宜忌)— 依董公原典 12 月歸納調整
 _JIANCHU_INFO = {
-    "建": ("凶", "月建日,氣旺剛猛;宜出行、謀事,忌動土、安葬、開倉。"),
+    "建": ("凶", "月建日,往亡氣旺;忌出行、嫁娶、動土,小事可用。"),
     "除": ("小吉", "除舊布新;宜祭祀、解除、療病、出行,小事可用。"),
-    "滿": ("凶", "滿則招損;宜祭祀、納采,忌嫁娶、就醫、動土。"),
-    "平": ("平", "平平之日;宜舖路、平整,餘事平常。"),
-    "定": ("吉", "安定;宜嫁娶、定盟、入學、上樑,忌訴訟、出行。"),
-    "執": ("小吉", "執持;宜造作、捕捉、立契,忌出行、移徙。"),
+    "滿": ("凶", "天富、天賊;宜納采,忌嫁娶、就醫、動土。"),
+    "平": ("凶", "朱雀、勾絞;忌起造、出行、安葬、婚姻、入宅,易招官非口舌。"),
+    "定": ("吉", "黃羅、紫檀諸吉;宜嫁娶、開市、入學、上樑、安葬。"),
+    "執": ("小吉", "執持;宜造作、立契、捕捉,忌出行、移徙。"),
     "破": ("大凶", "月破日,諸事不宜,惟宜破屋、療病、求醫。"),
-    "危": ("凶", "危日;凡事宜謹慎,忌登高、行船、冒險。"),
-    "成": ("大吉", "成就;宜嫁娶、開市、入學、修造、立業。"),
-    "收": ("平", "收成;宜收藏、納財、捕捉,忌出行、安葬。"),
-    "開": ("吉", "開通;宜開市、入學、修造、出行,忌安葬。"),
+    "危": ("小吉", "黃羅、紫檀星臨,多次吉;宜小作、修造,大事仍宜謹慎。"),
+    "成": ("大吉", "天喜星臨,成就;宜嫁娶、開市、入學、修造、立業。"),
+    "收": ("凶", "朱雀、勾絞、到州;忌出行、安葬、入宅,易招官司。"),
+    "開": ("小吉", "開通;宜開市、入學、修造、出行,忌安葬。"),
     "閉": ("凶", "閉塞;宜築堤、埋葬,忌開市、出行、就醫。"),
 }
 
@@ -249,6 +249,64 @@ def _yuede_gan(mdz):
     return 6       # 庚
 
 
+# 往亡日:月序(1=正月/寅月) -> 日支index
+_WANGWANG = {1: 2, 2: 5, 3: 8, 4: 11, 5: 3, 6: 6,
+             7: 9, 8: 0, 9: 4, 10: 7, 11: 10, 12: 1}
+
+
+def _wangwang(midx, dz):
+    return _WANGWANG.get(midx) == dz
+
+
+def _sifei(tg, dz, mdz):
+    """正四廢:春庚申辛酉、夏壬子癸亥、秋甲寅乙卯、冬丙午丁巳(季依月建支)。"""
+    gz = (tg, dz)
+    if mdz in (2, 3, 4):    # 春
+        return gz in ((6, 8), (7, 9))    # 庚申、辛酉
+    if mdz in (5, 6, 7):    # 夏
+        return gz in ((8, 0), (9, 11))   # 壬子、癸亥
+    if mdz in (8, 9, 10):   # 秋
+        return gz in ((0, 2), (1, 3))    # 甲寅、乙卯
+    return gz in ((2, 6), (3, 5))        # 冬 丙午、丁巳
+
+
+def _hongsha(mdz, dz):
+    """小紅沙:孟月(寅申巳亥)逢巳、仲月(子午卯酉)逢酉、季月(辰戌丑未)逢丑。
+    (依原典:正月平巳=紅沙、五月平酉=紅沙、九月平丑=紅沙)"""
+    if mdz in (2, 8, 5, 11):   # 孟
+        return dz == 5          # 巳
+    if mdz in (0, 6, 3, 9):    # 仲
+        return dz == 9          # 酉
+    return dz == 1              # 季 丑
+
+
+def _tianzhuan(tg, dz, mdz):
+    """天地轉煞:春乙卯/辛卯、夏丙午/戊午、秋辛酉/癸酉、冬壬子/丙子(季依月建支)。"""
+    gz = (tg, dz)
+    if mdz in (2, 3, 4):    # 春
+        return gz in ((1, 3), (7, 3))    # 乙卯、辛卯
+    if mdz in (5, 6, 7):    # 夏
+        return gz in ((2, 6), (4, 6))    # 丙午、戊午
+    if mdz in (8, 9, 10):   # 秋
+        return gz in ((7, 9), (9, 9))    # 辛酉、癸酉
+    return gz in ((8, 0), (2, 0))        # 冬 壬子、丙子
+
+
+# 天德:月序 -> ('g',干index) 或 ('z',支index)
+_TIANDE = {1: ("g", 3), 2: ("z", 8), 3: ("g", 8), 4: ("g", 7), 5: ("z", 11),
+           6: ("g", 0), 7: ("g", 9), 8: ("z", 2), 9: ("g", 2), 10: ("g", 1),
+           11: ("z", 5), 12: ("g", 6)}
+
+
+def _tiande(midx, tg, dz):
+    kind, idx = _TIANDE.get(midx, (None, None))
+    if kind == "g":
+        return tg == idx
+    if kind == "z":
+        return dz == idx
+    return False
+
+
 try:
     from divination.donggong_data import DONGGONG
 except Exception:
@@ -283,19 +341,57 @@ def day_zeri(year, month, day):
     jc = _JIANCHU[(dz - mdz) % 12]
     base_level, base_text = _JIANCHU_INFO[jc]
     level, text = base_level, base_text
-    shen = []
+    midx = (mdz - 2) % 12 + 1
 
-    # 吉神覆蓋(優先於建除):天赦、月德
-    if _tianshe(tg, dz, mdz):
-        shen.append("天赦")
-        level, text = "大吉", "天赦日,百無禁忌;宜修造、嫁娶、開市、出行、入宅。"
-    elif tg == _yuede_gan(mdz):
-        shen.append("月德")
-        level, text = "大吉", "月德,百事大吉。"
-    elif jc == "破":
+    # 偵測神煞
+    shen = []
+    she = _tianshe(tg, dz, mdz)
+    yd = tg == _yuede_gan(mdz)
+    td = _tiande(midx, tg, dz)
+    sf = _sifei(tg, dz, mdz)
+    hs = _hongsha(mdz, dz)
+    ww = _wangwang(midx, dz)
+    tz = _tianzhuan(tg, dz, mdz)
+    if jc == "破":
         shen.append("月破")
-    elif jc == "建":
+    if jc == "建":
         shen.append("月建")
+    if jc in ("平", "收"):
+        shen.append("朱雀勾絞")
+    if ww:
+        shen.append("往亡")
+    if hs:
+        shen.append("小紅沙")
+    if sf:
+        shen.append("正四廢")
+    if tz:
+        shen.append("天地轉煞")
+    if she:
+        shen.append("天赦")
+    if yd:
+        shen.append("月德")
+    if td:
+        shen.append("天德")
+
+    # 吉凶優先序:大凶煞 > 吉神 > 凶煞 > 建除基準
+    if sf:
+        level, text = "大凶", "正四廢日,四時休囚,百事不宜。"
+    elif jc == "破":
+        level, text = "大凶", "月破日,諸事不宜,惟宜破屋、療病、求醫。"
+    elif tz:
+        level, text = "凶", "天地轉煞,氣機反逆,諸事不宜。"
+    elif she:
+        level, text = "大吉", "天赦日,百無禁忌;宜修造、嫁娶、開市、出行、入宅。"
+    elif yd:
+        level, text = "大吉", "月德,百事大吉。"
+    elif td:
+        level = "吉"
+        text = "天德星臨,逢凶化吉;宜安葬、祈福、出行、見貴。"
+    elif hs:
+        level, text = "凶", "小紅沙日,易招官非、損財,諸事不宜。"
+    elif ww:
+        level, text = "凶", "往亡日,忌出行、嫁娶、赴任、求財。"
+    # 否則維持建除基準 level/text
 
     sdir = _sansha_dir(dz)
     opp = _SANSHA_OPP[sdir]
