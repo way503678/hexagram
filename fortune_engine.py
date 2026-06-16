@@ -350,6 +350,8 @@ def analyze_fortune(chart_dt, target_year, gender=None):
             "月名":     m["月名"],
             "節氣":     m["節氣"],
             "起始":     m["起始"],
+            "結束":     m["結束"],
+            "區間":     m["區間"],
             "干支":     m["干支"],
             "天干":     m["天干"],
             "地支":     m_branch,

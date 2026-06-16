@@ -600,6 +600,33 @@ def api_almanac_day():
     return jsonify(almanac.day_info(y, m, d))
 
 
+@app.route("/api/v1/fortune", methods=["GET"])
+def api_fortune():
+    """流年分析(免費、免登入):?y&m&d&h&gender&year。
+
+    依出生 y/m/d/h + 性別,分析目標 year 的流年 + 12 流月 + 白話斷語。
+    """
+    now = datetime.now()
+    try:
+        y_i = int(request.args["y"])
+        m_i = int(request.args["m"])
+        d_i = int(request.args["d"])
+        h_i = int(request.args["h"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "缺少出生年月日時(y/m/d/h)"}), 400
+    try:
+        year_i = int(request.args.get("year", now.year))
+    except ValueError:
+        year_i = now.year
+    gender = (request.args.get("gender", "") or "").strip().upper()
+    gender = gender if gender in ("M", "F") else None
+    try:
+        fortune = analyze_fortune(datetime(y_i, m_i, d_i, h_i, 0), year_i, gender=gender)
+    except Exception as e:
+        return jsonify({"error": f"流年分析失敗:{type(e).__name__}: {e}"}), 500
+    return jsonify(fortune)
+
+
 @app.route("/api/v1/prompt", methods=["POST"])
 def api_prompt():
     """組裝 AI 解讀 Prompt(規則 + 所問之事 + 卦象 JSON),供使用者複製到自己的 AI。
