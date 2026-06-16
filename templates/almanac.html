@@ -12,7 +12,17 @@
               border:1px solid #ddd; }
   .alm-grid .wd { background:#f4f1ea; text-align:center; padding:7px 0; font-size:15px; font-weight:700; color:#555; }
   .alm-grid .wd.sun { color:#c0392b; }
-  .cell { background:#fff; min-height:88px; padding:4px 5px; position:relative; }
+  .cell { background:#fff; min-height:88px; padding:4px 5px; position:relative; cursor:pointer; }
+  .cell:hover { background:#fdf7ef; box-shadow:inset 0 0 0 2px #c0651a; z-index:5; }
+  .cell-pop { display:none; position:absolute; top:100%; left:0; width:280px; max-width:78vw;
+              background:#fff; border:1px solid #c0651a; border-radius:8px; padding:10px 12px;
+              box-shadow:0 6px 20px rgba(0,0,0,.18); z-index:50; font-size:13px; line-height:1.7;
+              text-align:left; white-space:normal; }
+  .cell:hover .cell-pop { display:block; }
+  .cell:nth-child(7n) .cell-pop, .cell:nth-child(7n-1) .cell-pop { left:auto; right:0; }
+  .cell-pop .pop-h { font-weight:700; margin-bottom:4px; }
+  .cell-pop .pop-r { color:#444; }
+  .cell-pop .pop-r b { color:#888; font-weight:600; margin-right:4px; }
   .cell.empty { background:#faf8f4; }
   .cell-top { display:flex; justify-content:space-between; align-items:flex-start; }
   .dnum { font-size:21px; font-weight:800; color:#333; }
@@ -72,8 +82,7 @@
     {% set gc = 'wood' if gan in '甲乙' else 'fire' if gan in '丙丁' else 'earth' if gan in '戊己' else 'metal' if gan in '庚辛' else 'water' %}
     {% set z = day['擇日'] %}
     {% set jl = {'大吉':'jx-dj','吉':'jx-j','小吉':'jx-xj','平':'jx-p','凶':'jx-x','大凶':'jx-dx'}[z['吉凶']] if z else '' %}
-    <div class="cell {% if col == 0 %}sun{% endif %} {% if day.solar == today %}today{% endif %}"
-         {% if z %}title="{{ z['建除'] }}日 · {{ z['吉凶'] }}&#10;{{ z['宜忌'] }}&#10;正沖屬{{ z['正沖生肖'] }} · {{ z['三煞註'] }}"{% endif %}>
+    <div class="cell {% if col == 0 %}sun{% endif %} {% if day.solar == today %}today{% endif %}">
       <div class="cell-top">
         <span class="dnum">{{ day.solar[8:10]|int }}</span>
         <span class="gz {{ gc }}">{{ day.day_gz }}</span>
@@ -85,6 +94,15 @@
         <span class="zb zb{{ day.day_zibai }}">{{ day.day_zibai_name }}</span>
         {% if z %}<span class="jx {{ jl }}">{{ z['建除'] }}·{{ z['吉凶'] }}</span>{% endif %}
       </div>
+      {% if z %}
+      <div class="cell-pop">
+        <div class="pop-h">{{ day.solar }}　{{ day.day_gz }}日　<b class="{{ jl }}">{{ z['吉凶'] }}</b></div>
+        <div class="pop-r"><b>建除</b>{{ z['建除'] }}日　<b>日紫白</b>{{ day.day_zibai_name }}</div>
+        <div class="pop-r"><b>宜忌</b>{{ z['宜忌'] }}</div>
+        <div class="pop-r"><b>正沖</b>生肖屬{{ z['正沖生肖'] }}</div>
+        <div class="pop-r">{{ z['三煞註'] }}</div>
+      </div>
+      {% endif %}
     </div>
   {% endfor %}
 </div>
