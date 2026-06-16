@@ -15,6 +15,8 @@
 
 回傳結構與原版完全一致，templates 不用改。
 """
+from datetime import datetime, timedelta
+
 import sxtwl
 
 from core_data import HEAVENLY_STEMS, EARTHLY_BRANCHES, BRANCH_ELEMENT
@@ -54,30 +56,44 @@ def _gz_string(gz_obj):
 
 def _collect_months(year):
     """
-    收集流年 12 個流月。
-    從 year 立春日開始，連續找 12 個「節」（奇數節氣編號）。
+    收集流年 12 個流月(每月以「節」分界)。
+    從 year 立春日開始,連續找 13 個「節」:前 12 個為流月起點,
+    第 13 個(次年立春)用來界定第 12 個流月的結束。
+    每個流月帶國曆「起始」「結束」「區間」(結束 = 下個節氣前一天)。
     """
     d = _find_lichun(year)
-    months = []
-    while len(months) < 12:
+    anchors = []  # 連續 13 個節的 sxtwl Day
+    while len(anchors) < 13:
         if d.hasJieQi() and d.getJieQi() in MONTH_JIEQI:
-            jq = d.getJieQi()
-            m_gz = d.getMonthGZ()
-            month_branch = JIEQI_TO_MONTH_BRANCH[jq]
-            months.append({
-                "節氣編號": jq,
-                "節氣": JIEQI_NAMES[jq],
-                "月地支": month_branch,
-                "月序": MONTH_BRANCH_ORDER[month_branch],
-                "月名": MONTH_BRANCH_NAMES[month_branch],
-                "起始": "%04d-%02d-%02d" % (
-                    d.getSolarYear(), d.getSolarMonth(), d.getSolarDay()
-                ),
-                "干支": _gz_string(m_gz),
-                "天干": HEAVENLY_STEMS[m_gz.tg],
-                "地支": EARTHLY_BRANCHES[m_gz.dz],
-            })
+            anchors.append(d)
         d = d.after(1)
+
+    def _solar(day):
+        return datetime(day.getSolarYear(), day.getSolarMonth(), day.getSolarDay())
+
+    months = []
+    for i in range(12):
+        cur = anchors[i]
+        start_dt = _solar(cur)
+        end_dt = _solar(anchors[i + 1]) - timedelta(days=1)
+        jq = cur.getJieQi()
+        m_gz = cur.getMonthGZ()
+        month_branch = JIEQI_TO_MONTH_BRANCH[jq]
+        start_s = start_dt.strftime("%Y-%m-%d")
+        end_s = end_dt.strftime("%Y-%m-%d")
+        months.append({
+            "節氣編號": jq,
+            "節氣": JIEQI_NAMES[jq],
+            "月地支": month_branch,
+            "月序": MONTH_BRANCH_ORDER[month_branch],
+            "月名": MONTH_BRANCH_NAMES[month_branch],
+            "起始": start_s,
+            "結束": end_s,
+            "區間": f"{start_s} ~ {end_s}",
+            "干支": _gz_string(m_gz),
+            "天干": HEAVENLY_STEMS[m_gz.tg],
+            "地支": EARTHLY_BRANCHES[m_gz.dz],
+        })
     return months
 
 
