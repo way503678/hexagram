@@ -249,8 +249,33 @@ def _yuede_gan(mdz):
     return 6       # 庚
 
 
+try:
+    from divination.donggong_data import DONGGONG
+except Exception:
+    DONGGONG = {}
+
+
+def _donggong_level(text):
+    """由董公原典判詞文字推吉凶等級(供月曆色標;全文為準)。"""
+    if not text:
+        return None
+    if any(k in text for k in ("大凶", "百事不宜", "百事皆忌", "不宜用事", "諸事不宜")):
+        return "大凶"
+    if "百事大吉" in text or "大發" in text or "諸吉星" in text:
+        return "大吉"
+    if "大吉" in text:
+        return "大吉"
+    if "次吉" in text or "小作" in text or "小事" in text:
+        return "小吉"
+    if "不宜" in text or "忌" in text:
+        return "凶"
+    if "宜" in text:
+        return "吉"
+    return "平"
+
+
 def day_zeri(year, month, day):
-    """單日擇日資料(建除 + 神煞 + 吉凶宜忌,中性用詞)。"""
+    """單日擇日資料(董公原典判詞 + 建除/神煞 + 三煞/正沖)。"""
     sd = sxtwl.fromSolar(year, month, day)
     dg, mg = sd.getDayGZ(), sd.getMonthGZ()
     tg, dz, mdz = dg.tg, dg.dz, mg.dz
