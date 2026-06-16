@@ -40,6 +40,30 @@ _DAY_ANCHORS = {
 }
 
 
+_CN_NUM = "〇一二三四五六七八九十"
+_LMONTH = ["", "正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二"]
+
+
+def _lunar_day_cn(d):
+    """農曆日數字 -> 中文(初一/十五/廿三/三十)。"""
+    if d == 10:
+        return "初十"
+    if d == 20:
+        return "二十"
+    if d == 30:
+        return "三十"
+    if d < 10:
+        return "初" + _CN_NUM[d]
+    if d < 20:
+        return "十" + _CN_NUM[d - 10]
+    return "廿" + _CN_NUM[d - 20]
+
+
+def _lunar_month_cn(m, leap):
+    """農曆月 -> 中文(閏五月 / 正月)。"""
+    return ("閏" if leap else "") + _LMONTH[m] + "月"
+
+
 def _norm9(v):
     """把任意整數正規化到 1~9。"""
     return (v - 1) % 9 + 1
@@ -149,6 +173,10 @@ def day_info(year, month, day):
         "lunar_month": lunar_m,
         "lunar_day": lunar_d,
         "lunar_leap": is_leap,
+        "lunar_day_cn": _lunar_day_cn(lunar_d),
+        "lunar_month_cn": _lunar_month_cn(lunar_m, is_leap),
+        # 月曆每格主標:初一顯示月名,其餘顯示日;
+        "lunar_label": _lunar_month_cn(lunar_m, is_leap) if lunar_d == 1 else _lunar_day_cn(lunar_d),
         "year_gz": GAN[yg.tg] + ZHI[yg.dz],
         "month_gz": GAN[mg.tg] + ZHI[mg.dz],
         "day_gz": GAN[dg.tg] + ZHI[dg.dz],

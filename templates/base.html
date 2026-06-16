@@ -16,6 +16,7 @@
     <aside class="sidebar" id="sidebar">
       <div class="brand"><a href="/" style="color:inherit;text-decoration:none;">命卦排盤</a></div>
       <nav>
+        <a href="/almanac" class="{% if mode == 'almanac' %}active{% endif %}">萬年曆</a>
         <a href="/cast" class="{% if mode == 'solar' %}active{% endif %}">命盤排卦</a>
         <a href="/manual" class="{% if mode == 'manual' %}active{% endif %}">手動排卦</a>
         {% if session.get('is_admin') %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}萬年曆 — 命卦排盤{% endblock %}
+
+{% block content %}
+<style>
+  .alm-head { display:flex; align-items:center; gap:12px; margin-bottom:4px; }
+  .alm-title { font-size:26px; font-weight:800; color:#c0651a; }
+  .alm-nav a { text-decoration:none; font-size:20px; color:#6b2d8b; padding:0 8px; }
+  .alm-jq { color:#7a3b9e; font-size:14px; margin-bottom:10px; }
+  .alm-jq .t { color:#999; margin-left:2px; }
+  .alm-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:#ddd;
+              border:1px solid #ddd; }
+  .alm-grid .wd { background:#f4f1ea; text-align:center; padding:6px 0; font-size:13px; color:#666; }
+  .alm-grid .wd.sun { color:#c0392b; }
+  .cell { background:#fff; min-height:78px; padding:4px 5px; position:relative; }
+  .cell.empty { background:#faf8f4; }
+  .cell-top { display:flex; justify-content:space-between; align-items:flex-start; }
+  .dnum { font-size:18px; font-weight:700; color:#333; }
+  .cell.sun .dnum { color:#c0392b; }
+  .cell.today .dnum { background:#333; color:#fff; border-radius:50%;
+                      width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center; }
+  .gz { font-size:12px; line-height:1.15; text-align:center; writing-mode:vertical-rl; }
+  .gz.wood{color:#2e7d32;} .gz.fire{color:#c0392b;} .gz.earth{color:#a9791c;}
+  .gz.metal{color:#b8860b;} .gz.water{color:#2c5d8a;}
+  .lunar { font-size:12px; color:#888; margin-top:2px; }
+  .lunar .jq { color:#7a3b9e; font-weight:700; }
+  .zb { margin-top:4px; display:inline-block; font-size:13px; font-weight:700;
+        padding:1px 8px; border-radius:4px; }
+  .zb1{background:#fff;color:#2c5d8a;border:1px solid #bbb;}
+  .zb2{background:#1b1b1b;color:#fff;}
+  .zb3{background:#2e74c9;color:#fff;}
+  .zb4{background:#3a9d3a;color:#fff;}
+  .zb5{background:#e0a800;color:#fff;}
+  .zb6{background:#fff;color:#333;border:1px solid #bbb;}
+  .zb7{background:#d13b35;color:#fff;}
+  .zb8{background:#fff;color:#333;border:1px solid #bbb;}
+  .zb9{background:#7a3b9e;color:#fff;}
+</style>
+
+{% set lead = (data.first_weekday + 1) % 7 %}
+
+<div class="alm-head">
+  <span class="alm-title">{{ y }}年{{ m }}月</span>
+  <span class="alm-nav">
+    <a href="/almanac?y={{ prev_y }}&m={{ prev_m }}">‹</a>
+    <a href="/almanac">今</a>
+    <a href="/almanac?y={{ next_y }}&m={{ next_m }}">›</a>
+  </span>
+</div>
+
+<div class="alm-jq">
+  {% for jq in data.jieqi %}
+    {{ jq.name }} {{ jq.day }}日<span class="t">{{ jq.time }}</span>{% if not loop.last %}　{% endif %}
+  {% endfor %}
+</div>
+
+<div class="alm-grid">
+  {% for wd in ['日','一','二','三','四','五','六'] %}
+    <div class="wd {% if loop.first %}sun{% endif %}">{{ wd }}</div>
+  {% endfor %}
+
+  {% for _ in range(lead) %}<div class="cell empty"></div>{% endfor %}
+
+  {% for day in data.days %}
+    {% set col = (loop.index0 + lead) % 7 %}
+    {% set gan = day.day_gz[0] %}
+    {% set gc = 'wood' if gan in '甲乙' else 'fire' if gan in '丙丁' else 'earth' if gan in '戊己' else 'metal' if gan in '庚辛' else 'water' %}
+    <div class="cell {% if col == 0 %}sun{% endif %} {% if day.solar == today %}today{% endif %}">
+      <div class="cell-top">
+        <span class="dnum">{{ day.solar[8:10]|int }}</span>
+        <span class="gz {{ gc }}">{{ day.day_gz }}</span>
+      </div>
+      <div class="lunar">
+        {% if day.jieqi %}<span class="jq">{{ day.jieqi }}</span>{% else %}{{ day.lunar_label }}{% endif %}
+      </div>
+      <span class="zb zb{{ day.day_zibai }}">{{ day.day_zibai_name }}</span>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

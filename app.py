@@ -183,6 +183,28 @@ def landing():
     return render_template("landing.html", mode="landing")
 
 
+@app.route("/almanac", methods=["GET"])
+def almanac_page():
+    """萬年曆(紫白飛星):月曆視圖,公開。"""
+    from divination import almanac
+    now = datetime.now()
+    try:
+        y = int(request.args.get("y") or now.year)
+        m = int(request.args.get("m") or now.month)
+        if not (1 <= m <= 12 and 1900 <= y <= 2100):
+            raise ValueError
+    except (TypeError, ValueError):
+        y, m = now.year, now.month
+    data = almanac.month_info(y, m)
+    prev_y, prev_m = (y - 1, 12) if m == 1 else (y, m - 1)
+    next_y, next_m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return render_template(
+        "almanac.html", mode="almanac", data=data, y=y, m=m,
+        prev_y=prev_y, prev_m=prev_m, next_y=next_y, next_m=next_m,
+        today=now.strftime("%Y-%m-%d"),
+    )
+
+
 # ============================================================
 # 公開:時辰起卦
 # ============================================================
