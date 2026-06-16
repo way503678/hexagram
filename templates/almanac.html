@@ -35,6 +35,11 @@
   .zb7{background:#d13b35;color:#fff;}
   .zb8{background:#fff;color:#333;border:1px solid #bbb;}
   .zb9{background:#7a3b9e;color:#fff;}
+  .cell-bottom{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;}
+  .cell-bottom .zb{margin-top:0;}
+  .jx{font-size:11px;font-weight:700;}
+  .jx-dj{color:#c62828;} .jx-j{color:#2e7d32;} .jx-xj{color:#7cb342;}
+  .jx-p{color:#9e9e9e;} .jx-x{color:#d97706;} .jx-dx{color:#5d4037;}
 </style>
 
 {% set lead = (data.first_weekday + 1) % 7 %}
@@ -65,7 +70,10 @@
     {% set col = (loop.index0 + lead) % 7 %}
     {% set gan = day.day_gz[0] %}
     {% set gc = 'wood' if gan in '甲乙' else 'fire' if gan in '丙丁' else 'earth' if gan in '戊己' else 'metal' if gan in '庚辛' else 'water' %}
-    <div class="cell {% if col == 0 %}sun{% endif %} {% if day.solar == today %}today{% endif %}">
+    {% set z = day['擇日'] %}
+    {% set jl = {'大吉':'jx-dj','吉':'jx-j','小吉':'jx-xj','平':'jx-p','凶':'jx-x','大凶':'jx-dx'}[z['吉凶']] if z else '' %}
+    <div class="cell {% if col == 0 %}sun{% endif %} {% if day.solar == today %}today{% endif %}"
+         {% if z %}title="{{ z['建除'] }}日 · {{ z['吉凶'] }}&#10;{{ z['宜忌'] }}&#10;正沖屬{{ z['正沖生肖'] }} · {{ z['三煞註'] }}"{% endif %}>
       <div class="cell-top">
         <span class="dnum">{{ day.solar[8:10]|int }}</span>
         <span class="gz {{ gc }}">{{ day.day_gz }}</span>
@@ -73,7 +81,10 @@
       <div class="lunar">
         {% if day.jieqi %}<span class="jq">{{ day.jieqi }}</span>{% else %}{{ day.lunar_label }}{% endif %}
       </div>
-      <span class="zb zb{{ day.day_zibai }}">{{ day.day_zibai_name }}</span>
+      <div class="cell-bottom">
+        <span class="zb zb{{ day.day_zibai }}">{{ day.day_zibai_name }}</span>
+        {% if z %}<span class="jx {{ jl }}">{{ z['建除'] }}·{{ z['吉凶'] }}</span>{% endif %}
+      </div>
     </div>
   {% endfor %}
 </div>
