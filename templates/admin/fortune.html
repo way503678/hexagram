@@ -1,9 +1,13 @@
 {% extends "base.html" %}
-{% block title %}{{ detail_name }} ・ {{ fortune_year }} 流年 — 命卦排盤{% endblock %}
+{% block title %}{% if detail_name %}{{ detail_name }} ・ {% endif %}{{ fortune_year }} 流年 — 命卦排盤{% endblock %}
 
 {% block content %}
-<h1>{{ detail_name }} ・ {{ fortune_year }} 流年</h1>
-<a href="/admin/history/{{ detail_name|urlencode }}" class="back-link">← 回 {{ detail_name }} 的命盤清單</a>
+<h1>{% if detail_name %}{{ detail_name }} ・ {% endif %}{{ fortune_year }} 流年</h1>
+{% if detail_name %}
+  <a href="/admin/history/{{ detail_name|urlencode }}" class="back-link">← 回 {{ detail_name }} 的命盤清單</a>
+{% else %}
+  <a href="/cast" class="back-link">← 回 命盤排卦</a>
+{% endif %}
 
 {% if error %}
   <p class="err">錯誤:{{ error }}</p>
@@ -53,12 +57,14 @@
   {% endif %}
 
   {# ---- 年份選擇器 ---- #}
-  <form method="get" action="/admin/history/{{ detail_name|urlencode }}/fortune"
+  <form method="get"
+        action="{{ fortune_form_action if fortune_form_action else '/admin/history/' ~ (detail_name|urlencode) ~ '/fortune' }}"
         style="margin: 14px 0;">
     <input type="hidden" name="y" value="{{ fortune_chart_args['y'] }}">
     <input type="hidden" name="m" value="{{ fortune_chart_args['m'] }}">
     <input type="hidden" name="d" value="{{ fortune_chart_args['d'] }}">
     <input type="hidden" name="h" value="{{ fortune_chart_args['h'] }}">
+    {% if public %}<input type="hidden" name="gender" value="{{ chart_gender or '' }}">{% endif %}
     <span class="field">
       看流年:
       <input class="y" type="number" name="year" value="{{ fortune_year }}"
@@ -172,105 +178,6 @@
       {% endfor %}
     </div>
   </div>
-
-  {# ---- AI 深度解讀按鈕(佔位,尚未啟用)/ 顯示 AI 資料 ---- #}
-  <div class="ai-deep">
-    <button type="button" class="ai-btn ai-btn-placeholder" disabled
-            title="即將推出:以 AI 整合命盤與流年資料,產生個人化深度解讀">
-      🤖 AI 深度解讀(即將推出)
-    </button>
-    {% if fortune_chart_args and fortune_chart_args.get('y') %}
-      <button type="button" class="ai-btn export-btn"
-              id="show-ai-data-btn"
-              data-url="{{ url_for('admin_fortune_export', name=detail_name,
-                                   y=fortune_chart_args['y'], m=fortune_chart_args['m'],
-                                   d=fortune_chart_args['d'], h=fortune_chart_args['h'],
-                                   year=fortune_year) }}"
-              title="顯示本盤的流年+12 流月+四面向訊號 JSON,複製給 AI 解讀測試用">
-        📋 顯示 AI 解讀資料
-      </button>
-    {% endif %}
-    <span class="note">未來可由 AI 整合所有訊號,給出更詳細的個人化分析</span>
-  </div>
-
-  {# ---- AI 資料 Modal ---- #}
-  <div id="ai-data-modal" class="ai-modal" style="display:none;">
-    <div class="ai-modal-content">
-      <div class="ai-modal-header">
-        <span>AI 解讀資料 (JSON)</span>
-        <button type="button" class="ai-modal-close" id="ai-modal-close">✕</button>
-      </div>
-      <div class="ai-modal-body">
-        <textarea id="ai-data-text" readonly></textarea>
-      </div>
-      <div class="ai-modal-footer">
-        <button type="button" class="ai-btn export-btn" id="ai-copy-btn">📋 複製到剪貼簿</button>
-        <span id="ai-copy-status" class="note"></span>
-      </div>
-    </div>
-  </div>
-
-  <script>
-  (function() {
-    var btn = document.getElementById('show-ai-data-btn');
-    var modal = document.getElementById('ai-data-modal');
-    var closeBtn = document.getElementById('ai-modal-close');
-    var textarea = document.getElementById('ai-data-text');
-    var copyBtn = document.getElementById('ai-copy-btn');
-    var status = document.getElementById('ai-copy-status');
-    if (!btn) return;
-
-    btn.addEventListener('click', function() {
-      var url = btn.getAttribute('data-url');
-      btn.disabled = true;
-      btn.textContent = '⏳ 載入中...';
-      fetch(url, {credentials: 'same-origin'})
-        .then(function(res) {
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          return res.text();
-        })
-        .then(function(text) {
-          textarea.value = text;
-          modal.style.display = 'flex';
-          status.textContent = '';
-          btn.disabled = false;
-          btn.textContent = '📋 顯示 AI 解讀資料';
-        })
-        .catch(function(err) {
-          alert('載入失敗:' + err.message);
-          btn.disabled = false;
-          btn.textContent = '📋 顯示 AI 解讀資料';
-        });
-    });
-
-    closeBtn.addEventListener('click', function() {
-      modal.style.display = 'none';
-    });
-    modal.addEventListener('click', function(e) {
-      if (e.target === modal) modal.style.display = 'none';
-    });
-
-    copyBtn.addEventListener('click', function() {
-      textarea.select();
-      try {
-        var ok = document.execCommand('copy');
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText(textarea.value).then(function() {
-            status.textContent = '✓ 已複製';
-            setTimeout(function() { status.textContent = ''; }, 2000);
-          });
-        } else if (ok) {
-          status.textContent = '✓ 已複製';
-          setTimeout(function() { status.textContent = ''; }, 2000);
-        } else {
-          status.textContent = '複製失敗,請手動全選';
-        }
-      } catch (e) {
-        status.textContent = '複製失敗,請手動全選';
-      }
-    });
-  })();
-  </script>
 
   {# ---- 流月區塊(預設折疊,點開展開)---- #}
   <h2>流月(12 個月)</h2>

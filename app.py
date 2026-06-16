@@ -183,6 +183,46 @@ def landing():
     return render_template("landing.html", mode="landing")
 
 
+@app.route("/fortune", methods=["GET"])
+def fortune_page():
+    """公開流年分析:依出生 y/m/d/h + gender + 流年 year(免登入)。"""
+    now = datetime.now()
+    try:
+        y_i = int(request.args["y"])
+        m_i = int(request.args["m"])
+        d_i = int(request.args["d"])
+        h_i = int(request.args["h"])
+    except (KeyError, TypeError, ValueError):
+        return render_template(
+            "admin/fortune.html", mode="fortune", fortune=None,
+            error="缺少出生年月日時參數(y/m/d/h)",
+            fortune_year=now.year, fortune_chart_args={"y": "", "m": "", "d": "", "h": ""},
+            chart_gender=None, detail_name=None, public=True,
+            fortune_form_action="/fortune",
+        )
+    try:
+        year_i = int(request.args.get("year", now.year))
+    except ValueError:
+        year_i = now.year
+    gender = (request.args.get("gender", "") or "").strip().upper()
+    gender = gender if gender in ("M", "F") else None
+
+    fortune = None
+    error = None
+    try:
+        fortune = analyze_fortune(datetime(y_i, m_i, d_i, h_i, 0), year_i, gender=gender)
+    except Exception as e:
+        error = f"{type(e).__name__}: {e}"
+
+    return render_template(
+        "admin/fortune.html", mode="fortune",
+        fortune=fortune, fortune_year=year_i,
+        fortune_chart_args={"y": y_i, "m": m_i, "d": d_i, "h": h_i},
+        chart_gender=gender, detail_name=None, public=True,
+        fortune_form_action="/fortune", error=error,
+    )
+
+
 @app.route("/almanac", methods=["GET"])
 def almanac_page():
     """萬年曆(紫白飛星):月曆視圖,公開。"""
@@ -813,102 +853,6 @@ def admin_history_delete(name, chart_id):
     from urllib.parse import urlencode, quote
     qs = urlencode({"flash": msg, "flash_kind": kind})
     return redirect(f"/admin/history/{quote(name)}?{qs}")
-
-
-@app.route("/admin/history/<path:name>/fortune", methods=["GET"])
-@login_required
-def admin_fortune(name):
-    try:
-        y_i = int(request.args.get("y", ""))
-        m_i = int(request.args.get("m", ""))
-        d_i = int(request.args.get("d", ""))
-        h_i = int(request.args.get("h", ""))
-    except (TypeError, ValueError):
-        return render_template(
-            "admin/fortune.html",
-            mode="admin_fortune", detail_name=name,
-            error="缺少命盤年月日時參數(y/m/d/h)",
-            fortune=None,
-            fortune_chart_args={"y": "", "m": "", "d": "", "h": ""},
-            fortune_year=datetime.now().year,
-        )
-
-    try:
-        year_i = int(request.args.get("year", datetime.now().year))
-    except ValueError:
-        year_i = datetime.now().year
-
-    fortune = None
-    error = None
-    chart_gender = db.get_chart_gender(name, y_i, m_i, d_i, h_i)
-    try:
-        chart_dt = datetime(y_i, m_i, d_i, h_i, 0)
-        fortune = analyze_fortune(chart_dt, year_i, gender=chart_gender)
-    except ValueError as e:
-        error = f"日期或流年格式錯誤({e})"
-    except KeyError as e:
-        error = f"查無資料:{e}"
-    except Exception as e:
-        error = f"{type(e).__name__}: {e}"
-
-    return render_template(
-        "admin/fortune.html",
-        mode="admin_fortune",
-        detail_name=name,
-        fortune=fortune,
-        fortune_year=year_i,
-        fortune_chart_args={"y": y_i, "m": m_i, "d": d_i, "h": h_i},
-        chart_gender=chart_gender,
-        error=error,
-    )
-
-
-@app.route("/admin/history/<path:name>/fortune/export", methods=["GET"])
-@login_required
-def admin_fortune_export(name):
-    """匯出該流年盤的完整 AI 解讀資料(JSON)。"""
-    try:
-        y_i = int(request.args.get("y", ""))
-        m_i = int(request.args.get("m", ""))
-        d_i = int(request.args.get("d", ""))
-        h_i = int(request.args.get("h", ""))
-        year_i = int(request.args.get("year", datetime.now().year))
-    except (TypeError, ValueError):
-        abort(400, "缺少參數(y/m/d/h/year)")
-
-    chart_gender = db.get_chart_gender(name, y_i, m_i, d_i, h_i)
-    try:
-        chart_dt = datetime(y_i, m_i, d_i, h_i, 0)
-        fortune = analyze_fortune(chart_dt, year_i, gender=chart_gender)
-    except Exception as e:
-        abort(500, f"{type(e).__name__}: {e}")
-
-    # 姓名隱碼:保留第一個字,其餘用 *
-    if name:
-        masked_name = name[0] + "*" * (len(name) - 1) if len(name) > 1 else name
-    else:
-        masked_name = "(unknown)"
-
-    payload = {
-        "schema_version": 1,
-        "命主": {
-            "姓名(隱碼)": masked_name,
-            "性別": chart_gender,
-            "出生": f"{y_i:04d}-{m_i:02d}-{d_i:02d} {h_i:02d}:00",
-        },
-        "流年年份": year_i,
-        "原命盤": fortune.get("原命盤"),
-        "流年": fortune.get("流年"),
-        "流月": fortune.get("流月"),
-        "斷語": fortune.get("斷語"),
-        "四面向": fortune.get("四面向"),
-    }
-
-    body = json.dumps(payload, ensure_ascii=False, indent=2)
-    return Response(
-        body,
-        mimetype="application/json; charset=utf-8",
-    )
 
 
 if __name__ == "__main__":

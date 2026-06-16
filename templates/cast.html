@@ -44,5 +44,13 @@
 
 {% if r %}
   {% include "_hexagram_table.html" %}
+
+  {# ---- 流年分析入口(公開)---- #}
+  <div class="ai-deep" style="margin-top:16px;">
+    <a class="ai-btn export-btn" style="text-decoration:none;"
+       href="/fortune?y={{ y }}&m={{ m }}&d={{ d }}&h={{ h }}&gender={{ gender or '' }}">
+      📅 查看流年(今年起,可切年)→
+    </a>
+  </div>
 {% endif %}
 {% endblock %}
