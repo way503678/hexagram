@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}會員登入 — 命卦排盤{% endblock %}
+
+{% block content %}
+<h1>會員登入</h1>
+<form method="post" action="/login" class="login-form">
+  <input type="hidden" name="next" value="{{ next_url or '/member' }}">
+  <input type="email" name="email" placeholder="Email"
+         value="{{ email or '' }}" required autofocus autocomplete="email">
+  <input type="password" name="password" placeholder="密碼"
+         required autocomplete="current-password">
+  <button type="submit">登入</button>
+  {% if error %}<p class="err" style="margin-top:10px;">{{ error }}</p>{% endif %}
+  <p style="margin-top:16px; text-align:center; font-size:14px;">
+    還沒有帳號?<a href="/register" style="color:#8b0000;">立即註冊</a>
+  </p>
+</form>
+{% endblock %}

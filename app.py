@@ -16,6 +16,11 @@
 """
 import os
 import json
+import time
+import hmac
+import hashlib
+import base64
+import re
 from functools import wraps
 from datetime import datetime, timezone, timedelta
 
@@ -54,7 +59,7 @@ def _api_cors(resp):
     if request.path.startswith("/api/") or request.path == "/manual/ai_reading":
         resp.headers["Access-Control-Allow-Origin"] = "*"
         resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-        resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     return resp
 
 # 管理員 idle timeout(分鐘):超過此時間未活動則自動登出
@@ -63,6 +68,89 @@ ADMIN_IDLE_TIMEOUT_MINUTES = int(os.environ.get("ADMIN_IDLE_TIMEOUT_MINUTES", "1
 # 管理員密碼:以環境變數設定。預設 "admin",部署時務必改掉。
 _ADMIN_PASSWORD_PLAIN = os.environ.get("ADMIN_PASSWORD", "admin")
 _ADMIN_PASSWORD_HASH = generate_password_hash(_ADMIN_PASSWORD_PLAIN)
+
+
+# ============================================================
+# 會員登入 token(JWT / HS256)
+#   App 為跨網域呼叫的獨立程式,改用 Authorization: Bearer <token> 認身分,
+#   不依賴瀏覽器 cookie session。token 用既有 SECRET_KEY 以 HMAC-SHA256 簽章,
+#   不需額外套件。token 內只放 user id 與到期時間,驗章 + 未過期即視為有效。
+# ============================================================
+# token 有效天數(逾期須重新登入)
+TOKEN_TTL_DAYS = int(os.environ.get("TOKEN_TTL_DAYS", "30"))
+# 新會員註冊時贈送的點數(方便在 App 上實測解盤流程;設 0 可關閉)
+NEW_USER_BONUS = int(os.environ.get("NEW_USER_BONUS", "3"))
+# 密碼最短長度
+_MIN_PASSWORD_LEN = 6
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _token_secret():
+    """token 簽章金鑰(跟著 SECRET_KEY 走;金鑰若改變,既有 token 全部失效)。"""
+    return app.config["SECRET_KEY"].encode("utf-8")
+
+
+def _b64url(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _b64url_decode(s: str) -> bytes:
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def make_token(user_id):
+    """簽發一個會員 token(JWT/HS256),內含 uid 與到期時間。"""
+    header = {"alg": "HS256", "typ": "JWT"}
+    now = int(time.time())
+    payload = {"uid": int(user_id), "iat": now, "exp": now + TOKEN_TTL_DAYS * 86400}
+    signing_input = (
+        _b64url(json.dumps(header, separators=(",", ":")).encode())
+        + "."
+        + _b64url(json.dumps(payload, separators=(",", ":")).encode())
+    )
+    sig = hmac.new(_token_secret(), signing_input.encode("ascii"), hashlib.sha256).digest()
+    return signing_input + "." + _b64url(sig)
+
+
+def verify_token(token):
+    """驗證 token,成功回傳 user_id(int),失敗(簽章錯/過期/格式錯)回傳 None。"""
+    try:
+        signing_input, sig_b64 = token.rsplit(".", 1)
+        expected = hmac.new(
+            _token_secret(), signing_input.encode("ascii"), hashlib.sha256
+        ).digest()
+        if not hmac.compare_digest(_b64url(expected), sig_b64):
+            return None
+        _, payload_b64 = signing_input.split(".")
+        payload = json.loads(_b64url_decode(payload_b64))
+        if int(payload.get("exp", 0)) < int(time.time()):
+            return None
+        return int(payload["uid"])
+    except Exception:
+        return None
+
+
+def _user_id_from_request():
+    """從 Authorization: Bearer <token> 取出已驗證的 user_id(沒有則 None)。"""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return verify_token(auth[7:].strip())
+    return None
+
+
+def _public_user(user):
+    """整理成可回傳給前端的會員資料(不含 password_hash;時間轉字串)。"""
+    if not user:
+        return None
+    created = user.get("created_at")
+    return {
+        "id": user.get("id"),
+        "auth_provider": user.get("auth_provider"),
+        "display_name": user.get("display_name"),
+        "email": user.get("email"),
+        "points_balance": user.get("points_balance", 0),
+        "created_at": created.isoformat() if hasattr(created, "isoformat") else created,
+    }
 
 
 # ============================================================
@@ -148,13 +236,34 @@ def login_required(view):
 def current_user():
     """回傳目前登入會員 dict(含 points_balance)或 None。
 
-    ★ 暫時實作:管理員 session 對應到一個 'admin' 測試會員。
-      日後接上正式登入(LINE/Google/Email...)後,只要改這個函式的取得來源,
-      其餘扣點 / 會員頁 / AI 解盤都不用動。
+    身分來源依序:
+      1. Authorization: Bearer <token>(App / API 會員,Email/社群登入皆走這條)
+      2. 管理員 session(網頁後台,對應一個 'admin' 測試會員)
+    日後接 Google/Apple/Line 時,各 provider 端點驗證完只要 make_token() 簽發
+    token 即可,這個函式與其餘扣點 / 會員頁 / AI 解盤都不用再動。
     """
+    # 1. App / API:Authorization: Bearer <token>
+    uid = _user_id_from_request()
+    if uid:
+        u = db.get_user(uid)
+        if u:
+            return u
+    # 2. 網頁會員:登入後存在 session 的 user_id(cookie)
+    sid = session.get("user_id")
+    if sid:
+        u = db.get_user(sid)
+        if u:
+            return u
+    # 3. 管理員 session:對應一個 'admin' 測試會員(網頁後台)
     if session.get("is_admin"):
         return db.get_or_create_user("admin", "admin", display_name="管理員(測試)")
     return None
+
+
+@app.context_processor
+def _inject_current_user():
+    """讓所有模板都能用 current_user(顯示登入狀態 / 會員選單)。"""
+    return {"current_user": current_user()}
 
 
 def _get_field(name, default=""):
@@ -511,6 +620,103 @@ def api_health():
     return jsonify({"status": "ok", "service": "hexagram", "version": 1})
 
 
+# ============================================================
+# 會員登入 API(App / Web 共用;回傳 token,後續請求帶 Bearer token)
+#   /api/v1/auth/register  Email 註冊 → 回 token + 會員資料
+#   /api/v1/auth/login     Email 登入 → 回 token + 會員資料
+#   /api/v1/auth/me        憑 token 取目前會員資料
+#   日後社群登入(Google/Apple/Line)各自加一個端點,驗證該家身分後
+#   呼叫 db.get_or_create_user(provider, sub, ...) + make_token() 即可。
+# ============================================================
+@app.route("/api/v1/auth/register", methods=["POST"])
+def api_auth_register():
+    """Email 註冊。請求 {email, password, display_name?}。成功回 {token, user}。"""
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    display_name = (data.get("display_name") or "").strip() or None
+
+    if not _EMAIL_RE.match(email):
+        return jsonify({"error": "Email 格式不正確"}), 400
+    if len(password) < _MIN_PASSWORD_LEN:
+        return jsonify({"error": f"密碼至少需 {_MIN_PASSWORD_LEN} 個字"}), 400
+
+    pw_hash = generate_password_hash(password)
+    status, user = db.create_email_user(email, pw_hash, display_name)
+    if status == "exists":
+        return jsonify({"error": "這個 Email 已經註冊過了"}), 409
+    if status != "ok" or not user:
+        return jsonify({"error": "系統忙線,請稍後再試"}), 503
+
+    # 新會員贈點(方便實測解盤);失敗不影響註冊
+    if NEW_USER_BONUS > 0:
+        ok, _ = db.add_points(user["id"], NEW_USER_BONUS, "welcome_bonus")
+        if ok:
+            user = db.get_user(user["id"]) or user
+
+    token = make_token(user["id"])
+    return jsonify({"token": token, "user": _public_user(user)})
+
+
+@app.route("/api/v1/auth/login", methods=["POST"])
+def api_auth_login():
+    """Email 登入。請求 {email, password}。成功回 {token, user}。"""
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    if not email or not password:
+        return jsonify({"error": "請輸入 Email 與密碼"}), 400
+
+    row = db.get_email_user(email)
+    if (not row or not row.get("password_hash")
+            or not check_password_hash(row["password_hash"], password)):
+        # 不分「帳號不存在」與「密碼錯」,避免洩漏哪些 email 已註冊
+        return jsonify({"error": "Email 或密碼不正確"}), 401
+
+    user = db.get_user(row["id"]) or row
+    token = make_token(user["id"])
+    return jsonify({"token": token, "user": _public_user(user)})
+
+
+@app.route("/api/v1/auth/me", methods=["GET"])
+def api_auth_me():
+    """憑 Bearer token 取目前登入會員資料(含最新點數)。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "未登入或登入已逾期"}), 401
+    return jsonify({"user": _public_user(user)})
+
+
+@app.route("/api/v1/member/ledger", methods=["GET"])
+def api_member_ledger():
+    """目前會員的點數異動紀錄(新到舊)。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "未登入或登入已逾期"}), 401
+    rows = db.list_ledger(user["id"])
+    ledger = [{
+        "delta": r["delta"],
+        "balance_after": r["balance_after"],
+        "reason": r["reason"],
+        "ref": r["ref"],
+        "created_at": r["created_at"].isoformat()
+            if hasattr(r["created_at"], "isoformat") else r["created_at"],
+    } for r in rows]
+    return jsonify({"ledger": ledger})
+
+
+@app.route("/api/v1/member/test_topup", methods=["POST"])
+def api_member_test_topup():
+    """[暫時/測試用] 幫目前會員加 10 測試點數。綠界儲值串好後移除。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "未登入或登入已逾期"}), 401
+    ok, bal = db.add_points(user["id"], 10, "test_topup")
+    if not ok:
+        return jsonify({"error": "加點失敗"}), 500
+    return jsonify({"balance": bal})
+
+
 @app.route("/api/v1/chart", methods=["POST"])
 def api_chart():
     """排盤:日期時間 + 六爻 → 卦象 JSON(確定性、免費、免登入)。
@@ -708,7 +914,6 @@ def manual_ai_prompt():
 
 
 @app.route("/manual/ai_reading", methods=["POST"])
-@login_required
 def manual_ai_reading():
     """AI 解盤:扣 1 點 → 串流(SSE)即時產生解讀。任何失敗都自動退點。
 
@@ -772,17 +977,17 @@ def manual_ai_reading():
 # 會員頁面:會員資料 + 剩餘點數 + 點數異動紀錄
 # ============================================================
 @app.route("/member", methods=["GET"])
-@login_required
 def member():
     user = current_user()
-    ledger = db.list_ledger(user["id"]) if user else []
+    if not user:
+        return redirect(url_for("login_page", next="/member"))
+    ledger = db.list_ledger(user["id"])
     return render_template("member.html", mode="member", user=user, ledger=ledger)
 
 
 @app.route("/member/test_topup", methods=["POST"])
-@login_required
 def member_test_topup():
-    """[暫時/測試用] 管理員幫自己加 10 測試點數。綠界儲值串好後移除。"""
+    """[暫時/測試用] 幫目前會員加 10 測試點數。綠界儲值串好後移除。"""
     user = current_user()
     if not user:
         return jsonify({"error": "未登入"}), 401
@@ -790,6 +995,80 @@ def member_test_topup():
     if not ok:
         return jsonify({"error": "加點失敗"}), 500
     return jsonify({"balance": bal})
+
+
+# ============================================================
+# 會員:網頁登入 / 註冊 / 登出(session-based,與 App 的 token 並行)
+#   後端驗證共用 db.create_email_user / db.get_email_user,與 App 同一套帳號。
+# ============================================================
+@app.route("/register", methods=["GET", "POST"])
+def register_page():
+    """網頁 Email 註冊。成功後寫入 session 並導向會員中心。"""
+    if current_user():
+        return redirect(url_for("member"))
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        password = request.form.get("password") or ""
+        display_name = (request.form.get("display_name") or "").strip() or None
+
+        def _err(msg):
+            return render_template(
+                "register.html", mode="register", error=msg, email=email
+            )
+
+        if not _EMAIL_RE.match(email):
+            return _err("Email 格式不正確")
+        if len(password) < _MIN_PASSWORD_LEN:
+            return _err(f"密碼至少需 {_MIN_PASSWORD_LEN} 個字")
+
+        pw_hash = generate_password_hash(password)
+        status, user = db.create_email_user(email, pw_hash, display_name)
+        if status == "exists":
+            return _err("這個 Email 已經註冊過了")
+        if status != "ok" or not user:
+            return _err("系統忙線,請稍後再試")
+
+        if NEW_USER_BONUS > 0:
+            db.add_points(user["id"], NEW_USER_BONUS, "welcome_bonus")
+
+        session.permanent = True
+        session["user_id"] = user["id"]
+        return redirect(url_for("member"))
+
+    return render_template("register.html", mode="register")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    """網頁 Email 登入。成功後寫入 session 並導向 next(預設會員中心)。"""
+    if current_user():
+        return redirect(url_for("member"))
+    next_url = request.values.get("next", "/member")
+    if not next_url.startswith("/"):
+        next_url = "/member"
+
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        password = request.form.get("password") or ""
+        row = db.get_email_user(email)
+        if (not row or not row.get("password_hash")
+                or not check_password_hash(row["password_hash"], password)):
+            return render_template(
+                "login.html", mode="login",
+                error="Email 或密碼不正確", email=email, next_url=next_url,
+            )
+        session.permanent = True
+        session["user_id"] = row["id"]
+        return redirect(next_url)
+
+    return render_template("login.html", mode="login", next_url=next_url)
+
+
+@app.route("/logout", methods=["GET", "POST"])
+def member_logout():
+    """會員登出:只清掉會員 session(不影響管理員)。"""
+    session.pop("user_id", None)
+    return redirect(url_for("landing"))
 
 
 # ============================================================

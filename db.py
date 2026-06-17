@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS users (
     auth_id        TEXT NOT NULL,
     display_name   TEXT,
     email          TEXT,
+    password_hash  TEXT,                 -- 僅 Email 帳號使用;社群登入留空
     points_balance INTEGER NOT NULL DEFAULT 0,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (auth_provider, auth_id)
@@ -170,6 +171,20 @@ CREATE INDEX IF NOT EXISTS idx_payment_orders_user
 """
 
 
+# 對舊資料庫升級:users 表若缺 password_hash 欄位則補上(Email 帳號登入用)
+MIGRATE_USERS = """
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'password_hash'
+    ) THEN
+        ALTER TABLE users ADD COLUMN password_hash TEXT;
+    END IF;
+END $$;
+"""
+
+
 def init_db():
     """應用啟動時呼叫一次，確保 table 存在。失敗會印警告但不中斷。"""
     if not DB_ENABLED:
@@ -184,6 +199,7 @@ def init_db():
                 cur.execute(SCHEMA)
                 cur.execute(MIGRATE)
                 cur.execute(POINTS_SCHEMA)
+                cur.execute(MIGRATE_USERS)
         log.info("DB ready: %s@%s/%s",
                  PG_CONF["user"], PG_CONF["host"], PG_CONF["dbname"])
         return True
@@ -410,6 +426,74 @@ def get_or_create_user(auth_provider, auth_id, display_name=None, email=None):
         }
     except Exception as e:
         log.warning("DB get_or_create_user failed (%s: %s)", type(e).__name__, e)
+        return None
+
+
+def create_email_user(email, password_hash, display_name=None):
+    """建立一個 Email 帳號會員(auth_provider='email', auth_id=email)。
+
+    回傳 (status, user_dict):
+      ('ok',     dict)  建立成功
+      ('exists', None)  這個 email 已經註冊過
+      ('error',  None)  DB 失敗
+    email 應由呼叫端先正規化(去空白 + 轉小寫)。
+    """
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return ("error", None)
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO users (auth_provider, auth_id, display_name, email, password_hash)
+                    VALUES ('email', %s, %s, %s, %s)
+                    ON CONFLICT (auth_provider, auth_id) DO NOTHING
+                    RETURNING id, auth_provider, auth_id, display_name, email, points_balance, created_at
+                    """,
+                    (str(email), display_name, str(email), str(password_hash)),
+                )
+                r = cur.fetchone()
+        if r is None:
+            return ("exists", None)
+        return ("ok", {
+            "id": r[0], "auth_provider": r[1], "auth_id": r[2],
+            "display_name": r[3], "email": r[4],
+            "points_balance": r[5], "created_at": r[6],
+        })
+    except Exception as e:
+        log.warning("DB create_email_user failed (%s: %s)", type(e).__name__, e)
+        return ("error", None)
+
+
+def get_email_user(email):
+    """依 email 取得 Email 帳號會員(含 password_hash,供登入驗證)。回傳 dict 或 None。
+
+    email 應由呼叫端先正規化(去空白 + 轉小寫)。
+    """
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return None
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, auth_provider, auth_id, display_name, email,
+                           password_hash, points_balance, created_at
+                    FROM users
+                    WHERE auth_provider = 'email' AND auth_id = %s
+                    """,
+                    (str(email),),
+                )
+                r = cur.fetchone()
+        if not r:
+            return None
+        return {
+            "id": r[0], "auth_provider": r[1], "auth_id": r[2],
+            "display_name": r[3], "email": r[4], "password_hash": r[5],
+            "points_balance": r[6], "created_at": r[7],
+        }
+    except Exception as e:
+        log.warning("DB get_email_user failed (%s: %s)", type(e).__name__, e)
         return None
 
 

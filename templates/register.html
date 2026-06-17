@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}註冊會員 — 命卦排盤{% endblock %}
+
+{% block content %}
+<h1>註冊會員</h1>
+<form method="post" action="/register" class="login-form">
+  <input type="email" name="email" placeholder="Email"
+         value="{{ email or '' }}" required autofocus autocomplete="email">
+  <input type="password" name="password" placeholder="密碼(至少 6 個字)"
+         required autocomplete="new-password">
+  <input type="text" name="display_name" placeholder="暱稱(選填)"
+         autocomplete="nickname">
+  <button type="submit">註冊</button>
+  {% if error %}<p class="err" style="margin-top:10px;">{{ error }}</p>{% endif %}
+  <p style="margin-top:16px; text-align:center; font-size:14px;">
+    已經有帳號了?<a href="/login" style="color:#8b0000;">改用登入</a>
+  </p>
+</form>
+{% endblock %}

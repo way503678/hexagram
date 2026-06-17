@@ -26,8 +26,14 @@
       <div class="auth-area">
         {% if session.get('is_admin') %}
           <span class="logged-in">✓ 已登入管理員</span>
+          <a href="/member">會員中心</a>
           <a href="/admin/logout">登出</a>
+        {% elif current_user %}
+          <span class="logged-in">✓ {{ current_user.display_name or current_user.email or '會員' }}</span>
+          <a href="/member">會員中心（{{ current_user.points_balance }} 點）</a>
+          <a href="/logout">登出</a>
         {% else %}
+          <a href="/login">會員登入</a>
           <a href="/admin/login">管理登入</a>
         {% endif %}
       </div>
