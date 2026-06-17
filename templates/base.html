@@ -20,9 +20,19 @@
         <a href="/cast" class="{% if mode == 'solar' %}active{% endif %}">命盤排卦</a>
         <a href="/manual" class="{% if mode == 'manual' %}active{% endif %}">手動排卦</a>
         {% if current_user and current_user.is_admin %}
-          <div class="nav-group">管理介面</div>
-          <a href="/admin/members" class="{% if mode == 'admin_members' %}active{% endif %}">會員管理</a>
-          <a href="/admin/history" class="{% if mode.startswith('admin') and mode != 'admin_members' %}active{% endif %}">歷史紀錄</a>
+          {% set admin_open = mode.startswith('admin') %}
+          <div class="nav-section">
+            <button type="button" class="nav-section-toggle{% if admin_open %} open{% endif %}"
+                    aria-expanded="{{ 'true' if admin_open else 'false' }}"
+                    onclick="toggleNavSection(this)">
+              <span>管理介面</span>
+              <span class="nav-caret">›</span>
+            </button>
+            <div class="nav-section-body"{% if not admin_open %} hidden{% endif %}>
+              <a href="/admin/members" class="{% if mode == 'admin_members' %}active{% endif %}">會員管理</a>
+              <a href="/admin/history" class="{% if mode.startswith('admin') and mode != 'admin_members' %}active{% endif %}">歷史紀錄</a>
+            </div>
+          </div>
         {% endif %}
       </nav>
       <div class="auth-area">
@@ -47,6 +57,12 @@
       var bd = document.getElementById('backdrop');
       sb.classList.toggle('open');
       bd.classList.toggle('show');
+    }
+    function toggleNavSection(btn) {
+      var open = btn.classList.toggle('open');
+      var body = btn.nextElementSibling;
+      if (body) body.hidden = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
   </script>
 {% endblock %}
