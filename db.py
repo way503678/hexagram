@@ -45,6 +45,14 @@ PG_CONF = {
 # 是否啟用 DB（預設啟用）；想暫時關掉，設環境變數 DB_ENABLED=0
 DB_ENABLED = os.environ.get("DB_ENABLED", "1") == "1"
 
+
+def norm_gender(v):
+    """性別正規化的單一來源:'M'/'F' 維持原值,其餘一律 None。
+
+    呼叫端若需要空字串(例如填回表單)可用 `norm_gender(v) or ""`。
+    """
+    return v if v in ("M", "F") else None
+
 # 連線池上限(每個 gunicorn worker 各一個池;2 workers × 4 threads,8 足夠)
 _POOL_MAX = int(os.environ.get("PG_POOL_MAX", "8"))
 # 連線最大壽命(秒):超過就回收換新,避免連線無限老化
@@ -859,7 +867,7 @@ def update_user_profile(user_id, display_name=None, gender=None, birth=None):
     if not DB_ENABLED or not HAS_PSYCOPG:
         return False
     by, bm, bd, bh = birth if birth else (None, None, None, None)
-    g = gender if gender in ("M", "F") else None
+    g = norm_gender(gender)
     try:
         with _conn() as c:
             with c.cursor() as cur:

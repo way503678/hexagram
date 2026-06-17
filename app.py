@@ -387,7 +387,7 @@ def fortune_page():
     except ValueError:
         year_i = now.year
     gender = (request.args.get("gender", "") or "").strip().upper()
-    gender = gender if gender in ("M", "F") else None
+    gender = db.norm_gender(gender)
 
     fortune = None
     error = None
@@ -434,9 +434,7 @@ def almanac_page():
 def cast():
     y, m, d, h, default_y, default_m, default_d, default_h = _parse_dt_args()
     client_name = request.args.get("name", "").strip()
-    gender = request.args.get("gender", "").strip().upper()
-    if gender not in ("M", "F"):
-        gender = ""
+    gender = db.norm_gender(request.args.get("gender", "").strip().upper()) or ""
 
     if not (y or m or d or h):
         y_i, m_i, d_i, h_i = default_y, default_m, default_d, default_h
@@ -490,9 +488,7 @@ def manual():
     y, m, d, h, default_y, default_m, default_d, default_h = _parse_dt_args()
 
     # 性別 & 問事類別
-    gender = _get_field("gender", "").strip().upper()
-    if gender not in ("M", "F"):
-        gender = ""
+    gender = db.norm_gender(_get_field("gender", "").strip().upper()) or ""
     aspect = _get_field("aspect", "all").strip().lower()
     if aspect not in ("all", "love", "health", "work", "wealth"):
         aspect = "all"
@@ -760,6 +756,38 @@ def _login_member(email, password):
     return db.get_user(row["id"]) or row
 
 
+def _parse_birthday(get):
+    """生日驗證(web/api 共用)。get(name) 回傳該欄原始值。
+
+    回傳 (birth_tuple|None, errcode|None);errcode ∈ {'format','incomplete','invalid_date'}。
+    四欄(年/月/日/時)要嘛全給合理值、要嘛全留空。錯誤訊息由呼叫端依 errcode 決定。
+    """
+    def _opt(name, lo, hi):
+        v = get(name)
+        if v is None or str(v).strip() == "":
+            return None
+        try:
+            n = int(str(v).strip())
+        except (TypeError, ValueError):
+            return "ERR"
+        return n if lo <= n <= hi else "ERR"
+
+    vals = [_opt("birth_y", 1900, 2100), _opt("birth_m", 1, 12),
+            _opt("birth_d", 1, 31), _opt("birth_h", 0, 23)]
+    if "ERR" in vals:
+        return None, "format"
+    filled = [v is not None for v in vals]
+    if any(filled) and not all(filled):
+        return None, "incomplete"
+    if all(filled):
+        try:
+            datetime(vals[0], vals[1], vals[2], vals[3], 0)
+        except ValueError:
+            return None, "invalid_date"
+        return tuple(vals), None
+    return None, None
+
+
 @app.route("/api/v1/auth/register", methods=["POST"])
 def api_auth_register():
     """Email 註冊。請求 {email, password, display_name?, agreed}。成功回 {token, user}。
@@ -844,32 +872,14 @@ def api_member_profile():
     data = request.get_json(silent=True) or {}
     display_name = (data.get("display_name") or "").strip() or None
     gender = (data.get("gender") or "").strip().upper()
-    gender = gender if gender in ("M", "F") else None
+    gender = db.norm_gender(gender)
 
-    def _opt(name, lo, hi):
-        v = data.get(name)
-        if v is None or v == "":
-            return None
-        try:
-            n = int(v)
-        except (TypeError, ValueError):
-            return "ERR"
-        return n if lo <= n <= hi else "ERR"
-
-    vals = [_opt("birth_y", 1900, 2100), _opt("birth_m", 1, 12),
-            _opt("birth_d", 1, 31), _opt("birth_h", 0, 23)]
-    if "ERR" in vals:
-        return jsonify({"error": "生日格式不正確"}), 400
-    filled = [v is not None for v in vals]
-    birth = None
-    if any(filled):
-        if not all(filled):
-            return jsonify({"error": "生日請完整填寫年/月/日/時,或全部留空"}), 400
-        try:
-            datetime(vals[0], vals[1], vals[2], vals[3], 0)
-        except ValueError:
-            return jsonify({"error": "這個生日日期不存在"}), 400
-        birth = tuple(vals)
+    birth, ecode = _parse_birthday(lambda n: data.get(n))
+    if ecode:
+        msg = {"format": "生日格式不正確",
+               "incomplete": "生日請完整填寫年/月/日/時,或全部留空",
+               "invalid_date": "這個生日日期不存在"}[ecode]
+        return jsonify({"error": msg}), 400
 
     db.update_user_profile(user["id"], display_name=display_name,
                            gender=gender, birth=birth)
@@ -931,7 +941,7 @@ def api_cast():
     if name:
         try:
             db.log_divination(name, y_i, m_i, d_i, h_i,
-                              gender=gender if gender in ("M", "F") else None)
+                              gender=db.norm_gender(gender))
         except Exception as e:
             app.logger.warning("log_divination failed (%s: %s)",
                                type(e).__name__, e)
@@ -985,7 +995,7 @@ def api_fortune():
     except ValueError:
         year_i = now.year
     gender = (request.args.get("gender", "") or "").strip().upper()
-    gender = gender if gender in ("M", "F") else None
+    gender = db.norm_gender(gender)
     try:
         fortune = analyze_fortune(datetime(y_i, m_i, d_i, h_i, 0), year_i, gender=gender)
     except Exception as e:
@@ -1152,40 +1162,15 @@ def member_profile():
     if request.method == "POST":
         display_name = (request.form.get("display_name") or "").strip() or None
         gender = (request.form.get("gender") or "").strip().upper()
-        gender = gender if gender in ("M", "F") else None
+        gender = db.norm_gender(gender)
         # 生日(可留空;要填就四個都要合理)
-        def _opt_int(name, lo, hi):
-            v = (request.form.get(name) or "").strip()
-            if v == "":
-                return None
-            try:
-                n = int(v)
-            except ValueError:
-                return "ERR"
-            return n if lo <= n <= hi else "ERR"
-
-        by = _opt_int("birth_y", 1900, 2100)
-        bm = _opt_int("birth_m", 1, 12)
-        bd = _opt_int("birth_d", 1, 31)
-        bh = _opt_int("birth_h", 0, 23)
-        vals = [by, bm, bd, bh]
-
-        if "ERR" in vals:
+        birth, ecode = _parse_birthday(lambda n: request.form.get(n))
+        if ecode:
+            msg = {"format": "生日格式不正確",
+                   "incomplete": "生日請完整填寫年/月/日/時,或全部留空",
+                   "invalid_date": "這個生日日期不存在,請確認"}[ecode]
             return render_template("member_profile.html", mode="member",
-                                   user=user, error="生日格式不正確")
-        filled = [v is not None for v in vals]
-        if any(filled) and not all(filled):
-            return render_template("member_profile.html", mode="member",
-                                   user=user, error="生日請完整填寫年/月/日/時,或全部留空")
-        # 進一步驗證日期真實存在(例如 2/30)
-        birth = None
-        if all(filled):
-            try:
-                datetime(by, bm, bd, bh, 0)
-            except ValueError:
-                return render_template("member_profile.html", mode="member",
-                                       user=user, error="這個生日日期不存在,請確認")
-            birth = (by, bm, bd, bh)
+                                   user=user, error=msg)
 
         db.update_user_profile(user["id"], display_name=display_name,
                                gender=gender, birth=birth)
