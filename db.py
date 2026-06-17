@@ -196,6 +196,10 @@ def init_db():
     try:
         with _conn() as c:
             with c.cursor() as cur:
+                # 多個 gunicorn worker 會同時跑這段 DDL,直接併發會互相卡死
+                # (DeadlockDetected)。先取一把交易層 advisory lock 讓彼此排隊,
+                # 交易結束自動釋放;DDL 都是 IF NOT EXISTS,排隊重跑也安全。
+                cur.execute("SELECT pg_advisory_xact_lock(%s)", (911002,))
                 cur.execute(SCHEMA)
                 cur.execute(MIGRATE)
                 cur.execute(POINTS_SCHEMA)
