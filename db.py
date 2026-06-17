@@ -140,6 +140,8 @@ CREATE TABLE IF NOT EXISTS users (
     email          TEXT,
     password_hash  TEXT,                 -- 僅 Email 帳號使用;社群登入留空
     points_balance INTEGER NOT NULL DEFAULT 0,
+    consent_at     TIMESTAMPTZ,          -- 同意個資/免責的時間
+    consent_version TEXT,                -- 同意的條文版本
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (auth_provider, auth_id)
 );
@@ -207,6 +209,9 @@ BEGIN
         ALTER TABLE users ADD COLUMN password_hash TEXT;
     END IF;
 END $$;
+-- 同意紀錄欄位(舊庫升級;idempotent)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version TEXT;
 """
 
 
@@ -487,9 +492,10 @@ def get_or_create_user(auth_provider, auth_id, display_name=None, email=None):
         return None
 
 
-def create_email_user(email, password_hash, display_name=None):
+def create_email_user(email, password_hash, display_name=None, consent_version=None):
     """建立一個 Email 帳號會員(auth_provider='email', auth_id=email)。
 
+    consent_version:若有提供,會一併記錄同意時間(NOW())與條文版本。
     回傳 (status, user_dict):
       ('ok',     dict)  建立成功
       ('exists', None)  這個 email 已經註冊過
@@ -503,12 +509,15 @@ def create_email_user(email, password_hash, display_name=None):
             with c.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO users (auth_provider, auth_id, display_name, email, password_hash)
-                    VALUES ('email', %s, %s, %s, %s)
+                    INSERT INTO users (auth_provider, auth_id, display_name, email,
+                                       password_hash, consent_at, consent_version)
+                    VALUES ('email', %s, %s, %s, %s,
+                            CASE WHEN %s::text IS NOT NULL THEN NOW() ELSE NULL END, %s)
                     ON CONFLICT (auth_provider, auth_id) DO NOTHING
                     RETURNING id, auth_provider, auth_id, display_name, email, points_balance, created_at
                     """,
-                    (str(email), display_name, str(email), str(password_hash)),
+                    (str(email), display_name, str(email), str(password_hash),
+                     consent_version, consent_version),
                 )
                 r = cur.fetchone()
         if r is None:

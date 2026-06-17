@@ -89,6 +89,8 @@ TOKEN_TTL_DAYS = int(os.environ.get("TOKEN_TTL_DAYS", "30"))
 NEW_USER_BONUS = int(os.environ.get("NEW_USER_BONUS", "3"))
 # 密碼最短長度
 _MIN_PASSWORD_LEN = 6
+# 個資同意書 + 免責聲明的條文版本(改版時更新,會記在會員的 consent_version)
+CONSENT_VERSION = os.environ.get("CONSENT_VERSION", "2026-06-17")
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -683,7 +685,10 @@ def api_health():
 # ============================================================
 @app.route("/api/v1/auth/register", methods=["POST"])
 def api_auth_register():
-    """Email 註冊。請求 {email, password, display_name?}。成功回 {token, user}。"""
+    """Email 註冊。請求 {email, password, display_name?, agreed}。成功回 {token, user}。
+
+    agreed 須為 true(代表已同意個資同意書 + 免責聲明),否則拒絕。
+    """
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
@@ -693,9 +698,13 @@ def api_auth_register():
         return jsonify({"error": "Email 格式不正確"}), 400
     if len(password) < _MIN_PASSWORD_LEN:
         return jsonify({"error": f"密碼至少需 {_MIN_PASSWORD_LEN} 個字"}), 400
+    if not data.get("agreed"):
+        return jsonify({"error": "請先同意個資使用同意書與免責聲明"}), 400
 
     pw_hash = generate_password_hash(password)
-    status, user = db.create_email_user(email, pw_hash, display_name)
+    status, user = db.create_email_user(
+        email, pw_hash, display_name, consent_version=CONSENT_VERSION,
+    )
     if status == "exists":
         return jsonify({"error": "這個 Email 已經註冊過了"}), 409
     if status != "ok" or not user:
@@ -1083,7 +1092,9 @@ def register_page():
             return _err("請先閱讀並勾選個資使用同意書與免責聲明")
 
         pw_hash = generate_password_hash(password)
-        status, user = db.create_email_user(email, pw_hash, display_name)
+        status, user = db.create_email_user(
+            email, pw_hash, display_name, consent_version=CONSENT_VERSION,
+        )
         if status == "exists":
             return _err("這個 Email 已經註冊過了")
         if status != "ok" or not user:
