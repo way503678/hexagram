@@ -223,6 +223,28 @@ td.yao { font-family: monospace; font-size: 18px; letter-spacing: 2px; }
   box-sizing: border-box;
 }
 .login-form button { width: 100%; padding: 10px; font-size: 16px; margin: 12px 0 0; }
+.login-form button:disabled { background: #b9a9a9; cursor: not-allowed; }
+
+/* 註冊同意書區塊 */
+.consent-block {
+  margin-top: 14px; border: 1px solid #ddd; border-radius: 6px;
+  background: #fafafa; overflow: hidden;
+}
+.consent-title {
+  padding: 8px 12px; font-weight: 700; font-size: 14px;
+  background: #f0ece4; border-bottom: 1px solid #e3ddd2; color: #5a3a2a;
+}
+.consent-body {
+  max-height: 150px; overflow-y: auto; padding: 10px 12px;
+  font-size: 12.5px; line-height: 1.7; color: #444;
+}
+.consent-body p { margin: 0 0 6px; }
+.consent-check {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 10px 12px; border-top: 1px solid #e3ddd2;
+  font-size: 13.5px; color: #2b2620; cursor: pointer;
+}
+.consent-check input { margin-top: 3px; flex-shrink: 0; }
 .back-link {
   display: inline-block; margin-bottom: 12px;
   color: #8b0000; text-decoration: none;

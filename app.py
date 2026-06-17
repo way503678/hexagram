@@ -1079,6 +1079,8 @@ def register_page():
             return _err(f"密碼至少需 {_MIN_PASSWORD_LEN} 個字")
         if password != password2:
             return _err("兩次輸入的密碼不一致")
+        if not (request.form.get("agree_privacy") and request.form.get("agree_disclaimer")):
+            return _err("請先閱讀並勾選個資使用同意書與免責聲明")
 
         pw_hash = generate_password_hash(password)
         status, user = db.create_email_user(email, pw_hash, display_name)
