@@ -205,6 +205,7 @@ def _public_user(user):
         "email": user.get("email"),
         "points_balance": user.get("points_balance", 0),
         "is_admin": _email_is_admin(user.get("email")),
+        "gender": user.get("gender"),
         "birth_y": user.get("birth_y"), "birth_m": user.get("birth_m"),
         "birth_d": user.get("birth_d"), "birth_h": user.get("birth_h"),
         "created_at": created.isoformat() if hasattr(created, "isoformat") else created,
@@ -780,6 +781,8 @@ def api_member_profile():
         return jsonify({"error": "未登入或登入已逾期"}), 401
     data = request.get_json(silent=True) or {}
     display_name = (data.get("display_name") or "").strip() or None
+    gender = (data.get("gender") or "").strip().upper()
+    gender = gender if gender in ("M", "F") else None
 
     def _opt(name, lo, hi):
         v = data.get(name)
@@ -806,7 +809,8 @@ def api_member_profile():
             return jsonify({"error": "這個生日日期不存在"}), 400
         birth = tuple(vals)
 
-    db.update_user_profile(user["id"], display_name=display_name, birth=birth)
+    db.update_user_profile(user["id"], display_name=display_name,
+                           gender=gender, birth=birth)
     updated = db.get_user(user["id"]) or user
     return jsonify({"user": _public_user(updated)})
 
@@ -1115,6 +1119,8 @@ def member_profile():
 
     if request.method == "POST":
         display_name = (request.form.get("display_name") or "").strip() or None
+        gender = (request.form.get("gender") or "").strip().upper()
+        gender = gender if gender in ("M", "F") else None
         # 生日(可留空;要填就四個都要合理)
         def _opt_int(name, lo, hi):
             v = (request.form.get(name) or "").strip()
@@ -1149,7 +1155,8 @@ def member_profile():
                                        user=user, error="這個生日日期不存在,請確認")
             birth = (by, bm, bd, bh)
 
-        db.update_user_profile(user["id"], display_name=display_name, birth=birth)
+        db.update_user_profile(user["id"], display_name=display_name,
+                               gender=gender, birth=birth)
         return redirect(url_for("member"))
 
     return render_template("member_profile.html", mode="member", user=user)

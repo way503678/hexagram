@@ -13,6 +13,19 @@
            style="width:100%; padding:8px; border:1px solid #aaa; border-radius:4px; box-sizing:border-box;">
   </div>
 
+  <div style="margin-bottom:14px;">
+    <label style="display:block; margin-bottom:4px; font-weight:600;">性別</label>
+    <label style="margin-right:16px;">
+      <input type="radio" name="gender" value="M" {% if user.gender == 'M' %}checked{% endif %}> 男
+    </label>
+    <label style="margin-right:16px;">
+      <input type="radio" name="gender" value="F" {% if user.gender == 'F' %}checked{% endif %}> 女
+    </label>
+    <label>
+      <input type="radio" name="gender" value="" {% if not user.gender %}checked{% endif %}> 不設定
+    </label>
+  </div>
+
   <div style="margin-bottom:6px; font-weight:600;">生日(命盤排卦用)</div>
   <div style="font-size:12px; color:#888; margin-bottom:8px;">
     填寫後，會員中心就能一鍵查看您的命盤。可全部留空。時辰以 00:00 換日。

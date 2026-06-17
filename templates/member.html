@@ -29,7 +29,7 @@
         生日：{{ user.birth_y }}/{{ '%02d'%user.birth_m }}/{{ '%02d'%user.birth_d }}
         {{ '%02d'%user.birth_h }} 時
       </div>
-      <a href="/cast?y={{ user.birth_y }}&m={{ user.birth_m }}&d={{ user.birth_d }}&h={{ user.birth_h }}&view=1"
+      <a href="/cast?y={{ user.birth_y }}&m={{ user.birth_m }}&d={{ user.birth_d }}&h={{ user.birth_h }}&name={{ (user.display_name or '本人')|urlencode }}{% if user.gender %}&gender={{ user.gender }}{% endif %}&view=1"
          style="display:inline-block; padding:9px 16px; background:#8b0000; color:#fff;
                 border-radius:6px; text-decoration:none; font-weight:bold;">
         查看我的命盤
