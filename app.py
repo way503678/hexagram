@@ -162,6 +162,31 @@ def _login_at_from_request():
     return session.get("login_at")
 
 
+def _log_question_event(user, data):
+    """記一筆卜卦問事紀錄。只在「使用 AI」(產生 Prompt / AI 解盤)時呼叫。
+
+    data 需含 y/m/d/h/yao_vals/aspect/question(與排盤 API 相同格式)。
+    需登入會員才記;同會員 20 秒內相同問題+卦象會自動去重(見 db 層)。
+    """
+    if not user:
+        return
+    try:
+        chart_payload, _err = _compute_chart(data)
+        chart = (chart_payload or {}).get("卦象") or {}
+        db.log_divination_question(
+            user_id=user["id"],
+            user_email=user.get("email"),
+            login_at=_login_at_from_request(),
+            question=(data.get("question") or "").strip()[:500],
+            ben_gua=(chart.get("本卦") or {}).get("卦名"),
+            bian_gua=(chart.get("變卦") or {}).get("卦名"),
+            moving_lines=(chart.get("動爻") or {}).get("描述"),
+        )
+    except Exception as e:  # 記錄失敗絕不影響主流程
+        app.logger.warning("log question event failed (%s: %s)",
+                           type(e).__name__, e)
+
+
 def _public_user(user):
     """整理成可回傳給前端的會員資料(不含 password_hash;時間轉字串)。"""
     if not user:
@@ -497,23 +522,12 @@ def manual():
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
 
-    # 成功起卦且為登入會員 → 寫一筆卜卦問事紀錄(供管理介面查詢)
-    member = current_user()
-    if request.method == "POST" and result is not None and member:
-        db.log_divination_question(
-            user_id=member["id"],
-            user_email=member.get("email"),
-            login_at=_login_at_from_request(),
-            question=question,
-            ben_gua=(result.get("本卦") or {}).get("卦名"),
-            bian_gua=(result.get("變卦") or {}).get("卦名"),
-            moving_lines=(result.get("動爻") or {}).get("描述"),
-        )
-
+    # 注意:起卦(排盤)本身不記錄;只有實際「使用 AI」(產生 Prompt / AI 解盤)
+    # 才會在對應端點寫紀錄,見 _log_question_event。
     return render_template(
         "manual.html",
         mode="manual",
-        member=member,
+        member=current_user(),
         r=result, yao_vals=yao_vals,
         aspects=aspects_result,
         gender=gender,
@@ -894,20 +908,7 @@ def api_prompt():
             }), 402
         return jsonify({"error": "系統忙線,請稍後再試"}), 503
 
-    # 卜卦問事紀錄(App 端的問事入口;網頁在 /manual 起卦時就已記錄)
-    chart_payload, _cerr = _compute_chart(data)
-    if chart_payload:
-        _chart = chart_payload.get("卦象") or {}
-        db.log_divination_question(
-            user_id=user["id"],
-            user_email=user.get("email"),
-            login_at=_login_at_from_request(),
-            question=(data.get("question") or "").strip()[:500],
-            ben_gua=(_chart.get("本卦") or {}).get("卦名"),
-            bian_gua=(_chart.get("變卦") or {}).get("卦名"),
-            moving_lines=(_chart.get("動爻") or {}).get("描述"),
-        )
-
+    _log_question_event(user, data)        # 使用 AI(產生 Prompt)→ 記錄
     full_prompt = system_text + "\n\n---\n\n" + user_text
     return jsonify({"prompt": full_prompt, "balance": bal})
 
@@ -982,6 +983,7 @@ def manual_ai_prompt():
                 "balance": user.get("points_balance", 0),
             }), 402
         return jsonify({"error": "系統忙線,請稍後再試"}), 503
+    _log_question_event(user, request.get_json(silent=True) or {})  # 使用 AI → 記錄
     full_prompt = system_text + "\n\n---\n\n" + user_text
     return jsonify({"prompt": full_prompt, "balance": bal})
 
@@ -1016,6 +1018,7 @@ def manual_ai_reading():
             }), 402
         return jsonify({"error": "系統忙線,請稍後再試"}), 503
 
+    _log_question_event(user, data)        # 使用 AI(解盤)→ 記錄
     uid = user["id"]
 
     def _sse(event, payload):

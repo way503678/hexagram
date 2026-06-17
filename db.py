@@ -227,11 +227,39 @@ def init_db():
                 cur.execute(QUESTIONS_SCHEMA)
         log.info("DB ready: %s@%s/%s",
                  PG_CONF["user"], PG_CONF["host"], PG_CONF["dbname"])
+        _ensure_search_indexes()
         return True
     except Exception as e:
         log.warning("DB init failed (%s: %s); logging will be skipped",
                     type(e).__name__, e)
         return False
+
+
+# 卜卦問事查詢用的加速索引:管理介面以 ILIKE '%關鍵字%' 搜 email / 問題,
+# 一般 btree 對前後萬用字元無效,需 pg_trgm 的 GIN 三元組索引才會快。
+# 另外放一個交易,且自帶 try:就算缺權限建不了 extension 也只是搜尋慢,
+# 不會影響核心建表。
+SEARCH_INDEXES = """
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_divq_email_trgm
+    ON divination_questions USING gin (user_email gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_divq_question_trgm
+    ON divination_questions USING gin (question gin_trgm_ops);
+"""
+
+
+def _ensure_search_indexes():
+    """建立 pg_trgm 與 GIN 索引(加速管理介面的模糊搜尋)。失敗只記 warning。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute("SELECT pg_advisory_xact_lock(%s)", (911003,))
+                cur.execute(SEARCH_INDEXES)
+    except Exception as e:
+        log.warning("DB search-index setup skipped (%s: %s); "
+                    "搜尋仍可運作,只是大量資料時較慢", type(e).__name__, e)
 
 
 def log_divination(client_name, y, m, d, h, gender=None):
