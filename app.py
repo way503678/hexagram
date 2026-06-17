@@ -686,6 +686,22 @@ def _build_manual_reading(data):
     return _MANUAL_AI_PROMPT, user_text, chart_payload, None
 
 
+def _prompt_and_charge(user, data):
+    """產生 AI 解讀 Prompt:驗證 → 扣 1 點 → 記錄 → 回 prompt。web 與 api 共用。
+    回傳 (body_dict, status_code);成功 body = {"prompt", "balance"}。"""
+    system_text, user_text, chart_payload, err = _build_manual_reading(data)
+    if err:
+        return err  # (error_dict, status_code)
+    ok, bal, msg = db.try_deduct_point(user["id"], 1, "prompt")
+    if not ok:
+        if msg == "insufficient":
+            return ({"error": "點數不足,請先儲值",
+                     "balance": user.get("points_balance", 0)}, 402)
+        return ({"error": "系統忙線,請稍後再試"}, 503)
+    _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI → 記錄
+    return ({"prompt": system_text + "\n\n---\n\n" + user_text, "balance": bal}, 200)
+
+
 # ============================================================
 # REST API (給 iOS app;JSON 進出。排盤確定性、免費、免登入)
 # ============================================================
@@ -703,6 +719,47 @@ def api_health():
 #   日後社群登入(Google/Apple/Line)各自加一個端點,驗證該家身分後
 #   呼叫 db.get_or_create_user(provider, sub, ...) + make_token() 即可。
 # ============================================================
+# --- 註冊 / 登入共用核心(web 與 api 同一套,避免兩份各自維護) ---
+def _validate_credentials(email, password):
+    """Email/密碼基本驗證。回傳 error_msg 或 None(通過)。"""
+    if not _EMAIL_RE.match((email or "").strip().lower()):
+        return "Email 格式不正確"
+    if len(password or "") < _MIN_PASSWORD_LEN:
+        return f"密碼至少需 {_MIN_PASSWORD_LEN} 個字"
+    return None
+
+
+def _create_member(email, password, display_name):
+    """建立 Email 會員 + 新會員贈點 + 記錄同意版本。
+    回傳 (status, user|None):('ok', user) / ('exists', None) / ('error', None)。
+    呼叫端負責平台專屬前置檢查(密碼再確認 / 勾選同意 / agreed)。"""
+    pw_hash = generate_password_hash(password)
+    status, user = db.create_email_user(
+        (email or "").strip().lower(), pw_hash, display_name or None,
+        consent_version=CONSENT_VERSION,
+    )
+    if status != "ok" or not user:
+        return (status, None)
+    # 新會員贈點(方便實測);失敗不影響註冊
+    if NEW_USER_BONUS > 0:
+        ok, _ = db.add_points(user["id"], NEW_USER_BONUS, "welcome_bonus")
+        if ok:
+            user = db.get_user(user["id"]) or user
+    return ("ok", user)
+
+
+def _login_member(email, password):
+    """驗證 Email + 密碼。成功回完整 user dict、失敗回 None。"""
+    email = (email or "").strip().lower()
+    if not email or not password:
+        return None
+    row = db.get_email_user(email)
+    if (not row or not row.get("password_hash")
+            or not check_password_hash(row["password_hash"], password)):
+        return None
+    return db.get_user(row["id"]) or row
+
+
 @app.route("/api/v1/auth/register", methods=["POST"])
 def api_auth_register():
     """Email 註冊。請求 {email, password, display_name?, agreed}。成功回 {token, user}。
@@ -714,27 +771,17 @@ def api_auth_register():
     password = data.get("password") or ""
     display_name = (data.get("display_name") or "").strip() or None
 
-    if not _EMAIL_RE.match(email):
-        return jsonify({"error": "Email 格式不正確"}), 400
-    if len(password) < _MIN_PASSWORD_LEN:
-        return jsonify({"error": f"密碼至少需 {_MIN_PASSWORD_LEN} 個字"}), 400
+    err = _validate_credentials(email, password)
+    if err:
+        return jsonify({"error": err}), 400
     if not data.get("agreed"):
         return jsonify({"error": "請先同意個資使用同意書與免責聲明"}), 400
 
-    pw_hash = generate_password_hash(password)
-    status, user = db.create_email_user(
-        email, pw_hash, display_name, consent_version=CONSENT_VERSION,
-    )
+    status, user = _create_member(email, password, display_name)
     if status == "exists":
         return jsonify({"error": "這個 Email 已經註冊過了"}), 409
     if status != "ok" or not user:
         return jsonify({"error": "系統忙線,請稍後再試"}), 503
-
-    # 新會員贈點(方便實測解盤);失敗不影響註冊
-    if NEW_USER_BONUS > 0:
-        ok, _ = db.add_points(user["id"], NEW_USER_BONUS, "welcome_bonus")
-        if ok:
-            user = db.get_user(user["id"]) or user
 
     token = make_token(user["id"])
     return jsonify({"token": token, "user": _public_user(user)})
@@ -749,13 +796,11 @@ def api_auth_login():
     if not email or not password:
         return jsonify({"error": "請輸入 Email 與密碼"}), 400
 
-    row = db.get_email_user(email)
-    if (not row or not row.get("password_hash")
-            or not check_password_hash(row["password_hash"], password)):
+    user = _login_member(email, password)
+    if not user:
         # 不分「帳號不存在」與「密碼錯」,避免洩漏哪些 email 已註冊
         return jsonify({"error": "Email 或密碼不正確"}), 401
 
-    user = db.get_user(row["id"]) or row
     token = make_token(user["id"])
     return jsonify({"token": token, "user": _public_user(user)})
 
@@ -959,24 +1004,8 @@ def api_prompt():
     user = current_user()
     if not user:
         return jsonify({"error": "請先登入會員"}), 401
-    data = request.get_json(silent=True) or {}
-    system_text, user_text, chart_payload, err = _build_manual_reading(data)
-    if err:
-        body, code = err
-        return jsonify(body), code
-    # 先驗證通過再扣點,避免無效請求白扣
-    ok, bal, msg = db.try_deduct_point(user["id"], 1, "prompt")
-    if not ok:
-        if msg == "insufficient":
-            return jsonify({
-                "error": "點數不足,請先儲值",
-                "balance": user.get("points_balance", 0),
-            }), 402
-        return jsonify({"error": "系統忙線,請稍後再試"}), 503
-
-    _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI(產生 Prompt)→ 記錄
-    full_prompt = system_text + "\n\n---\n\n" + user_text
-    return jsonify({"prompt": full_prompt, "balance": bal})
+    body, code = _prompt_and_charge(user, request.get_json(silent=True) or {})
+    return jsonify(body), code
 
 
 def _call_claude_reading(system_text, user_text):
@@ -1036,22 +1065,8 @@ def manual_ai_prompt():
     user = current_user()
     if not user:
         return jsonify({"error": "請先登入會員"}), 401
-    data = request.get_json(silent=True) or {}
-    system_text, user_text, chart_payload, err = _build_manual_reading(data)
-    if err:
-        body, code = err
-        return jsonify(body), code
-    ok, bal, msg = db.try_deduct_point(user["id"], 1, "prompt")
-    if not ok:
-        if msg == "insufficient":
-            return jsonify({
-                "error": "點數不足,請先儲值",
-                "balance": user.get("points_balance", 0),
-            }), 402
-        return jsonify({"error": "系統忙線,請稍後再試"}), 503
-    _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI → 記錄
-    full_prompt = system_text + "\n\n---\n\n" + user_text
-    return jsonify({"prompt": full_prompt, "balance": bal})
+    body, code = _prompt_and_charge(user, request.get_json(silent=True) or {})
+    return jsonify(body), code
 
 
 @app.route("/manual/ai_reading", methods=["POST"])
@@ -1199,26 +1214,19 @@ def register_page():
                 "register.html", mode="register", error=msg, email=email
             )
 
-        if not _EMAIL_RE.match(email):
-            return _err("Email 格式不正確")
-        if len(password) < _MIN_PASSWORD_LEN:
-            return _err(f"密碼至少需 {_MIN_PASSWORD_LEN} 個字")
+        err = _validate_credentials(email, password)
+        if err:
+            return _err(err)
         if password != password2:
             return _err("兩次輸入的密碼不一致")
         if not (request.form.get("agree_privacy") and request.form.get("agree_disclaimer")):
             return _err("請先閱讀並勾選個資使用同意書與免責聲明")
 
-        pw_hash = generate_password_hash(password)
-        status, user = db.create_email_user(
-            email, pw_hash, display_name, consent_version=CONSENT_VERSION,
-        )
+        status, user = _create_member(email, password, display_name)
         if status == "exists":
             return _err("這個 Email 已經註冊過了")
         if status != "ok" or not user:
             return _err("系統忙線,請稍後再試")
-
-        if NEW_USER_BONUS > 0:
-            db.add_points(user["id"], NEW_USER_BONUS, "welcome_bonus")
 
         session.permanent = True
         session["user_id"] = user["id"]
@@ -1240,15 +1248,14 @@ def login_page():
     if request.method == "POST":
         email = (request.form.get("email") or "").strip().lower()
         password = request.form.get("password") or ""
-        row = db.get_email_user(email)
-        if (not row or not row.get("password_hash")
-                or not check_password_hash(row["password_hash"], password)):
+        user = _login_member(email, password)
+        if not user:
             return render_template(
                 "login.html", mode="login",
                 error="Email 或密碼不正確", email=email, next_url=next_url,
             )
         session.permanent = True
-        session["user_id"] = row["id"]
+        session["user_id"] = user["id"]
         session["login_at"] = datetime.now(timezone.utc).isoformat()
         return redirect(next_url)
 

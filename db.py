@@ -13,6 +13,7 @@ PostgreSQL 紀錄存取
 """
 import os
 import logging
+import time
 import threading
 from datetime import datetime
 from contextlib import contextmanager
@@ -46,9 +47,12 @@ DB_ENABLED = os.environ.get("DB_ENABLED", "1") == "1"
 
 # 連線池上限(每個 gunicorn worker 各一個池;2 workers × 4 threads,8 足夠)
 _POOL_MAX = int(os.environ.get("PG_POOL_MAX", "8"))
+# 連線最大壽命(秒):超過就回收換新,避免連線無限老化
+_CONN_MAX_AGE = int(os.environ.get("PG_CONN_MAX_AGE", "600"))
 _POOL = None
 _POOL_PID = None
 _POOL_LOCK = threading.Lock()
+_CONN_BORN = {}  # id(conn) -> 首次取用的時間(算壽命用)
 
 
 def _get_pool():
@@ -67,26 +71,43 @@ def _get_pool():
     return _POOL
 
 
-def _get_live_conn(pool):
-    """從池取一條「確定還活著」的連線(壞的就丟掉換一條)。
+def _discard_conn(pool, c):
+    """把一條連線從池中關掉丟棄(不歸還),並清掉壽命紀錄。"""
+    _CONN_BORN.pop(id(c), None)
+    try:
+        pool.putconn(c, close=True)
+    except Exception:
+        pass
 
-    保留原本「每次操作都拿到可用連線」的語意:用 SELECT 1 驗證,但因為連線
-    已開好,只是一次極輕量往返,遠比每次都重新 connect() 便宜。
+
+def _get_live_conn(pool):
+    """從池取一條「確定健康」的連線。健康機制三層:
+      1. 太老(超過 _CONN_MAX_AGE)→ 回收換新,避免連線無限老化。
+      2. SELECT 1 驗證仍活著(連線已開好,只是極輕量往返,遠比重新 connect 便宜)。
+      3. 驗證失敗 → 關掉丟棄,再換一條。
+    保留原本「每次操作都拿到可用連線」的語意。
     """
     last_err = None
     for _ in range(3):
         c = pool.getconn()
+        born = _CONN_BORN.get(id(c))
+        now = time.time()
+        # 1. 壽命到了就回收
+        if born is not None and (now - born) > _CONN_MAX_AGE:
+            _discard_conn(pool, c)
+            continue
+        # 2. 健檢
         try:
             with c.cursor() as cur:
                 cur.execute("SELECT 1")
             c.rollback()  # 結束驗證用的隱式交易
-            return c
         except Exception as e:
             last_err = e
-            try:
-                pool.putconn(c, close=True)
-            except Exception:
-                pass
+            _discard_conn(pool, c)  # 3. 壞了就丟
+            continue
+        if born is None:
+            _CONN_BORN[id(c)] = now
+        return c
     raise last_err or RuntimeError("no live DB connection")
 
 
@@ -112,10 +133,13 @@ def _conn():
             healthy = False  # rollback 都失敗 → 連線已壞,別歸還
         raise
     finally:
-        try:
-            pool.putconn(c, close=not healthy)
-        except Exception:
-            pass
+        if healthy:
+            try:
+                pool.putconn(c)
+            except Exception:
+                pass
+        else:
+            _discard_conn(pool, c)  # 壞連線:關掉丟棄,別污染池
 
 
 SCHEMA = """
