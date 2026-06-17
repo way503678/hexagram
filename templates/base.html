@@ -18,7 +18,7 @@
       <nav>
         <a href="/almanac" class="{% if mode == 'almanac' %}active{% endif %}">萬年曆</a>
         <a href="/cast" class="{% if mode == 'solar' %}active{% endif %}">命盤排卦</a>
-        <a href="/manual" class="{% if mode == 'manual' %}active{% endif %}">手動排卦</a>
+        <a href="/manual" class="{% if mode == 'manual' %}active{% endif %}">卜卦問事</a>
         {% if current_user and current_user.is_admin %}
           {% set admin_open = mode.startswith('admin') %}
           <div class="nav-section">
