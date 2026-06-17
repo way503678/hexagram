@@ -37,8 +37,8 @@
   {# ---- 問事類別固定 all(原 radio 已移除)---- #}
   <input type="hidden" name="aspect" value="all">
 
-  {# ---- 所問之事(管理員專用,先填再擲卦)---- #}
-  {% if session.get('is_admin') %}
+  {# ---- 所問之事(需登入會員,先填再擲卦)---- #}
+  {% if current_user %}
     <div class="manual-question-box" style="margin: 10px 0; padding: 10px;
          border: 1px solid #ddd; border-radius: 6px; background: #fafafa;">
       <label for="manual-question" style="display:block; margin-bottom:6px; font-weight:600;">
@@ -159,8 +159,8 @@
     </div>
   {% endif %}
 
-  {# ---- AI 解讀按鈕(管理員專用,排盤後顯示)---- #}
-  {% if session.get('is_admin') %}
+  {# ---- AI 解讀按鈕(需登入會員,排盤後顯示)---- #}
+  {% if current_user %}
     <div class="ai-deep">
       <button type="button" class="ai-btn export-btn" id="manual-ai-btn">
         🤖 產生 AI 解讀 Prompt
@@ -181,8 +181,8 @@
   {% endif %}
 {% endif %}
 
-{# ---- AI 解讀 Modal(管理員專用;僅顯示 + 複製,問題已於上方填寫)---- #}
-{% if r and session.get('is_admin') %}
+{# ---- AI 解讀 Modal(需登入會員;僅顯示 + 複製,問題已於上方填寫)---- #}
+{% if r and current_user %}
 <div id="manual-ai-modal" class="ai-modal" style="display:none;">
   <div class="ai-modal-content">
     <div class="ai-modal-header">
@@ -431,10 +431,10 @@
       body: JSON.stringify(payload)
     })
     .then(function(res) {
-      // 此功能限管理員;未登入會 302 轉登入頁、非管理員會回 403,皆非 JSON
+      // 需登入會員;未登入會回 401(JSON)或被轉登入頁(非 JSON)
       var ct = res.headers.get('Content-Type') || '';
       if (res.redirected || ct.indexOf('application/json') === -1) {
-        throw new Error('此功能限管理員,請以管理員帳號登入後再試');
+        throw new Error('請先登入會員後再產生 Prompt');
       }
       return res.json().then(function(data){
         return { ok: res.ok, data: data };

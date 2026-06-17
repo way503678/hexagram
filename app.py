@@ -833,9 +833,11 @@ def api_prompt():
     """組裝 AI 解讀 Prompt(規則 + 所問之事 + 卦象 JSON),供使用者複製到自己的 AI。
 
     請求 JSON:與 /api/v1/chart 相同,另加 question(所問之事,必填)。
-    免費、免登入、不呼叫 Claude(只是把可攜帶 prompt 組好回傳)。
+    需登入會員(免費、不呼叫 Claude,只是把可攜帶 prompt 組好回傳)。
     回傳:{"prompt": "..."}。
     """
+    if not current_user():
+        return jsonify({"error": "請先登入會員"}), 401
     data = request.get_json(silent=True) or {}
     system_text, user_text, err = _build_manual_reading(data)
     if err:
@@ -896,9 +898,10 @@ def _stream_claude_reading(system_text, user_text):
 
 
 @app.route("/manual/ai_prompt", methods=["POST"])
-@admin_required
 def manual_ai_prompt():
-    """組裝可攜帶 prompt(規則 + 所問之事 + 卦象 JSON),供管理員複製貼到自己的 AI。"""
+    """組裝可攜帶 prompt(規則 + 所問之事 + 卦象 JSON),供會員複製貼到自己的 AI。需登入。"""
+    if not current_user():
+        return jsonify({"error": "請先登入會員"}), 401
     data = request.get_json(silent=True) or {}
     system_text, user_text, err = _build_manual_reading(data)
     if err:
