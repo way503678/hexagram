@@ -833,18 +833,28 @@ def api_prompt():
     """組裝 AI 解讀 Prompt(規則 + 所問之事 + 卦象 JSON),供使用者複製到自己的 AI。
 
     請求 JSON:與 /api/v1/chart 相同,另加 question(所問之事,必填)。
-    需登入會員(免費、不呼叫 Claude,只是把可攜帶 prompt 組好回傳)。
-    回傳:{"prompt": "..."}。
+    需登入會員,扣 1 點(不呼叫 Claude,只是把可攜帶 prompt 組好回傳)。
+    回傳:{"prompt": "...", "balance": n}。
     """
-    if not current_user():
+    user = current_user()
+    if not user:
         return jsonify({"error": "請先登入會員"}), 401
     data = request.get_json(silent=True) or {}
     system_text, user_text, err = _build_manual_reading(data)
     if err:
         body, code = err
         return jsonify(body), code
+    # 先驗證通過再扣點,避免無效請求白扣
+    ok, bal, msg = db.try_deduct_point(user["id"], 1, "prompt")
+    if not ok:
+        if msg == "insufficient":
+            return jsonify({
+                "error": "點數不足,請先儲值",
+                "balance": user.get("points_balance", 0),
+            }), 402
+        return jsonify({"error": "系統忙線,請稍後再試"}), 503
     full_prompt = system_text + "\n\n---\n\n" + user_text
-    return jsonify({"prompt": full_prompt})
+    return jsonify({"prompt": full_prompt, "balance": bal})
 
 
 def _call_claude_reading(system_text, user_text):
@@ -899,16 +909,26 @@ def _stream_claude_reading(system_text, user_text):
 
 @app.route("/manual/ai_prompt", methods=["POST"])
 def manual_ai_prompt():
-    """組裝可攜帶 prompt(規則 + 所問之事 + 卦象 JSON),供會員複製貼到自己的 AI。需登入。"""
-    if not current_user():
+    """組裝可攜帶 prompt(規則 + 所問之事 + 卦象 JSON),供會員複製貼到自己的 AI。
+    需登入,扣 1 點。"""
+    user = current_user()
+    if not user:
         return jsonify({"error": "請先登入會員"}), 401
     data = request.get_json(silent=True) or {}
     system_text, user_text, err = _build_manual_reading(data)
     if err:
         body, code = err
         return jsonify(body), code
+    ok, bal, msg = db.try_deduct_point(user["id"], 1, "prompt")
+    if not ok:
+        if msg == "insufficient":
+            return jsonify({
+                "error": "點數不足,請先儲值",
+                "balance": user.get("points_balance", 0),
+            }), 402
+        return jsonify({"error": "系統忙線,請稍後再試"}), 503
     full_prompt = system_text + "\n\n---\n\n" + user_text
-    return jsonify({"prompt": full_prompt})
+    return jsonify({"prompt": full_prompt, "balance": bal})
 
 
 @app.route("/manual/ai_reading", methods=["POST"])

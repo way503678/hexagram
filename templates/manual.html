@@ -163,7 +163,7 @@
   {% if current_user %}
     <div class="ai-deep">
       <button type="button" class="ai-btn export-btn" id="manual-ai-btn">
-        🤖 產生 AI 解讀 Prompt
+        🤖 產生 AI 解讀 Prompt（扣 1 點）
       </button>
       {# 🔮 AI 解盤暫時隱藏(避免誤按);要還原把 display:none 拿掉即可 #}
       <button type="button" class="ai-btn export-btn" id="manual-reading-btn"
@@ -447,6 +447,11 @@
       outputEl.value = r.data.prompt;
       statusEl.textContent = '';
       copyBtn.disabled = false;
+      // 更新剩餘點數顯示
+      if (r.data.balance != null) {
+        var balEl2 = document.getElementById('member-balance');
+        if (balEl2) balEl2.textContent = r.data.balance;
+      }
     })
     .catch(function(err) {
       statusEl.textContent = '產生失敗:' + err.message;
