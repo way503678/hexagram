@@ -261,6 +261,16 @@ def _inject_current_user():
     return {"current_user": current_user()}
 
 
+@app.context_processor
+def _inject_asset_version():
+    """靜態檔版本號(用 style.css 的 mtime),讓 CSS 連結在改版後自動繞過快取。"""
+    try:
+        v = int(os.path.getmtime(os.path.join(app.static_folder, "style.css")))
+    except OSError:
+        v = 1
+    return {"asset_version": v}
+
+
 def _get_field(name, default=""):
     """從 POST form 或 GET query 取單一欄位(POST 優先)。"""
     if request.method == "POST":
