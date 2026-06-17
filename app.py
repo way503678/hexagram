@@ -1090,6 +1090,38 @@ def member_logout():
 
 
 # ============================================================
+# 管理:會員管理(需 ADMIN_EMAILS 名單內的帳號登入)
+# ============================================================
+@app.route("/admin/members", methods=["GET"])
+@admin_required
+def admin_members():
+    """會員清單:可看每位會員的點數,並手動加點。"""
+    users = db.list_users()
+    added = request.args.get("added")          # 剛加點成功的 user_id(顯示提示)
+    return render_template(
+        "admin/members.html", mode="admin_members", users=users, added=added,
+    )
+
+
+@app.route("/admin/members/<int:user_id>/add_points", methods=["POST"])
+@admin_required
+def admin_member_add_points(user_id):
+    """手動幫某會員加點(可正可負;負數為扣回)。事由記為 admin_adjust。"""
+    try:
+        amount = int(request.form.get("amount", "0"))
+    except (TypeError, ValueError):
+        amount = 0
+    if amount == 0:
+        return redirect("/admin/members")
+    # 防呆:單次調整上限,避免手滑打太多
+    amount = max(-100000, min(100000, amount))
+    admin = current_user()
+    db.add_points(user_id, amount, "admin_adjust",
+                  ref=(admin.get("email") if admin else None))
+    return redirect(f"/admin/members?added={user_id}")
+
+
+# ============================================================
 # 管理:歷史紀錄(需 ADMIN_EMAILS 名單內的帳號登入)
 # ============================================================
 @app.route("/admin/history", methods=["GET"])

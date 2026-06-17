@@ -501,6 +501,34 @@ def get_email_user(email):
         return None
 
 
+def list_users(limit=500):
+    """列出所有會員(新到舊),供管理介面用。回傳 list of dict。失敗回 []。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return []
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, auth_provider, auth_id, display_name, email,
+                           points_balance, created_at
+                    FROM users
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                    """,
+                    (int(limit),),
+                )
+                rows = cur.fetchall()
+        return [{
+            "id": r[0], "auth_provider": r[1], "auth_id": r[2],
+            "display_name": r[3], "email": r[4],
+            "points_balance": r[5], "created_at": r[6],
+        } for r in rows]
+    except Exception as e:
+        log.warning("DB list_users failed (%s: %s)", type(e).__name__, e)
+        return []
+
+
 def get_user(user_id):
     """依 id 取得會員(含餘額)。回傳 dict 或 None。"""
     if not DB_ENABLED or not HAS_PSYCOPG:

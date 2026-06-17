@@ -20,7 +20,9 @@
         <a href="/cast" class="{% if mode == 'solar' %}active{% endif %}">命盤排卦</a>
         <a href="/manual" class="{% if mode == 'manual' %}active{% endif %}">手動排卦</a>
         {% if current_user and current_user.is_admin %}
-          <a href="/admin/history" class="{% if mode.startswith('admin') %}active{% endif %}">歷史紀錄</a>
+          <div class="nav-group">管理介面</div>
+          <a href="/admin/members" class="{% if mode == 'admin_members' %}active{% endif %}">會員管理</a>
+          <a href="/admin/history" class="{% if mode.startswith('admin') and mode != 'admin_members' %}active{% endif %}">歷史紀錄</a>
         {% endif %}
       </nav>
       <div class="auth-area">
