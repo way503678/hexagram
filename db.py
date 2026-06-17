@@ -142,6 +142,10 @@ CREATE TABLE IF NOT EXISTS users (
     points_balance INTEGER NOT NULL DEFAULT 0,
     consent_at     TIMESTAMPTZ,          -- 同意個資/免責的時間
     consent_version TEXT,                -- 同意的條文版本
+    birth_y        INTEGER,              -- 生日(命盤排卦用):年
+    birth_m        INTEGER,              -- 月
+    birth_d        INTEGER,              -- 日
+    birth_h        INTEGER,              -- 時(0-23)
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (auth_provider, auth_id)
 );
@@ -212,6 +216,11 @@ END $$;
 -- 同意紀錄欄位(舊庫升級;idempotent)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version TEXT;
+-- 生日欄位(命盤排卦用)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_y INTEGER;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_m INTEGER;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_d INTEGER;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_h INTEGER;
 """
 
 
@@ -728,7 +737,8 @@ def get_user(user_id):
                 cur.execute(
                     """
                     SELECT id, auth_provider, auth_id, display_name, email,
-                           points_balance, created_at
+                           points_balance, created_at,
+                           birth_y, birth_m, birth_d, birth_h
                     FROM users WHERE id = %s
                     """,
                     (int(user_id),),
@@ -740,10 +750,38 @@ def get_user(user_id):
             "id": r[0], "auth_provider": r[1], "auth_id": r[2],
             "display_name": r[3], "email": r[4],
             "points_balance": r[5], "created_at": r[6],
+            "birth_y": r[7], "birth_m": r[8], "birth_d": r[9], "birth_h": r[10],
         }
     except Exception as e:
         log.warning("DB get_user failed (%s: %s)", type(e).__name__, e)
         return None
+
+
+def update_user_profile(user_id, display_name=None, birth=None):
+    """更新會員資料。display_name 為 None 時不動;birth 為 (y,m,d,h) tuple 或 None。
+    回傳 True/False。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                if birth is not None:
+                    by, bm, bd, bh = birth
+                    cur.execute(
+                        """UPDATE users SET display_name = %s,
+                               birth_y=%s, birth_m=%s, birth_d=%s, birth_h=%s
+                           WHERE id = %s""",
+                        (display_name, by, bm, bd, bh, int(user_id)),
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE users SET display_name = %s WHERE id = %s",
+                        (display_name, int(user_id)),
+                    )
+        return True
+    except Exception as e:
+        log.warning("DB update_user_profile failed (%s: %s)", type(e).__name__, e)
+        return False
 
 
 def add_points(user_id, points, reason, ref=None):

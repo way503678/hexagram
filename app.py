@@ -1062,6 +1062,55 @@ def member():
     return render_template("member.html", mode="member", user=user, ledger=ledger)
 
 
+@app.route("/member/profile", methods=["GET", "POST"])
+def member_profile():
+    """修改會員資料:暱稱 + 生日(命盤排卦用)。"""
+    user = current_user()
+    if not user:
+        return redirect(url_for("login_page", next="/member/profile"))
+
+    if request.method == "POST":
+        display_name = (request.form.get("display_name") or "").strip() or None
+        # 生日(可留空;要填就四個都要合理)
+        def _opt_int(name, lo, hi):
+            v = (request.form.get(name) or "").strip()
+            if v == "":
+                return None
+            try:
+                n = int(v)
+            except ValueError:
+                return "ERR"
+            return n if lo <= n <= hi else "ERR"
+
+        by = _opt_int("birth_y", 1900, 2100)
+        bm = _opt_int("birth_m", 1, 12)
+        bd = _opt_int("birth_d", 1, 31)
+        bh = _opt_int("birth_h", 0, 23)
+        vals = [by, bm, bd, bh]
+
+        if "ERR" in vals:
+            return render_template("member_profile.html", mode="member",
+                                   user=user, error="生日格式不正確")
+        filled = [v is not None for v in vals]
+        if any(filled) and not all(filled):
+            return render_template("member_profile.html", mode="member",
+                                   user=user, error="生日請完整填寫年/月/日/時,或全部留空")
+        # 進一步驗證日期真實存在(例如 2/30)
+        birth = None
+        if all(filled):
+            try:
+                datetime(by, bm, bd, bh, 0)
+            except ValueError:
+                return render_template("member_profile.html", mode="member",
+                                       user=user, error="這個生日日期不存在,請確認")
+            birth = (by, bm, bd, bh)
+
+        db.update_user_profile(user["id"], display_name=display_name, birth=birth)
+        return redirect(url_for("member"))
+
+    return render_template("member_profile.html", mode="member", user=user)
+
+
 # ============================================================
 # 會員:網頁登入 / 註冊 / 登出(session-based,與 App 的 token 並行)
 #   後端驗證共用 db.create_email_user / db.get_email_user,與 App 同一套帳號。
