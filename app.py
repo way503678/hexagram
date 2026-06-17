@@ -26,7 +26,7 @@ from datetime import datetime, timezone, timedelta
 
 from flask import (
     Flask, request, render_template, session, redirect, url_for, abort,
-    Response, jsonify, stream_with_context,
+    Response, jsonify, stream_with_context, g,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -164,16 +164,18 @@ def _login_at_from_request():
     return session.get("login_at")
 
 
-def _log_question_event(user, data):
+def _log_question_event(user, data, chart_payload=None):
     """記一筆卜卦問事紀錄。只在「使用 AI」(產生 Prompt / AI 解盤)時呼叫。
 
     data 需含 y/m/d/h/yao_vals/aspect/question(與排盤 API 相同格式)。
+    chart_payload:呼叫端若已算好卦象可傳入,避免重算;None 則自行計算。
     需登入會員才記;同會員 20 秒內相同問題+卦象會自動去重(見 db 層)。
     """
     if not user:
         return
     try:
-        chart_payload, _err = _compute_chart(data)
+        if chart_payload is None:
+            chart_payload, _err = _compute_chart(data)
         chart = (chart_payload or {}).get("卦象") or {}
         yv = data.get("yao_vals")
         yao_str = "|".join(str(x) for x in yv) if isinstance(yv, (list, tuple)) else None
@@ -276,15 +278,30 @@ def admin_required(view):
     return wrapper
 
 
+_UNSET = object()
+
+
 def current_user():
     """回傳目前登入會員 dict(含 points_balance、is_admin)或 None。
+
+    同一個 request 內會快取(flask.g):一次請求常會多次呼叫(裝飾器 + 路由 +
+    模板 context),快取後只查一次 DB,結果完全相同。
+    """
+    cached = getattr(g, "_cached_user", _UNSET)
+    if cached is not _UNSET:
+        return cached
+    user = _resolve_current_user()
+    g._cached_user = user
+    return user
+
+
+def _resolve_current_user():
+    """實際解析目前登入會員。
 
     身分來源依序:
       1. Authorization: Bearer <token>(App / API 會員,Email/社群登入皆走這條)
       2. 網頁會員 session 的 user_id(cookie)
     管理員不另設帳號:回傳的 dict 會依 ADMIN_EMAILS 名單補上 is_admin 旗標。
-    日後接 Google/Apple/Line 時,各 provider 端點驗證完只要 make_token() 簽發
-    token 即可,這個函式與其餘扣點 / 會員頁 / AI 解盤都不用再動。
     """
     def _augment(u):
         if u:
@@ -639,25 +656,25 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
 
 
 def _build_manual_reading(data):
-    """從 POST data 解析、重排盤、組出 (系統規則文字, 問事+卦象JSON文字)。
+    """從 POST data 解析、重排盤、組出 (系統規則文字, 問事+卦象JSON文字, 卦象payload)。
 
-    回傳 (system_text, user_text, err):
-      成功 → err 為 None;system_text 為規則(適合當可快取的 system),
-             user_text 為「所問之事 + 卦象 JSON」(每次不同)。
-      失敗 → (None, None, (error_dict, status_code))。
+    回傳 (system_text, user_text, chart_payload, err):
+      成功 → err 為 None;另外回傳 chart_payload 供呼叫端重用(免再算一次)。
+      失敗 → (None, None, None, (error_dict, status_code))。
+    驗證順序不變(先檢查所問之事,再排盤)。
     """
     if _MANUAL_AI_PROMPT is None:
-        return None, None, ({"error": "伺服器未載入 prompt 檔案,請聯絡管理員"}, 500)
+        return None, None, None, ({"error": "伺服器未載入 prompt 檔案,請聯絡管理員"}, 500)
 
     question = (data.get("question") or "").strip()
     if not question:
-        return None, None, ({"error": "請輸入所問之事"}, 400)
+        return None, None, None, ({"error": "請輸入所問之事"}, 400)
     if len(question) > 500:
-        return None, None, ({"error": "所問之事超過 500 字"}, 400)
+        return None, None, None, ({"error": "所問之事超過 500 字"}, 400)
 
     chart_payload, err = _compute_chart(data)
     if err:
-        return None, None, err
+        return None, None, None, err
 
     chart_json_str = json.dumps(
         chart_payload, ensure_ascii=False, separators=(",", ":")
@@ -666,7 +683,7 @@ def _build_manual_reading(data):
         "【所問之事】\n" + question
         + "\n\n【卦象 JSON】\n```json\n" + chart_json_str + "\n```\n"
     )
-    return _MANUAL_AI_PROMPT, user_text, None
+    return _MANUAL_AI_PROMPT, user_text, chart_payload, None
 
 
 # ============================================================
@@ -943,7 +960,7 @@ def api_prompt():
     if not user:
         return jsonify({"error": "請先登入會員"}), 401
     data = request.get_json(silent=True) or {}
-    system_text, user_text, err = _build_manual_reading(data)
+    system_text, user_text, chart_payload, err = _build_manual_reading(data)
     if err:
         body, code = err
         return jsonify(body), code
@@ -957,7 +974,7 @@ def api_prompt():
             }), 402
         return jsonify({"error": "系統忙線,請稍後再試"}), 503
 
-    _log_question_event(user, data)        # 使用 AI(產生 Prompt)→ 記錄
+    _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI(產生 Prompt)→ 記錄
     full_prompt = system_text + "\n\n---\n\n" + user_text
     return jsonify({"prompt": full_prompt, "balance": bal})
 
@@ -1020,7 +1037,7 @@ def manual_ai_prompt():
     if not user:
         return jsonify({"error": "請先登入會員"}), 401
     data = request.get_json(silent=True) or {}
-    system_text, user_text, err = _build_manual_reading(data)
+    system_text, user_text, chart_payload, err = _build_manual_reading(data)
     if err:
         body, code = err
         return jsonify(body), code
@@ -1032,7 +1049,7 @@ def manual_ai_prompt():
                 "balance": user.get("points_balance", 0),
             }), 402
         return jsonify({"error": "系統忙線,請稍後再試"}), 503
-    _log_question_event(user, request.get_json(silent=True) or {})  # 使用 AI → 記錄
+    _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI → 記錄
     full_prompt = system_text + "\n\n---\n\n" + user_text
     return jsonify({"prompt": full_prompt, "balance": bal})
 
@@ -1052,7 +1069,7 @@ def manual_ai_reading():
         return jsonify({"error": "請先登入會員"}), 401
 
     data = request.get_json(silent=True) or {}
-    system_text, user_text, err = _build_manual_reading(data)
+    system_text, user_text, chart_payload, err = _build_manual_reading(data)
     if err:
         body, code = err
         return jsonify(body), code
@@ -1067,7 +1084,7 @@ def manual_ai_reading():
             }), 402
         return jsonify({"error": "系統忙線,請稍後再試"}), 503
 
-    _log_question_event(user, data)        # 使用 AI(解盤)→ 記錄
+    _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI(解盤)→ 記錄
     uid = user["id"]
 
     def _sse(event, payload):
@@ -1329,7 +1346,7 @@ def admin_question_detail(qid):
                     "aspect": "all",
                     "question": rec.get("question") or "",
                 }
-                system_text, user_text, perr = _build_manual_reading(data)
+                system_text, user_text, _cp, perr = _build_manual_reading(data)
                 if not perr:
                     prompt_text = system_text + "\n\n---\n\n" + user_text
         except Exception as e:

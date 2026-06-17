@@ -13,12 +13,14 @@ PostgreSQL 紀錄存取
 """
 import os
 import logging
+import threading
 from datetime import datetime
 from contextlib import contextmanager
 
 try:
     import psycopg2
     from psycopg2 import sql
+    from psycopg2 import pool as _pg_pool
     HAS_PSYCOPG = True
 except ImportError:
     HAS_PSYCOPG = False
@@ -31,26 +33,89 @@ PG_CONF = {
     "user":     os.environ.get("PG_USER", "postgres"),
     "password": os.environ.get("PG_PASSWORD", "postgres"),
     "dbname":   os.environ.get("PG_DATABASE", "hexagram"),
+    "connect_timeout": 5,
+    # TCP keepalive:讓 OS 偵測到斷掉的連線,避免池裡留死連線
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 3,
 }
 
 # 是否啟用 DB（預設啟用）；想暫時關掉，設環境變數 DB_ENABLED=0
 DB_ENABLED = os.environ.get("DB_ENABLED", "1") == "1"
 
+# 連線池上限(每個 gunicorn worker 各一個池;2 workers × 4 threads,8 足夠)
+_POOL_MAX = int(os.environ.get("PG_POOL_MAX", "8"))
+_POOL = None
+_POOL_PID = None
+_POOL_LOCK = threading.Lock()
+
+
+def _get_pool():
+    """取得本行程的連線池(lazy 建立)。
+
+    用 pid 綁定:gunicorn fork 出來的子行程第一次用到時會各自建自己的池,
+    避免把 fork 前建立的連線跨行程共用(那會出錯)。
+    """
+    global _POOL, _POOL_PID
+    pid = os.getpid()
+    if _POOL is None or _POOL_PID != pid:
+        with _POOL_LOCK:
+            if _POOL is None or _POOL_PID != pid:
+                _POOL = _pg_pool.ThreadedConnectionPool(1, _POOL_MAX, **PG_CONF)
+                _POOL_PID = pid
+    return _POOL
+
+
+def _get_live_conn(pool):
+    """從池取一條「確定還活著」的連線(壞的就丟掉換一條)。
+
+    保留原本「每次操作都拿到可用連線」的語意:用 SELECT 1 驗證,但因為連線
+    已開好,只是一次極輕量往返,遠比每次都重新 connect() 便宜。
+    """
+    last_err = None
+    for _ in range(3):
+        c = pool.getconn()
+        try:
+            with c.cursor() as cur:
+                cur.execute("SELECT 1")
+            c.rollback()  # 結束驗證用的隱式交易
+            return c
+        except Exception as e:
+            last_err = e
+            try:
+                pool.putconn(c, close=True)
+            except Exception:
+                pass
+    raise last_err or RuntimeError("no live DB connection")
+
 
 @contextmanager
 def _conn():
-    """連線 context manager，例外會傳出來給呼叫端決定要不要忽略"""
+    """連線 context manager(改用連線池)。
+
+    行為與原本一致:成功 commit、例外 rollback 並向外拋。差別只在連線取自
+    池、用完歸還(若途中連線壞掉就關掉不歸還),省去每次 connect 的握手成本。
+    """
     if not HAS_PSYCOPG:
         raise RuntimeError("psycopg2 not installed")
-    c = psycopg2.connect(**PG_CONF, connect_timeout=5)
+    pool = _get_pool()
+    c = _get_live_conn(pool)
+    healthy = True
     try:
         yield c
         c.commit()
     except Exception:
-        c.rollback()
+        try:
+            c.rollback()
+        except Exception:
+            healthy = False  # rollback 都失敗 → 連線已壞,別歸還
         raise
     finally:
-        c.close()
+        try:
+            pool.putconn(c, close=not healthy)
+        except Exception:
+            pass
 
 
 SCHEMA = """
