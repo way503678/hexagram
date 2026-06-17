@@ -145,6 +145,23 @@ def _user_id_from_request():
     return None
 
 
+def _login_at_from_request():
+    """本次登入時間:App 用 token 的 iat、網頁用 session['login_at']。
+    回傳 ISO 字串或 None。"""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            signing_input = auth[7:].strip().rsplit(".", 1)[0]
+            _, payload_b64 = signing_input.split(".")
+            payload = json.loads(_b64url_decode(payload_b64))
+            iat = payload.get("iat")
+            if iat:
+                return datetime.fromtimestamp(int(iat), timezone.utc).isoformat()
+        except Exception:
+            pass
+    return session.get("login_at")
+
+
 def _public_user(user):
     """整理成可回傳給前端的會員資料(不含 password_hash;時間轉字串)。"""
     if not user:
@@ -486,7 +503,7 @@ def manual():
         db.log_divination_question(
             user_id=member["id"],
             user_email=member.get("email"),
-            login_at=session.get("login_at"),
+            login_at=_login_at_from_request(),
             question=question,
             ben_gua=(result.get("本卦") or {}).get("卦名"),
             bian_gua=(result.get("變卦") or {}).get("卦名"),
@@ -876,6 +893,21 @@ def api_prompt():
                 "balance": user.get("points_balance", 0),
             }), 402
         return jsonify({"error": "系統忙線,請稍後再試"}), 503
+
+    # 卜卦問事紀錄(App 端的問事入口;網頁在 /manual 起卦時就已記錄)
+    chart_payload, _cerr = _compute_chart(data)
+    if chart_payload:
+        _chart = chart_payload.get("卦象") or {}
+        db.log_divination_question(
+            user_id=user["id"],
+            user_email=user.get("email"),
+            login_at=_login_at_from_request(),
+            question=(data.get("question") or "").strip()[:500],
+            ben_gua=(_chart.get("本卦") or {}).get("卦名"),
+            bian_gua=(_chart.get("變卦") or {}).get("卦名"),
+            moving_lines=(_chart.get("動爻") or {}).get("描述"),
+        )
+
     full_prompt = system_text + "\n\n---\n\n" + user_text
     return jsonify({"prompt": full_prompt, "balance": bal})
 

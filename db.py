@@ -551,13 +551,36 @@ def list_users(limit=500):
 
 
 def log_divination_question(user_id, user_email, login_at, question,
-                            ben_gua, bian_gua, moving_lines):
-    """寫入一筆卜卦問事紀錄。失敗只記 warning,不影響起卦。"""
+                            ben_gua, bian_gua, moving_lines,
+                            dedup_window_seconds=20):
+    """寫入一筆卜卦問事紀錄。失敗只記 warning,不影響起卦。
+
+    dedup_window_seconds:若同一會員在這段秒數內已寫過「完全相同」的一筆
+    (同問題 + 同卦象),視為重整 / 連點造成的重複,直接跳過不寫。
+    回傳 True=有寫入, False=跳過或失敗。
+    """
     if not DB_ENABLED or not HAS_PSYCOPG:
         return False
     try:
         with _conn() as c:
             with c.cursor() as cur:
+                if dedup_window_seconds:
+                    cur.execute(
+                        """
+                        SELECT 1 FROM divination_questions
+                        WHERE user_id      IS NOT DISTINCT FROM %s
+                          AND question     IS NOT DISTINCT FROM %s
+                          AND ben_gua      IS NOT DISTINCT FROM %s
+                          AND bian_gua     IS NOT DISTINCT FROM %s
+                          AND moving_lines IS NOT DISTINCT FROM %s
+                          AND created_at > NOW() - make_interval(secs => %s)
+                        LIMIT 1
+                        """,
+                        (user_id, question, ben_gua, bian_gua, moving_lines,
+                         int(dedup_window_seconds)),
+                    )
+                    if cur.fetchone():
+                        return False  # 短時間內的重複,跳過
                 cur.execute(
                     """
                     INSERT INTO divination_questions
