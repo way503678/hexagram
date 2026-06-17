@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}卜卦紀錄 — 命卦排盤{% endblock %}
+
+{% block content %}
+<h1>卜卦紀錄</h1>
+<div class="note">共 {{ records|length }} 筆（最多顯示最近 200 筆）。可用會員 Email 或問題關鍵字搜尋。</div>
+
+<form method="get" action="/admin/questions"
+      style="margin:12px 0; display:flex; gap:8px; max-width:480px;">
+  <input type="text" name="q" value="{{ search or '' }}"
+         placeholder="搜尋 Email 或問題關鍵字"
+         style="flex:1; padding:7px; border:1px solid #aaa; border-radius:4px;">
+  <button type="submit">搜尋</button>
+  {% if search %}<a href="/admin/questions" style="align-self:center;">清除</a>{% endif %}
+</form>
+
+{% if records %}
+  <table class="history-table" style="width:100%;">
+    <thead>
+      <tr>
+        <th>卜卦時間</th>
+        <th>會員</th>
+        <th>登入時間</th>
+        <th>問題</th>
+        <th>卦象（本卦 → 變卦）</th>
+        <th>動爻</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in records %}
+        <tr>
+          <td style="white-space:nowrap; color:#666;">
+            {{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '' }}
+          </td>
+          <td>{{ r.user_email or '—' }}</td>
+          <td style="white-space:nowrap; color:#888; font-size:13px;">
+            {{ r.login_at.strftime('%Y-%m-%d %H:%M') if r.login_at else '—' }}
+          </td>
+          <td>{{ r.question or '—' }}</td>
+          <td style="white-space:nowrap;">
+            <b>{{ r.ben_gua or '—' }}</b>
+            {% if r.bian_gua %}<span style="color:#888;"> → </span><b>{{ r.bian_gua }}</b>{% endif %}
+          </td>
+          <td style="color:#a02020;">{{ r.moving_lines or '—' }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>{% if search %}找不到符合「{{ search }}」的紀錄。{% else %}目前沒有任何卜卦紀錄。{% endif %}</p>
+{% endif %}
+{% endblock %}

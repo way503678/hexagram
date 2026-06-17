@@ -171,6 +171,26 @@ CREATE INDEX IF NOT EXISTS idx_payment_orders_user
 """
 
 
+# 卜卦問事紀錄:每次會員在「卜卦問事」成功起卦就寫一筆,供管理介面查詢
+QUESTIONS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS divination_questions (
+    id            BIGSERIAL PRIMARY KEY,
+    user_id       INTEGER REFERENCES users(id),
+    user_email    TEXT,                              -- 冗餘存一份,方便查詢顯示
+    login_at      TIMESTAMPTZ,                       -- 該次登入時間
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),-- 卜卦時間
+    question      TEXT,                              -- 所問之事
+    ben_gua       TEXT,                              -- 本卦
+    bian_gua      TEXT,                              -- 變卦
+    moving_lines  TEXT                               -- 動爻描述
+);
+CREATE INDEX IF NOT EXISTS idx_divq_created
+    ON divination_questions (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_divq_user
+    ON divination_questions (user_id, created_at DESC);
+"""
+
+
 # 對舊資料庫升級:users 表若缺 password_hash 欄位則補上(Email 帳號登入用)
 MIGRATE_USERS = """
 DO $$
@@ -204,6 +224,7 @@ def init_db():
                 cur.execute(MIGRATE)
                 cur.execute(POINTS_SCHEMA)
                 cur.execute(MIGRATE_USERS)
+                cur.execute(QUESTIONS_SCHEMA)
         log.info("DB ready: %s@%s/%s",
                  PG_CONF["user"], PG_CONF["host"], PG_CONF["dbname"])
         return True
@@ -526,6 +547,72 @@ def list_users(limit=500):
         } for r in rows]
     except Exception as e:
         log.warning("DB list_users failed (%s: %s)", type(e).__name__, e)
+        return []
+
+
+def log_divination_question(user_id, user_email, login_at, question,
+                            ben_gua, bian_gua, moving_lines):
+    """寫入一筆卜卦問事紀錄。失敗只記 warning,不影響起卦。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO divination_questions
+                      (user_id, user_email, login_at, question,
+                       ben_gua, bian_gua, moving_lines)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (user_id, user_email, login_at, question,
+                     ben_gua, bian_gua, moving_lines),
+                )
+        return True
+    except Exception as e:
+        log.warning("DB log_divination_question failed (%s: %s)",
+                    type(e).__name__, e)
+        return False
+
+
+def list_divination_questions(limit=200, search=None):
+    """列出卜卦問事紀錄(新到舊),可用 email 或問題關鍵字搜尋。回傳 list of dict。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return []
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                if search:
+                    like = f"%{search}%"
+                    cur.execute(
+                        """
+                        SELECT id, user_email, login_at, created_at, question,
+                               ben_gua, bian_gua, moving_lines
+                        FROM divination_questions
+                        WHERE user_email ILIKE %s OR question ILIKE %s
+                        ORDER BY created_at DESC LIMIT %s
+                        """,
+                        (like, like, int(limit)),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT id, user_email, login_at, created_at, question,
+                               ben_gua, bian_gua, moving_lines
+                        FROM divination_questions
+                        ORDER BY created_at DESC LIMIT %s
+                        """,
+                        (int(limit),),
+                    )
+                rows = cur.fetchall()
+        return [{
+            "id": r[0], "user_email": r[1], "login_at": r[2],
+            "created_at": r[3], "question": r[4], "ben_gua": r[5],
+            "bian_gua": r[6], "moving_lines": r[7],
+        } for r in rows]
+    except Exception as e:
+        log.warning("DB list_divination_questions failed (%s: %s)",
+                    type(e).__name__, e)
         return []
 
 

@@ -480,10 +480,23 @@ def manual():
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
 
+    # 成功起卦且為登入會員 → 寫一筆卜卦問事紀錄(供管理介面查詢)
+    member = current_user()
+    if request.method == "POST" and result is not None and member:
+        db.log_divination_question(
+            user_id=member["id"],
+            user_email=member.get("email"),
+            login_at=session.get("login_at"),
+            question=question,
+            ben_gua=(result.get("本卦") or {}).get("卦名"),
+            bian_gua=(result.get("變卦") or {}).get("卦名"),
+            moving_lines=(result.get("動爻") or {}).get("描述"),
+        )
+
     return render_template(
         "manual.html",
         mode="manual",
-        member=current_user(),
+        member=member,
         r=result, yao_vals=yao_vals,
         aspects=aspects_result,
         gender=gender,
@@ -1061,6 +1074,7 @@ def register_page():
 
         session.permanent = True
         session["user_id"] = user["id"]
+        session["login_at"] = datetime.now(timezone.utc).isoformat()
         return redirect(url_for("member"))
 
     return render_template("register.html", mode="register")
@@ -1087,6 +1101,7 @@ def login_page():
             )
         session.permanent = True
         session["user_id"] = row["id"]
+        session["login_at"] = datetime.now(timezone.utc).isoformat()
         return redirect(next_url)
 
     return render_template("login.html", mode="login", next_url=next_url)
@@ -1129,6 +1144,21 @@ def admin_member_add_points(user_id):
     db.add_points(user_id, amount, "admin_adjust",
                   ref=(admin.get("email") if admin else None))
     return redirect(f"/admin/members?added={user_id}")
+
+
+# ============================================================
+# 管理:卜卦問事紀錄(需 ADMIN_EMAILS 名單內的帳號登入)
+# ============================================================
+@app.route("/admin/questions", methods=["GET"])
+@admin_required
+def admin_questions():
+    """卜卦問事紀錄查詢:會員、登入時間、卜卦時間、問題、卦象結果。"""
+    search = (request.args.get("q") or "").strip()
+    records = db.list_divination_questions(search=search or None)
+    return render_template(
+        "admin/questions.html", mode="admin_questions",
+        records=records, search=search,
+    )
 
 
 # ============================================================
