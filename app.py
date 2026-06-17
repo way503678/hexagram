@@ -205,6 +205,8 @@ def _public_user(user):
         "email": user.get("email"),
         "points_balance": user.get("points_balance", 0),
         "is_admin": _email_is_admin(user.get("email")),
+        "birth_y": user.get("birth_y"), "birth_m": user.get("birth_m"),
+        "birth_d": user.get("birth_d"), "birth_h": user.get("birth_h"),
         "created_at": created.isoformat() if hasattr(created, "isoformat") else created,
     }
 
@@ -765,6 +767,48 @@ def api_member_ledger():
             if hasattr(r["created_at"], "isoformat") else r["created_at"],
     } for r in rows]
     return jsonify({"ledger": ledger})
+
+
+@app.route("/api/v1/member/profile", methods=["POST"])
+def api_member_profile():
+    """更新會員資料(暱稱 + 生日)。請求 {display_name?, birth_y/m/d/h}。回 {user}。
+
+    生日四欄要嘛全給(合理值)、要嘛全留空(null)。
+    """
+    user = current_user()
+    if not user:
+        return jsonify({"error": "未登入或登入已逾期"}), 401
+    data = request.get_json(silent=True) or {}
+    display_name = (data.get("display_name") or "").strip() or None
+
+    def _opt(name, lo, hi):
+        v = data.get(name)
+        if v is None or v == "":
+            return None
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return "ERR"
+        return n if lo <= n <= hi else "ERR"
+
+    vals = [_opt("birth_y", 1900, 2100), _opt("birth_m", 1, 12),
+            _opt("birth_d", 1, 31), _opt("birth_h", 0, 23)]
+    if "ERR" in vals:
+        return jsonify({"error": "生日格式不正確"}), 400
+    filled = [v is not None for v in vals]
+    birth = None
+    if any(filled):
+        if not all(filled):
+            return jsonify({"error": "生日請完整填寫年/月/日/時,或全部留空"}), 400
+        try:
+            datetime(vals[0], vals[1], vals[2], vals[3], 0)
+        except ValueError:
+            return jsonify({"error": "這個生日日期不存在"}), 400
+        birth = tuple(vals)
+
+    db.update_user_profile(user["id"], display_name=display_name, birth=birth)
+    updated = db.get_user(user["id"]) or user
+    return jsonify({"user": _public_user(updated)})
 
 
 @app.route("/api/v1/chart", methods=["POST"])
