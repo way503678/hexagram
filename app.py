@@ -62,12 +62,19 @@ def _api_cors(resp):
         resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     return resp
 
-# 管理員 idle timeout(分鐘):超過此時間未活動則自動登出
-ADMIN_IDLE_TIMEOUT_MINUTES = int(os.environ.get("ADMIN_IDLE_TIMEOUT_MINUTES", "15"))
+# 管理員身分:由 ADMIN_EMAILS 環境變數列出(逗號分隔)。
+#   名單內的 email 用一般帳號註冊/登入後,即自動擁有最高權限。
+#   要新增/移除管理員只要改這個環境變數,不需要改程式或資料庫。
+ADMIN_EMAILS = {
+    e.strip().lower()
+    for e in os.environ.get("ADMIN_EMAILS", "").split(",")
+    if e.strip()
+}
 
-# 管理員密碼:以環境變數設定。預設 "admin",部署時務必改掉。
-_ADMIN_PASSWORD_PLAIN = os.environ.get("ADMIN_PASSWORD", "admin")
-_ADMIN_PASSWORD_HASH = generate_password_hash(_ADMIN_PASSWORD_PLAIN)
+
+def _email_is_admin(email):
+    """email 是否在管理員名單內。"""
+    return bool(email) and email.strip().lower() in ADMIN_EMAILS
 
 
 # ============================================================
@@ -149,6 +156,7 @@ def _public_user(user):
         "display_name": user.get("display_name"),
         "email": user.get("email"),
         "points_balance": user.get("points_balance", 0),
+        "is_admin": _email_is_admin(user.get("email")),
         "created_at": created.isoformat() if hasattr(created, "isoformat") else created,
     }
 
@@ -201,62 +209,49 @@ if _MANUAL_AI_PROMPT is None:
           "AI 解讀功能會回傳 500。")
 
 
-def _now_utc_iso():
-    """目前 UTC 時間的 ISO 字串(可序列化進 session)。"""
-    return datetime.now(timezone.utc).isoformat()
+def admin_required(view):
+    """裝飾器:要求已登入且為管理員(email 在 ADMIN_EMAILS 名單內)。
 
-
-def _is_session_expired():
-    """檢查管理員 session 是否已逾時(超過 ADMIN_IDLE_TIMEOUT_MINUTES 未活動)。"""
-    last_iso = session.get("last_active")
-    if not last_iso:
-        return True
-    try:
-        last_dt = datetime.fromisoformat(last_iso)
-    except ValueError:
-        return True
-    now = datetime.now(timezone.utc)
-    return (now - last_dt) > timedelta(minutes=ADMIN_IDLE_TIMEOUT_MINUTES)
-
-
-def login_required(view):
-    """裝飾器:要求已登入,並檢查 idle timeout。"""
+    未登入 → 導去登入頁;已登入但非管理員 → 403。
+    """
     @wraps(view)
     def wrapper(*a, **kw):
-        if not session.get("is_admin"):
-            return redirect(url_for("admin_login", next=request.path))
-        if _is_session_expired():
-            session.clear()
-            return redirect(url_for("admin_login", next=request.path, timeout=1))
-        session["last_active"] = _now_utc_iso()
+        user = current_user()
+        if not user:
+            return redirect(url_for("login_page", next=request.path))
+        if not user.get("is_admin"):
+            abort(403)
         return view(*a, **kw)
     return wrapper
 
 
 def current_user():
-    """回傳目前登入會員 dict(含 points_balance)或 None。
+    """回傳目前登入會員 dict(含 points_balance、is_admin)或 None。
 
     身分來源依序:
       1. Authorization: Bearer <token>(App / API 會員,Email/社群登入皆走這條)
-      2. 管理員 session(網頁後台,對應一個 'admin' 測試會員)
+      2. 網頁會員 session 的 user_id(cookie)
+    管理員不另設帳號:回傳的 dict 會依 ADMIN_EMAILS 名單補上 is_admin 旗標。
     日後接 Google/Apple/Line 時,各 provider 端點驗證完只要 make_token() 簽發
     token 即可,這個函式與其餘扣點 / 會員頁 / AI 解盤都不用再動。
     """
+    def _augment(u):
+        if u:
+            u["is_admin"] = _email_is_admin(u.get("email"))
+        return u
+
     # 1. App / API:Authorization: Bearer <token>
     uid = _user_id_from_request()
     if uid:
         u = db.get_user(uid)
         if u:
-            return u
+            return _augment(u)
     # 2. 網頁會員:登入後存在 session 的 user_id(cookie)
     sid = session.get("user_id")
     if sid:
         u = db.get_user(sid)
         if u:
-            return u
-    # 3. 管理員 session:對應一個 'admin' 測試會員(網頁後台)
-    if session.get("is_admin"):
-        return db.get_or_create_user("admin", "admin", display_name="管理員(測試)")
+            return _augment(u)
     return None
 
 
@@ -901,7 +896,7 @@ def _stream_claude_reading(system_text, user_text):
 
 
 @app.route("/manual/ai_prompt", methods=["POST"])
-@login_required
+@admin_required
 def manual_ai_prompt():
     """組裝可攜帶 prompt(規則 + 所問之事 + 卦象 JSON),供管理員複製貼到自己的 AI。"""
     data = request.get_json(silent=True) or {}
@@ -1066,52 +1061,16 @@ def login_page():
 
 @app.route("/logout", methods=["GET", "POST"])
 def member_logout():
-    """會員登出:只清掉會員 session(不影響管理員)。"""
-    session.pop("user_id", None)
-    return redirect(url_for("landing"))
-
-
-# ============================================================
-# 管理:登入 / 登出
-# ============================================================
-@app.route("/admin/login", methods=["GET", "POST"])
-def admin_login():
-    if request.method == "POST":
-        password = request.form.get("password", "")
-        if check_password_hash(_ADMIN_PASSWORD_HASH, password):
-            session.permanent = False
-            session["is_admin"] = True
-            session["last_active"] = _now_utc_iso()
-            next_url = request.form.get("next", "/admin/history")
-            if not next_url.startswith("/"):
-                next_url = "/admin/history"
-            return redirect(next_url)
-        return render_template(
-            "admin/login.html", mode="admin_login", error="密碼不正確"
-        )
-
-    # GET:檢查是否從逾時跳轉而來
-    next_url = request.args.get("next", "/admin/history")
-    timeout = request.args.get("timeout") == "1"
-    return render_template(
-        "admin/login.html", mode="admin_login",
-        next_url=next_url,
-        timeout=timeout,
-        timeout_minutes=ADMIN_IDLE_TIMEOUT_MINUTES,
-    )
-
-
-@app.route("/admin/logout", methods=["GET"])
-def admin_logout():
+    """登出:清掉登入 session。"""
     session.clear()
     return redirect(url_for("landing"))
 
 
 # ============================================================
-# 管理:歷史紀錄
+# 管理:歷史紀錄(需 ADMIN_EMAILS 名單內的帳號登入)
 # ============================================================
 @app.route("/admin/history", methods=["GET"])
-@login_required
+@admin_required
 def admin_history():
     clients = db.list_clients()
     return render_template(
@@ -1121,7 +1080,7 @@ def admin_history():
 
 
 @app.route("/admin/history/<path:name>", methods=["GET"])
-@login_required
+@admin_required
 def admin_history_detail(name):
     charts = db.list_charts_by_name(name)
     for ch in charts:
@@ -1143,7 +1102,7 @@ def admin_history_detail(name):
 
 
 @app.route("/admin/history/<path:name>/delete/<int:chart_id>", methods=["POST"])
-@login_required
+@admin_required
 def admin_history_delete(name, chart_id):
     success, deleted, info = db.delete_chart_by_id(chart_id)
     if success and deleted > 0:

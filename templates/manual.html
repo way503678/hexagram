@@ -310,12 +310,12 @@
     })
     .then(function(res){
       var ct = res.headers.get('Content-Type') || '';
-      if (res.redirected || res.url.indexOf('/admin/login') !== -1) {
-        throw {handled:true, msg:'登入已逾時,請重新登入後再試'};
-      }
       // 前置檢查失敗(扣點前)會回一般 JSON,不是串流
       if (ct.indexOf('text/event-stream') === -1) {
         return res.json().then(function(d){
+          if (res.status === 401) {
+            throw {handled:true, msg:'請先登入會員後再使用 AI 解盤'};
+          }
           if (res.status === 402) {
             throw {handled:true, msg:(d.error||'點數不足') + '(目前 ' + (d.balance!=null?d.balance:'?') + ' 點,請至會員中心儲值)'};
           }
@@ -431,11 +431,10 @@
       body: JSON.stringify(payload)
     })
     .then(function(res) {
-      // session 逾時時,後端會 302 轉到登入頁,回來的是 HTML 而非 JSON
+      // 此功能限管理員;未登入會 302 轉登入頁、非管理員會回 403,皆非 JSON
       var ct = res.headers.get('Content-Type') || '';
-      if (res.redirected || res.url.indexOf('/admin/login') !== -1 ||
-          ct.indexOf('application/json') === -1) {
-        throw new Error('登入已逾時,請重新登入後再按一次');
+      if (res.redirected || ct.indexOf('application/json') === -1) {
+        throw new Error('此功能限管理員,請以管理員帳號登入後再試');
       }
       return res.json().then(function(data){
         return { ok: res.ok, data: data };
