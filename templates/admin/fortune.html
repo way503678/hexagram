@@ -74,6 +74,33 @@
     <span class="note" style="margin-left: 10px;">以立春為界</span>
   </form>
 
+  {# ---- 流年宜忌 AI 解讀(需登入,扣點)---- #}
+  <div class="ai-deep" style="margin:14px 0;"
+       data-y="{{ fortune_chart_args['y'] }}" data-m="{{ fortune_chart_args['m'] }}"
+       data-d="{{ fortune_chart_args['d'] }}" data-h="{{ fortune_chart_args['h'] }}"
+       data-year="{{ fortune_year }}" data-gender="{{ chart_gender or '' }}">
+    {% if current_user %}
+      <button type="button" class="ai-btn export-btn" id="fortune-ai-btn"
+              style="background:#6b2d8b;">🔮 流年宜忌 AI 解讀(扣 {{ fortune_ai_cost }} 點)</button>
+      <button type="button" class="ai-btn export-btn" id="fortune-prompt-btn"
+              style="margin-left:8px;">🤖 產生流年 Prompt(扣 {{ fortune_ai_cost }} 點)</button>
+      <span id="fortune-ai-msg" style="font-size:13px; color:#666; margin-left:8px;"></span>
+      <div id="fortune-ai-out" style="display:none; white-space:pre-wrap; line-height:1.8;
+           margin-top:10px; padding:12px; border:1px solid #ddd; border-radius:6px; background:#fafafa;"></div>
+      <div id="fortune-prompt-box" style="display:none; margin-top:10px;">
+        <textarea id="fortune-prompt-text" readonly
+                  style="width:100%; min-height:200px; padding:10px; font-size:13px;
+                         border:1px solid #ccc; border-radius:6px; box-sizing:border-box; white-space:pre; font-family:monospace;"></textarea>
+        <button type="button" id="fortune-prompt-copy"
+                style="margin-top:6px; padding:6px 12px; cursor:pointer; border:1px solid #6b2d8b;
+                       border-radius:6px; background:#fff; color:#6b2d8b;">複製</button>
+      </div>
+    {% else %}
+      <div class="note">登入會員後可使用「流年宜忌 AI 解讀」(白話告訴你今年各面向宜做/忌做)。
+        <a href="/login" style="color:#8b0000; font-weight:bold;">會員登入</a></div>
+    {% endif %}
+  </div>
+
   {# ---- 流年區塊 ---- #}
   {% set y = fortune['流年'] %}
   <h2>流年總覽 ・ {{ y['干支'] }}年(立春 {{ y['立春日'] }} 起)</h2>
@@ -281,5 +308,98 @@
       </div>
     </details>
   {% endfor %}
+{% endif %}
+
+{% if fortune and current_user %}
+<script>
+(function(){
+  var box = document.querySelector('.ai-deep[data-year]');
+  if (!box) return;
+  var aiBtn = document.getElementById('fortune-ai-btn');
+  var pBtn  = document.getElementById('fortune-prompt-btn');
+  var msg   = document.getElementById('fortune-ai-msg');
+  var out   = document.getElementById('fortune-ai-out');
+  var pBox  = document.getElementById('fortune-prompt-box');
+  var pText = document.getElementById('fortune-prompt-text');
+  var pCopy = document.getElementById('fortune-prompt-copy');
+
+  function payload(){
+    return {
+      y: +box.dataset.y, m: +box.dataset.m, d: +box.dataset.d, h: +box.dataset.h,
+      year: +(document.querySelector('[name="year"]') || {value: box.dataset.year}).value,
+      gender: box.dataset.gender || ''
+    };
+  }
+
+  // ---- AI 解讀(SSE 串流)----
+  aiBtn.addEventListener('click', function(){
+    aiBtn.disabled = true; pBtn.disabled = true;
+    out.style.display = 'block'; out.textContent = ''; out.dataset.started = '';
+    msg.style.color = '#666'; msg.textContent = '⏳ 解讀中…';
+    fetch('/api/v1/fortune/reading', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload())
+    }).then(function(res){
+      var ct = res.headers.get('Content-Type') || '';
+      if (ct.indexOf('text/event-stream') === -1) {
+        return res.json().then(function(d){
+          if (res.status === 402) throw {handled:true, msg:(d.error||'點數不足')+'(目前 '+(d.balance!=null?d.balance:'?')+' 點)'};
+          if (res.status === 401) throw {handled:true, msg:'請先登入會員'};
+          throw {handled:true, msg:(d.error||('HTTP '+res.status))};
+        });
+      }
+      var reader = res.body.getReader(), dec = new TextDecoder(), buf = '';
+      function handle(evt){
+        var m2 = /event: (\w+)\ndata: (.*)/s.exec(evt.trim());
+        if (!m2) return;
+        var ev = m2[1], d;
+        try { d = JSON.parse(m2[2]); } catch(e){ return; }
+        if (ev === 'delta') { out.dataset.started='1'; out.textContent += d.t; msg.textContent=''; }
+        else if (ev === 'done') { msg.style.color='#2d7a2d'; msg.textContent='✓ 完成(餘 '+d.balance+' 點)'; }
+        else if (ev === 'error') { msg.style.color='#a02020'; msg.textContent = d.error || '解讀失敗'; }
+      }
+      function pump(){
+        return reader.read().then(function(r){
+          if (r.done){ if (buf.trim()) handle(buf); return; }
+          buf += dec.decode(r.value, {stream:true});
+          var parts = buf.split('\n\n'); buf = parts.pop();
+          parts.forEach(handle);
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function(err){
+      msg.style.color='#a02020';
+      msg.textContent = err && err.handled ? err.msg : '連線失敗,請稍後再試';
+    }).finally(function(){ aiBtn.disabled=false; pBtn.disabled=false; });
+  });
+
+  // ---- 產生 Prompt ----
+  pBtn.addEventListener('click', function(){
+    pBtn.disabled = true; aiBtn.disabled = true; msg.style.color='#666'; msg.textContent='⏳ 產生中…';
+    fetch('/api/v1/fortune/prompt', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload())
+    }).then(function(res){ return res.json().then(function(d){ return {ok:res.ok, status:res.status, d:d}; }); })
+      .then(function(r){
+        if (!r.ok) {
+          msg.style.color='#a02020';
+          msg.textContent = r.status===402 ? ((r.d.error||'點數不足')) : (r.d.error||('HTTP '+r.status));
+          return;
+        }
+        pBox.style.display='block'; pText.value = r.d.prompt;
+        msg.style.color='#2d7a2d'; msg.textContent='✓ 已產生(餘 '+r.d.balance+' 點)';
+      }).catch(function(){ msg.style.color='#a02020'; msg.textContent='連線失敗'; })
+      .finally(function(){ pBtn.disabled=false; aiBtn.disabled=false; });
+  });
+
+  pCopy.addEventListener('click', function(){
+    pText.select();
+    if (navigator.clipboard) navigator.clipboard.writeText(pText.value);
+    else document.execCommand('copy');
+    msg.style.color='#2d7a2d'; msg.textContent='✓ 已複製';
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}

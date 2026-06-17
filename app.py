@@ -91,6 +91,8 @@ NEW_USER_BONUS = int(os.environ.get("NEW_USER_BONUS", "3"))
 _MIN_PASSWORD_LEN = 6
 # 個資同意書 + 免責聲明的條文版本(改版時更新,會記在會員的 consent_version)
 CONSENT_VERSION = os.environ.get("CONSENT_VERSION", "2026-06-17")
+# 流年宜忌解讀(進階功能)每次扣的點數
+FORTUNE_AI_COST = int(os.environ.get("FORTUNE_AI_COST", "1"))
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -217,16 +219,11 @@ def _public_user(user):
 # ============================================================
 # AI 解讀 prompt 載入(啟動時讀進記憶體)
 # ============================================================
-def _load_manual_prompt():
-    """讀取手動排卦 AI 解讀 prompt v1。
-
-    從 docs/AI_INTERPRETER_MANUAL_PROMPT_v1.md 中擷取
-    「===== PROMPT 開始 =====」到「===== PROMPT 結束 =====」之間的純 prompt 內容。
-    """
+def _load_prompt_md(filename):
+    """從 docs/<filename> 擷取「===== PROMPT 開始/結束 =====」之間的純 prompt 內容。"""
     candidates = [
-        os.path.join(os.path.dirname(__file__), "docs",
-                     "AI_INTERPRETER_MANUAL_PROMPT_v1.md"),
-        "/app/docs/AI_INTERPRETER_MANUAL_PROMPT_v1.md",
+        os.path.join(os.path.dirname(__file__), "docs", filename),
+        "/app/docs/" + filename,
     ]
     for path in candidates:
         if not os.path.isfile(path):
@@ -256,10 +253,12 @@ def _load_manual_prompt():
     return None
 
 
-_MANUAL_AI_PROMPT = _load_manual_prompt()
+_MANUAL_AI_PROMPT = _load_prompt_md("AI_INTERPRETER_MANUAL_PROMPT_v1.md")
+_FORTUNE_AI_PROMPT = _load_prompt_md("AI_FORTUNE_PROMPT_v1.md")
 if _MANUAL_AI_PROMPT is None:
-    print("[AI prompt] 警告:找不到 docs/AI_INTERPRETER_MANUAL_PROMPT_v1.md,"
-          "AI 解讀功能會回傳 500。")
+    print("[AI prompt] 警告:找不到手動排卦 prompt 檔,AI 解讀會回 500。")
+if _FORTUNE_AI_PROMPT is None:
+    print("[AI prompt] 警告:找不到流年 prompt 檔,流年解讀會回 500。")
 
 
 def admin_required(view):
@@ -331,12 +330,13 @@ def _inject_current_user():
 
 @app.context_processor
 def _inject_asset_version():
-    """靜態檔版本號(用 style.css 的 mtime),讓 CSS 連結在改版後自動繞過快取。"""
+    """靜態檔版本號(用 style.css 的 mtime),讓 CSS 連結在改版後自動繞過快取。
+    順帶把流年解讀點數成本給模板顯示。"""
     try:
         v = int(os.path.getmtime(os.path.join(app.static_folder, "style.css")))
     except OSError:
         v = 1
-    return {"asset_version": v}
+    return {"asset_version": v, "fortune_ai_cost": FORTUNE_AI_COST}
 
 
 def _get_field(name, default=""):
@@ -695,6 +695,71 @@ def _prompt_and_charge(user, data):
                      "balance": user.get("points_balance", 0)}, 402)
         return ({"error": "系統忙線,請稍後再試"}, 503)
     _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI → 記錄
+    return ({"prompt": system_text + "\n\n---\n\n" + user_text, "balance": bal}, 200)
+
+
+# ============================================================
+# 流年宜忌解讀(進階、扣點):引擎算四面向斷語 → AI 翻成白話宜忌
+# ============================================================
+def _build_fortune_reading(data):
+    """從 data(出生 y/m/d/h + year + gender)算流年,組出 (系統規則, 流年JSON文字, err)。
+
+    把引擎的「流年 + 四面向 + 12 流月四面向斷語」抽成精簡 JSON 餵給 AI;
+    AI 只把這些既有判斷翻成白話宜忌(見 docs/AI_FORTUNE_PROMPT_v1.md)。
+    """
+    if _FORTUNE_AI_PROMPT is None:
+        return None, None, ({"error": "伺服器未載入流年 prompt 檔案,請聯絡管理員"}, 500)
+    try:
+        y = int(data.get("y")); m = int(data.get("m"))
+        d = int(data.get("d")); h = int(data.get("h"))
+    except (TypeError, ValueError):
+        return None, None, ({"error": "缺少出生年月日時(y/m/d/h)"}, 400)
+    try:
+        year = int(data.get("year") or datetime.now().year)
+    except (TypeError, ValueError):
+        year = datetime.now().year
+    gender = db.norm_gender((data.get("gender") or "").strip().upper())
+    try:
+        result = analyze_fortune(datetime(y, m, d, h, 0), year, gender=gender)
+    except Exception as e:
+        return None, None, ({"error": f"流年分析失敗:{type(e).__name__}: {e}"}, 500)
+
+    fy = result.get("流年", {}) or {}
+    aspects = result.get("四面向", {}) or {}
+    month_range = {mm.get("月名"): mm.get("區間") for mm in result.get("流月", []) or []}
+    months = {}
+    for mname, asp in (aspects.get("流月", {}) or {}).items():
+        months[mname] = {"區間": month_range.get(mname, ""), **asp}
+
+    payload = {
+        "流年": {
+            "西元": fy.get("西元"), "干支": fy.get("干支"),
+            "卦名": fy.get("卦名") or (fy.get("本卦", {}) or {}).get("卦名"),
+            "對世爻": fy.get("對世爻"), "對世爻合沖": fy.get("對世爻合沖"),
+        },
+        "性別": {"M": "男", "F": "女"}.get(gender, "未提供"),
+        "四面向": aspects.get("流年", {}),
+        "流月": months,
+    }
+    user_text = (
+        "【流年盤與四面向斷語(請依此產生白話宜忌,勿自行新增命理)】\n```json\n"
+        + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        + "\n```\n"
+    )
+    return _FORTUNE_AI_PROMPT, user_text, None
+
+
+def _fortune_prompt_and_charge(user, data):
+    """流年「產生 Prompt」:算流年 → 扣點 → 回 prompt。web 與 api 共用。"""
+    system_text, user_text, err = _build_fortune_reading(data)
+    if err:
+        return err
+    ok, bal, msg = db.try_deduct_point(user["id"], FORTUNE_AI_COST, "fortune")
+    if not ok:
+        if msg == "insufficient":
+            return ({"error": "點數不足,請先儲值",
+                     "balance": user.get("points_balance", 0)}, 402)
+        return ({"error": "系統忙線,請稍後再試"}, 503)
     return ({"prompt": system_text + "\n\n---\n\n" + user_text, "balance": bal}, 200)
 
 
@@ -1068,6 +1133,39 @@ def _stream_claude_reading(system_text, user_text):
                 yield chunk
 
 
+def _stream_reading_response(uid, system_text, user_text, bal,
+                            refund_points, refund_ref):
+    """共用的 SSE 串流解讀回應:逐段吐 Claude 文字,失敗自動退點。
+
+    事件:delta(逐段文字)/ done(附最新餘額)/ error(已退點)。
+    扣點請由呼叫端先做好,bal 為扣完後餘額;失敗時退回 refund_points 點。
+    """
+    def _sse(event, payload):
+        return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    def generate():
+        got_any = False
+        try:
+            for chunk in _stream_claude_reading(system_text, user_text):
+                got_any = True
+                yield _sse("delta", {"t": chunk})
+            if not got_any:
+                raise RuntimeError("AI 回傳空內容")
+            yield _sse("done", {"balance": bal})
+        except Exception as e:  # 串流途中任何失敗都退點
+            db.add_points(uid, refund_points, "refund", ref=refund_ref)
+            app.logger.warning("AI reading stream failed (%s: %s)",
+                               type(e).__name__, e)
+            yield _sse("error", {"error": "解讀產生失敗,已退還點數,請稍後再試"})
+
+    headers = {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",  # 若前方有 nginx,關閉其緩衝以確保即時串流
+    }
+    return Response(stream_with_context(generate()), headers=headers)
+
+
 @app.route("/manual/ai_prompt", methods=["POST"])
 def manual_ai_prompt():
     """組裝可攜帶 prompt(規則 + 所問之事 + 卦象 JSON),供會員複製貼到自己的 AI。
@@ -1110,34 +1208,42 @@ def manual_ai_reading():
         return jsonify({"error": "系統忙線,請稍後再試"}), 503
 
     _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI(解盤)→ 記錄
-    uid = user["id"]
+    return _stream_reading_response(user["id"], system_text, user_text, bal,
+                                    1, "ai_reading_failed")
 
-    def _sse(event, payload):
-        return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
-    def generate():
-        got_any = False
-        try:
-            for chunk in _stream_claude_reading(system_text, user_text):
-                got_any = True
-                yield _sse("delta", {"t": chunk})
-            if not got_any:
-                raise RuntimeError("AI 回傳空內容")
-            yield _sse("done", {"balance": bal})
-        except Exception as e:  # 串流途中任何失敗都退回剛扣的 1 點
-            db.add_points(uid, 1, "refund", ref="ai_reading_failed")
-            app.logger.warning("AI reading stream failed (%s: %s)",
-                               type(e).__name__, e)
-            yield _sse("error", {
-                "error": "解讀產生失敗,已退還 1 點,請稍後再試",
-            })
+# ============================================================
+# 流年宜忌解讀端點(進階、扣點;web 與 app 共用同一組 API)
+# ============================================================
+@app.route("/api/v1/fortune/prompt", methods=["POST"])
+def api_fortune_prompt():
+    """流年「產生 Prompt」:扣點、回傳可貼到自己 AI 的流年宜忌 prompt。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "請先登入會員"}), 401
+    body, code = _fortune_prompt_and_charge(user, request.get_json(silent=True) or {})
+    return jsonify(body), code
 
-    headers = {
-        "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",  # 若前方有 nginx,關閉其緩衝以確保即時串流
-    }
-    return Response(stream_with_context(generate()), headers=headers)
+
+@app.route("/api/v1/fortune/reading", methods=["POST"])
+def api_fortune_reading():
+    """流年「AI 解讀」:扣點 → 串流(SSE)即時產生白話宜忌。失敗自動退點。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "請先登入會員"}), 401
+    data = request.get_json(silent=True) or {}
+    system_text, user_text, err = _build_fortune_reading(data)
+    if err:
+        body, code = err
+        return jsonify(body), code
+    ok, bal, msg = db.try_deduct_point(user["id"], FORTUNE_AI_COST, "fortune")
+    if not ok:
+        if msg == "insufficient":
+            return jsonify({"error": "點數不足,請先儲值",
+                            "balance": user.get("points_balance", 0)}), 402
+        return jsonify({"error": "系統忙線,請稍後再試"}), 503
+    return _stream_reading_response(user["id"], system_text, user_text, bal,
+                                    FORTUNE_AI_COST, "fortune_reading_failed")
 
 
 # ============================================================
