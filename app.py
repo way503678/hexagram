@@ -1215,6 +1215,7 @@ def admin_question_detail(qid):
     if not rec:
         abort(404)
     chart = None
+    prompt_text = None
     if rec.get("yao_vals"):
         try:
             lines, moving = [], []
@@ -1229,12 +1230,25 @@ def admin_question_detail(qid):
                 except ValueError:
                     dt_obj = None
             chart = cast_hexagram_manual(lines, moving, dt_obj)
+
+            # 用存下的資料即時重組「當時的 AI Prompt」(不額外佔空間)
+            if dt_obj is not None:
+                data = {
+                    "y": dt_obj.year, "m": dt_obj.month,
+                    "d": dt_obj.day, "h": dt_obj.hour,
+                    "yao_vals": rec["yao_vals"].split("|"),
+                    "aspect": "all",
+                    "question": rec.get("question") or "",
+                }
+                system_text, user_text, perr = _build_manual_reading(data)
+                if not perr:
+                    prompt_text = system_text + "\n\n---\n\n" + user_text
         except Exception as e:
-            app.logger.warning("rebuild chart failed (%s: %s)", type(e).__name__, e)
-            chart = None
+            app.logger.warning("rebuild chart/prompt failed (%s: %s)",
+                               type(e).__name__, e)
     return render_template(
         "admin/question_detail.html", mode="admin_questions",
-        rec=rec, r=chart,
+        rec=rec, r=chart, prompt_text=prompt_text,
     )
 
 

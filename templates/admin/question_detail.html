@@ -12,6 +12,48 @@
   <div>所問之事：<b>{{ rec.question or '—' }}</b></div>
 </div>
 
+{% if prompt_text %}
+  <div style="margin:14px 0;">
+    <button type="button" id="genPromptBtn"
+            style="padding:8px 14px; cursor:pointer; border:1px solid #6b2d8b;
+                   border-radius:6px; background:#6b2d8b; color:#fff; font-size:14px;">
+      🤖 重新產生當時的 AI Prompt
+    </button>
+    <span id="promptMsg" style="font-size:13px; color:#666; margin-left:8px;"></span>
+    <div id="promptBox" style="display:none; margin-top:8px;">
+      <textarea id="promptText" readonly
+                style="width:100%; min-height:240px; padding:10px; font-size:13px;
+                       border:1px solid #ccc; border-radius:6px; box-sizing:border-box;
+                       white-space:pre; font-family:monospace;">{{ prompt_text }}</textarea>
+      <button type="button" id="copyPromptBtn"
+              style="margin-top:6px; padding:6px 12px; cursor:pointer;
+                     border:1px solid #6b2d8b; border-radius:6px;
+                     background:#fff; color:#6b2d8b; font-size:14px;">複製</button>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var btn=document.getElementById('genPromptBtn');
+    var box=document.getElementById('promptBox');
+    var ta=document.getElementById('promptText');
+    var copy=document.getElementById('copyPromptBtn');
+    var msg=document.getElementById('promptMsg');
+    btn.addEventListener('click',function(){
+      var show = box.style.display==='none';
+      box.style.display = show ? 'block':'none';
+      btn.textContent = show ? '🤖 收合 AI Prompt' : '🤖 重新產生當時的 AI Prompt';
+    });
+    copy.addEventListener('click',function(){
+      ta.select();
+      var done=function(){ msg.textContent='✓ 已複製'; setTimeout(function(){msg.textContent='';},2000); };
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(ta.value).then(done,function(){document.execCommand('copy');done();});
+      } else { document.execCommand('copy'); done(); }
+    });
+  })();
+  </script>
+{% endif %}
+
 {% if r %}
   {# 用存下的原始六爻 + 起卦時間重建的完整卦象(與卜卦問事頁同一張表) #}
   {% include "_hexagram_table.html" %}
