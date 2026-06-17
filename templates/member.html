@@ -17,19 +17,6 @@
     <div style="font-size:12px; color:#999; margin-top:4px;">1 點 = 一次 AI 解盤</div>
   </div>
 
-  {# ★ 暫時/測試用:綠界儲值串好後移除 #}
-  <div style="margin-bottom:20px;">
-    <button type="button" id="testTopupBtn"
-            style="padding:8px 14px; cursor:pointer; border:1px solid #8b0000;
-                   border-radius:6px; background:#fff; color:#8b0000; font-size:14px;">
-      ＋10 測試點數（暫時）
-    </button>
-    <span id="topupMsg" style="font-size:13px; color:#666; margin-left:8px;"></span>
-    <div style="font-size:12px; color:#bbb; margin-top:4px;">
-      （此為測試按鈕，綠界儲值串接完成後會移除）
-    </div>
-  </div>
-
   <h3>點數紀錄</h3>
   <table class="history-table" style="width:100%; max-width:640px; border-collapse:collapse;">
     <thead>
@@ -61,24 +48,6 @@
       {% endfor %}
     </tbody>
   </table>
-
-  <script>
-  (function(){
-    var btn = document.getElementById('testTopupBtn');
-    var msg = document.getElementById('topupMsg');
-    if (!btn) return;
-    btn.addEventListener('click', function(){
-      btn.disabled = true; msg.textContent = '處理中…';
-      fetch('/member/test_topup', {method:'POST', credentials:'same-origin'})
-        .then(function(r){ return r.json(); })
-        .then(function(d){
-          if (d.balance !== undefined) { location.reload(); }
-          else { msg.textContent = d.error || '失敗'; btn.disabled = false; }
-        })
-        .catch(function(e){ msg.textContent = '失敗:' + e.message; btn.disabled = false; });
-    });
-  })();
-  </script>
 {% else %}
   <p>請先登入會員。</p>
   <p style="margin-top:10px;">

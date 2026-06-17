@@ -758,18 +758,6 @@ def api_member_ledger():
     return jsonify({"ledger": ledger})
 
 
-@app.route("/api/v1/member/test_topup", methods=["POST"])
-def api_member_test_topup():
-    """[暫時/測試用] 幫目前會員加 10 測試點數。綠界儲值串好後移除。"""
-    user = current_user()
-    if not user:
-        return jsonify({"error": "未登入或登入已逾期"}), 401
-    ok, bal = db.add_points(user["id"], 10, "test_topup")
-    if not ok:
-        return jsonify({"error": "加點失敗"}), 500
-    return jsonify({"balance": bal})
-
-
 @app.route("/api/v1/chart", methods=["POST"])
 def api_chart():
     """排盤:日期時間 + 六爻 → 卦象 JSON(確定性、免費、免登入)。
@@ -1063,18 +1051,6 @@ def member():
         return redirect(url_for("login_page", next="/member"))
     ledger = db.list_ledger(user["id"])
     return render_template("member.html", mode="member", user=user, ledger=ledger)
-
-
-@app.route("/member/test_topup", methods=["POST"])
-def member_test_topup():
-    """[暫時/測試用] 幫目前會員加 10 測試點數。綠界儲值串好後移除。"""
-    user = current_user()
-    if not user:
-        return jsonify({"error": "未登入"}), 401
-    ok, bal = db.add_points(user["id"], 10, "test_topup")
-    if not ok:
-        return jsonify({"error": "加點失敗"}), 500
-    return jsonify({"balance": bal})
 
 
 # ============================================================
