@@ -182,8 +182,13 @@ CREATE TABLE IF NOT EXISTS divination_questions (
     question      TEXT,                              -- 所問之事
     ben_gua       TEXT,                              -- 本卦
     bian_gua      TEXT,                              -- 變卦
-    moving_lines  TEXT                               -- 動爻描述
+    moving_lines  TEXT,                              -- 動爻描述
+    yao_vals      TEXT,                              -- 原始六爻 "陰陽,動否" 以 | 連接,供重建完整卦象
+    cast_dt       TEXT                               -- 起卦時間字串(重建卦象用)
 );
+-- 舊資料庫升級:補欄位(idempotent)
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS yao_vals TEXT;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS cast_dt  TEXT;
 CREATE INDEX IF NOT EXISTS idx_divq_created
     ON divination_questions (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_divq_user
@@ -580,6 +585,7 @@ def list_users(limit=500):
 
 def log_divination_question(user_id, user_email, login_at, question,
                             ben_gua, bian_gua, moving_lines,
+                            yao_vals=None, cast_dt=None,
                             dedup_window_seconds=20):
     """寫入一筆卜卦問事紀錄。失敗只記 warning,不影響起卦。
 
@@ -613,11 +619,11 @@ def log_divination_question(user_id, user_email, login_at, question,
                     """
                     INSERT INTO divination_questions
                       (user_id, user_email, login_at, question,
-                       ben_gua, bian_gua, moving_lines)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                       ben_gua, bian_gua, moving_lines, yao_vals, cast_dt)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (user_id, user_email, login_at, question,
-                     ben_gua, bian_gua, moving_lines),
+                     ben_gua, bian_gua, moving_lines, yao_vals, cast_dt),
                 )
         return True
     except Exception as e:
@@ -626,35 +632,40 @@ def log_divination_question(user_id, user_email, login_at, question,
         return False
 
 
-def list_divination_questions(limit=200, search=None):
-    """列出卜卦問事紀錄(新到舊),可用 email 或問題關鍵字搜尋。回傳 list of dict。"""
+def list_divination_questions(limit=200, search=None, start=None, end=None):
+    """列出卜卦問事紀錄(新到舊)。
+
+    search:email 或問題關鍵字(模糊);start/end:日期字串 YYYY-MM-DD(含當日)。
+    回傳 list of dict。
+    """
     if not DB_ENABLED or not HAS_PSYCOPG:
         return []
     try:
+        conds, params = [], []
+        if search:
+            conds.append("(user_email ILIKE %s OR question ILIKE %s)")
+            like = f"%{search}%"
+            params += [like, like]
+        if start:
+            conds.append("created_at >= %s::date")
+            params.append(start)
+        if end:
+            conds.append("created_at < (%s::date + 1)")  # 含結束當日
+            params.append(end)
+        where = ("WHERE " + " AND ".join(conds)) if conds else ""
+        params.append(int(limit))
         with _conn() as c:
             with c.cursor() as cur:
-                if search:
-                    like = f"%{search}%"
-                    cur.execute(
-                        """
-                        SELECT id, user_email, login_at, created_at, question,
-                               ben_gua, bian_gua, moving_lines
-                        FROM divination_questions
-                        WHERE user_email ILIKE %s OR question ILIKE %s
-                        ORDER BY created_at DESC LIMIT %s
-                        """,
-                        (like, like, int(limit)),
-                    )
-                else:
-                    cur.execute(
-                        """
-                        SELECT id, user_email, login_at, created_at, question,
-                               ben_gua, bian_gua, moving_lines
-                        FROM divination_questions
-                        ORDER BY created_at DESC LIMIT %s
-                        """,
-                        (int(limit),),
-                    )
+                cur.execute(
+                    f"""
+                    SELECT id, user_email, login_at, created_at, question,
+                           ben_gua, bian_gua, moving_lines
+                    FROM divination_questions
+                    {where}
+                    ORDER BY created_at DESC LIMIT %s
+                    """,
+                    params,
+                )
                 rows = cur.fetchall()
         return [{
             "id": r[0], "user_email": r[1], "login_at": r[2],
@@ -665,6 +676,37 @@ def list_divination_questions(limit=200, search=None):
         log.warning("DB list_divination_questions failed (%s: %s)",
                     type(e).__name__, e)
         return []
+
+
+def get_divination_question(qid):
+    """依 id 取單筆卜卦問事紀錄(含原始六爻/起卦時間,供重建完整卦象)。回傳 dict 或 None。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return None
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, user_id, user_email, login_at, created_at,
+                           question, ben_gua, bian_gua, moving_lines,
+                           yao_vals, cast_dt
+                    FROM divination_questions WHERE id = %s
+                    """,
+                    (int(qid),),
+                )
+                r = cur.fetchone()
+        if not r:
+            return None
+        return {
+            "id": r[0], "user_id": r[1], "user_email": r[2], "login_at": r[3],
+            "created_at": r[4], "question": r[5], "ben_gua": r[6],
+            "bian_gua": r[7], "moving_lines": r[8],
+            "yao_vals": r[9], "cast_dt": r[10],
+        }
+    except Exception as e:
+        log.warning("DB get_divination_question failed (%s: %s)",
+                    type(e).__name__, e)
+        return None
 
 
 def get_user(user_id):

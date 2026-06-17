@@ -173,6 +173,8 @@ def _log_question_event(user, data):
     try:
         chart_payload, _err = _compute_chart(data)
         chart = (chart_payload or {}).get("卦象") or {}
+        yv = data.get("yao_vals")
+        yao_str = "|".join(str(x) for x in yv) if isinstance(yv, (list, tuple)) else None
         db.log_divination_question(
             user_id=user["id"],
             user_email=user.get("email"),
@@ -181,6 +183,8 @@ def _log_question_event(user, data):
             ben_gua=(chart.get("本卦") or {}).get("卦名"),
             bian_gua=(chart.get("變卦") or {}).get("卦名"),
             moving_lines=(chart.get("動爻") or {}).get("描述"),
+            yao_vals=yao_str,
+            cast_dt=(chart_payload or {}).get("排盤時間"),
         )
     except Exception as e:  # 記錄失敗絕不影響主流程
         app.logger.warning("log question event failed (%s: %s)",
@@ -1085,6 +1089,7 @@ def register_page():
     if request.method == "POST":
         email = (request.form.get("email") or "").strip().lower()
         password = request.form.get("password") or ""
+        password2 = request.form.get("password2") or ""
         display_name = (request.form.get("display_name") or "").strip() or None
 
         def _err(msg):
@@ -1096,6 +1101,8 @@ def register_page():
             return _err("Email 格式不正確")
         if len(password) < _MIN_PASSWORD_LEN:
             return _err(f"密碼至少需 {_MIN_PASSWORD_LEN} 個字")
+        if password != password2:
+            return _err("兩次輸入的密碼不一致")
 
         pw_hash = generate_password_hash(password)
         status, user = db.create_email_user(email, pw_hash, display_name)
@@ -1187,12 +1194,47 @@ def admin_member_add_points(user_id):
 @app.route("/admin/questions", methods=["GET"])
 @admin_required
 def admin_questions():
-    """卜卦問事紀錄查詢:會員、登入時間、卜卦時間、問題、卦象結果。"""
+    """卜卦問事紀錄查詢:會員、登入時間、卜卦時間、問題、卦象結果。支援關鍵字 + 日期區間。"""
     search = (request.args.get("q") or "").strip()
-    records = db.list_divination_questions(search=search or None)
+    start = (request.args.get("start") or "").strip()
+    end = (request.args.get("end") or "").strip()
+    records = db.list_divination_questions(
+        search=search or None, start=start or None, end=end or None,
+    )
     return render_template(
         "admin/questions.html", mode="admin_questions",
-        records=records, search=search,
+        records=records, search=search, start=start, end=end,
+    )
+
+
+@app.route("/admin/questions/<int:qid>", methods=["GET"])
+@admin_required
+def admin_question_detail(qid):
+    """單筆卜卦問事明細:用存下的原始六爻 + 起卦時間重建完整卦象。"""
+    rec = db.get_divination_question(qid)
+    if not rec:
+        abort(404)
+    chart = None
+    if rec.get("yao_vals"):
+        try:
+            lines, moving = [], []
+            for part in rec["yao_vals"].split("|"):
+                a, b = part.split(",")
+                lines.append(int(a))
+                moving.append(int(b))
+            dt_obj = None
+            if rec.get("cast_dt"):
+                try:
+                    dt_obj = datetime.strptime(rec["cast_dt"], "%Y-%m-%d %H:%M")
+                except ValueError:
+                    dt_obj = None
+            chart = cast_hexagram_manual(lines, moving, dt_obj)
+        except Exception as e:
+            app.logger.warning("rebuild chart failed (%s: %s)", type(e).__name__, e)
+            chart = None
+    return render_template(
+        "admin/question_detail.html", mode="admin_questions",
+        rec=rec, r=chart,
     )
 
 

@@ -6,12 +6,19 @@
 <div class="note">共 {{ records|length }} 筆（最多顯示最近 200 筆）。可用會員 Email 或問題關鍵字搜尋。</div>
 
 <form method="get" action="/admin/questions"
-      style="margin:12px 0; display:flex; gap:8px; max-width:480px;">
+      style="margin:12px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
   <input type="text" name="q" value="{{ search or '' }}"
          placeholder="搜尋 Email 或問題關鍵字"
-         style="flex:1; padding:7px; border:1px solid #aaa; border-radius:4px;">
+         style="flex:1; min-width:200px; padding:7px; border:1px solid #aaa; border-radius:4px;">
+  <label style="font-size:13px; color:#666;">日期
+    <input type="date" name="start" value="{{ start or '' }}"
+           style="padding:6px; border:1px solid #aaa; border-radius:4px;">
+    ～
+    <input type="date" name="end" value="{{ end or '' }}"
+           style="padding:6px; border:1px solid #aaa; border-radius:4px;">
+  </label>
   <button type="submit">搜尋</button>
-  {% if search %}<a href="/admin/questions" style="align-self:center;">清除</a>{% endif %}
+  {% if search or start or end %}<a href="/admin/questions" style="align-self:center;">清除</a>{% endif %}
 </form>
 
 {% if records %}
@@ -29,8 +36,10 @@
     <tbody>
       {% for r in records %}
         <tr>
-          <td style="white-space:nowrap; color:#666;">
-            {{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '' }}
+          <td style="white-space:nowrap;">
+            <a href="/admin/questions/{{ r.id }}" style="color:#8b0000; font-weight:bold;">
+              {{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '查看' }}
+            </a>
           </td>
           <td>{{ r.user_email or '—' }}</td>
           <td style="white-space:nowrap; color:#888; font-size:13px;">
