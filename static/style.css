@@ -28,12 +28,22 @@ body {
   display: flex; align-items: center; justify-content: space-between;
   width: 100%; box-sizing: border-box;
   padding: 11px 18px; margin: 0;
-  background: none; border: none; cursor: pointer;
+  border: none; border-radius: 0; cursor: pointer;
   font-family: inherit; font-size: 13px; letter-spacing: 2px;
   color: #9a8585; text-align: left;
+  -webkit-tap-highlight-color: transparent;
   transition: color 0.15s;
 }
-.sidebar nav .nav-section-toggle:hover { color: #fff; }
+/* 蓋掉全域 button 的紅底:這顆是分類標題,任何狀態都不該有底色 */
+.sidebar nav .nav-section-toggle,
+.sidebar nav .nav-section-toggle:hover,
+.sidebar nav .nav-section-toggle:focus,
+.sidebar nav .nav-section-toggle:active {
+  background: transparent;
+  outline: none;
+}
+.sidebar nav .nav-section-toggle:hover { color: #e6d2d2; }
+.sidebar nav .nav-section-toggle:hover .nav-caret { color: #b89a9a; }
 .sidebar nav .nav-caret {
   font-size: 16px; line-height: 1; color: #7a6060;
   transition: transform 0.18s ease;
