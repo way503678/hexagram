@@ -89,6 +89,8 @@ TOKEN_TTL_DAYS = int(os.environ.get("TOKEN_TTL_DAYS", "30"))
 NEW_USER_BONUS = int(os.environ.get("NEW_USER_BONUS", "3"))
 # 密碼最短長度(政策:至少 8 碼、且英數混合)
 _MIN_PASSWORD_LEN = 8
+# 連續登入失敗達此次數即鎖定帳號(需管理員解鎖)
+LOGIN_MAX_FAILS = int(os.environ.get("LOGIN_MAX_FAILS", "3"))
 # 個資同意書 + 免責聲明的條文版本(改版時更新,會記在會員的 consent_version)
 CONSENT_VERSION = os.environ.get("CONSENT_VERSION", "2026-06-17")
 # 流年宜忌解讀(進階功能)每次扣的點數
@@ -892,15 +894,24 @@ def _create_member(email, password, display_name):
 
 
 def _login_member(email, password):
-    """驗證 Email + 密碼。成功回完整 user dict、失敗回 None。"""
+    """驗證 Email + 密碼。回傳 (user|None, status):
+      status: "ok"(成功) / "locked"(帳號已鎖) / "bad"(帳號或密碼錯)。
+    連續失敗達 LOGIN_MAX_FAILS 次會自動鎖定;成功則清失敗計數。
+    """
     email = (email or "").strip().lower()
     if not email or not password:
-        return None
+        return (None, "bad")
     row = db.get_email_user(email)
-    if (not row or not row.get("password_hash")
-            or not check_password_hash(row["password_hash"], password)):
-        return None
-    return db.get_user(row["id"]) or row
+    if not row or not row.get("password_hash"):
+        return (None, "bad")
+    if row.get("locked"):
+        return (None, "locked")
+    if not check_password_hash(row["password_hash"], password):
+        now_locked = db.register_login_failure(row["id"], LOGIN_MAX_FAILS)
+        return (None, "locked" if now_locked else "bad")
+    if row.get("failed_logins"):
+        db.reset_login_failures(row["id"])
+    return (db.get_user(row["id"]) or row, "ok")
 
 
 def _parse_birthday(get):
@@ -971,7 +982,9 @@ def api_auth_login():
     if not email or not password:
         return jsonify({"error": "請輸入 Email 與密碼"}), 400
 
-    user = _login_member(email, password)
+    user, status = _login_member(email, password)
+    if status == "locked":
+        return jsonify({"error": "帳號已鎖定(連續登入失敗過多),請聯絡管理員解鎖"}), 403
     if not user:
         # 不分「帳號不存在」與「密碼錯」,避免洩漏哪些 email 已註冊
         return jsonify({"error": "Email 或密碼不正確"}), 401
@@ -1540,7 +1553,13 @@ def login_page():
     if request.method == "POST":
         email = (request.form.get("email") or "").strip().lower()
         password = request.form.get("password") or ""
-        user = _login_member(email, password)
+        user, status = _login_member(email, password)
+        if status == "locked":
+            return render_template(
+                "login.html", mode="login",
+                error="帳號已鎖定(連續登入失敗過多),請聯絡管理員解鎖",
+                email=email, next_url=next_url,
+            )
         if not user:
             return render_template(
                 "login.html", mode="login",
@@ -1610,8 +1629,10 @@ def admin_members():
     """會員清單:可看每位會員的點數,並手動加點。"""
     users = db.list_users()
     added = request.args.get("added")          # 剛加點成功的 user_id(顯示提示)
+    unlocked = request.args.get("unlocked")    # 剛解鎖的 user_id(顯示提示)
     return render_template(
-        "admin/members.html", mode="admin_members", users=users, added=added,
+        "admin/members.html", mode="admin_members",
+        users=users, added=added, unlocked=unlocked,
     )
 
 
@@ -1631,6 +1652,14 @@ def admin_member_add_points(user_id):
     db.add_points(user_id, amount, "admin_adjust",
                   ref=(admin.get("email") if admin else None))
     return redirect(f"/admin/members?added={user_id}")
+
+
+@app.route("/admin/members/<int:user_id>/unlock", methods=["POST"])
+@admin_required
+def admin_member_unlock(user_id):
+    """管理員解鎖帳號(清失敗計數 + 解除鎖定)。"""
+    db.set_user_locked(user_id, False)
+    return redirect(f"/admin/members?unlocked={user_id}")
 
 
 # ============================================================

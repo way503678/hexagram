@@ -10,17 +10,23 @@
     ✓ 已更新會員 #{{ added }} 的點數。
   </div>
 {% endif %}
+{% if unlocked %}
+  <div class="flash flash-ok" style="max-width:420px; margin:10px 0;">
+    ✓ 已解鎖會員 #{{ unlocked }}。
+  </div>
+{% endif %}
 
 {% set provider_map = {'email':'Email','google':'Google','apple':'Apple','line':'LINE'} %}
 
 {% if users %}
-  <table class="history-table" style="width:100%; max-width:860px;">
+  <table class="history-table" style="width:100%; max-width:960px;">
     <thead>
       <tr>
         <th>ID</th>
         <th>會員</th>
         <th>來源</th>
         <th>點數</th>
+        <th>狀態</th>
         <th>註冊時間</th>
         <th>手動加點</th>
       </tr>
@@ -35,6 +41,20 @@
           </td>
           <td>{{ provider_map.get(u.auth_provider, u.auth_provider) }}</td>
           <td style="font-weight:bold; color:#8b0000; font-size:16px;">{{ u.points_balance }}</td>
+          <td>
+            {% if u.locked %}
+              <span style="color:#a02020; font-weight:bold;">🔒 已鎖定</span>
+              <form method="post" action="/admin/members/{{ u.id }}/unlock" style="display:inline;">
+                <button type="submit"
+                        style="margin-top:4px; padding:4px 10px; cursor:pointer;
+                               border:1px solid #2d7a2d; border-radius:4px;
+                               background:#2d7a2d; color:#fff; font-size:13px;">解鎖</button>
+              </form>
+            {% else %}
+              <span style="color:#2d7a2d;">正常</span>
+              {% if u.failed_logins %}<span style="color:#999; font-size:12px;"> ({{ u.failed_logins }} 次失敗)</span>{% endif %}
+            {% endif %}
+          </td>
           <td style="color:#666;">
             {{ u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at else '' }}
           </td>

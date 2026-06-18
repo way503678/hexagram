@@ -237,6 +237,9 @@ CREATE TABLE IF NOT EXISTS users (
     email          TEXT,
     password_hash  TEXT,                 -- 僅 Email 帳號使用;社群登入留空
     points_balance INTEGER NOT NULL DEFAULT 0,
+    failed_logins  INTEGER NOT NULL DEFAULT 0,  -- 連續登入失敗次數
+    locked         BOOLEAN NOT NULL DEFAULT FALSE,  -- 是否鎖定(達上限自動鎖)
+    locked_at      TIMESTAMPTZ,          -- 鎖定時間
     consent_at     TIMESTAMPTZ,          -- 同意個資/免責的時間
     consent_version TEXT,                -- 同意的條文版本
     gender         TEXT,                 -- 性別 'M'/'F'/NULL
@@ -314,6 +317,10 @@ END $$;
 -- 同意紀錄欄位(舊庫升級;idempotent)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version TEXT;
+-- 登入鎖定欄位
+ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_logins INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locked BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
 -- 性別 + 生日欄位(命盤排卦用)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_y INTEGER;
@@ -653,7 +660,8 @@ def get_email_user(email):
                 cur.execute(
                     """
                     SELECT id, auth_provider, auth_id, display_name, email,
-                           password_hash, points_balance, created_at
+                           password_hash, points_balance, created_at,
+                           failed_logins, locked
                     FROM users
                     WHERE auth_provider = 'email' AND auth_id = %s
                     """,
@@ -666,6 +674,7 @@ def get_email_user(email):
             "id": r[0], "auth_provider": r[1], "auth_id": r[2],
             "display_name": r[3], "email": r[4], "password_hash": r[5],
             "points_balance": r[6], "created_at": r[7],
+            "failed_logins": r[8], "locked": r[9],
         }
     except Exception as e:
         log.warning("DB get_email_user failed (%s: %s)", type(e).__name__, e)
@@ -682,7 +691,7 @@ def list_users(limit=500):
                 cur.execute(
                     """
                     SELECT id, auth_provider, auth_id, display_name, email,
-                           points_balance, created_at
+                           points_balance, created_at, locked, failed_logins
                     FROM users
                     ORDER BY created_at DESC
                     LIMIT %s
@@ -694,6 +703,7 @@ def list_users(limit=500):
             "id": r[0], "auth_provider": r[1], "auth_id": r[2],
             "display_name": r[3], "email": r[4],
             "points_balance": r[5], "created_at": r[6],
+            "locked": r[7], "failed_logins": r[8],
         } for r in rows]
     except Exception as e:
         log.warning("DB list_users failed (%s: %s)", type(e).__name__, e)
@@ -914,6 +924,73 @@ def update_password(user_id, new_password_hash):
         return True
     except Exception as e:
         log.warning("DB update_password failed (%s: %s)", type(e).__name__, e)
+        return False
+
+
+def register_login_failure(user_id, threshold):
+    """登入失敗 +1;達 threshold 即鎖定。回傳 (是否鎖定 bool)。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET failed_logins = failed_logins + 1,
+                        locked = (failed_logins + 1 >= %s) OR locked,
+                        locked_at = CASE
+                            WHEN (failed_logins + 1 >= %s) AND NOT locked THEN NOW()
+                            ELSE locked_at END
+                    WHERE id = %s
+                    RETURNING locked
+                    """,
+                    (int(threshold), int(threshold), int(user_id)),
+                )
+                row = cur.fetchone()
+        return bool(row and row[0])
+    except Exception as e:
+        log.warning("DB register_login_failure failed (%s: %s)", type(e).__name__, e)
+        return False
+
+
+def reset_login_failures(user_id):
+    """登入成功後清掉失敗計數(不動 locked)。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    "UPDATE users SET failed_logins = 0 WHERE id = %s", (int(user_id),)
+                )
+        return True
+    except Exception as e:
+        log.warning("DB reset_login_failures failed (%s: %s)", type(e).__name__, e)
+        return False
+
+
+def set_user_locked(user_id, locked):
+    """管理員設定鎖定/解鎖。解鎖時一併清失敗計數與鎖定時間。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                if locked:
+                    cur.execute(
+                        "UPDATE users SET locked = TRUE, locked_at = NOW() WHERE id = %s",
+                        (int(user_id),),
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE users SET locked = FALSE, failed_logins = 0, "
+                        "locked_at = NULL WHERE id = %s",
+                        (int(user_id),),
+                    )
+        return True
+    except Exception as e:
+        log.warning("DB set_user_locked failed (%s: %s)", type(e).__name__, e)
         return False
 
 
