@@ -22,6 +22,13 @@ services:
       SECRET_KEY: "${SECRET_KEY:-please-change-me-in-production}"
       # Claude API 金鑰（值放在 .env，不進 git；此處僅引用變數）
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      # 寄信（忘記密碼用）；值放 .env，未設定則連結只進 log
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      MAIL_FROM: "${MAIL_FROM:-}"
+      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-}"
     networks:
       - default          # hexagram 自己的 default network
       - postgres-net     # 連到 postgres 所在的外部 network
@@ -31,6 +38,28 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # ---- 自動備份 hexagram 資料庫(每日 pg_dump + gzip + 輪替保留)----
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:17
+    container_name: hexagram-db-backup
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Taipei
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: hexagram
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${PG_PASSWORD:-postgres}"
+      SCHEDULE: "0 3 * * *"          # 每天凌晨 3 點(Asia/Taipei)
+      BACKUP_KEEP_DAYS: "7"
+      BACKUP_KEEP_WEEKS: "4"
+      BACKUP_KEEP_MONTHS: "6"
+      POSTGRES_EXTRA_OPTS: "--clean --if-exists"
+    volumes:
+      - ./backups:/backups          # 備份存到主機 ./backups(已 gitignore)
+    networks:
+      - postgres-net                # 連到 postgres 所在的外部 network
 
 networks:
   postgres-net:
