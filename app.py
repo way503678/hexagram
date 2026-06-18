@@ -178,22 +178,19 @@ def verify_reset_token(token):
         return None
 
 
-def _send_reset_email(to_email, link):
-    """寄重設密碼信。未設定 SMTP 時把連結寫進 log(方便開發),回 False。"""
+def _send_mail(to_email, subject, body):
+    """寄信(SMTP,供應商無關)。未設定 SMTP 時寫 log,回 False。"""
     host = os.environ.get("SMTP_HOST")
     if not host:
-        app.logger.warning("SMTP 未設定;重設連結(僅 log):%s", link)
+        app.logger.warning("SMTP 未設定;信件(僅 log) → %s | %s", to_email, subject)
         return False
     import smtplib
     from email.message import EmailMessage
     msg = EmailMessage()
-    msg["Subject"] = "命卦排盤 — 重設密碼"
+    msg["Subject"] = subject
     msg["From"] = os.environ.get("MAIL_FROM") or os.environ.get("SMTP_USER", "")
     msg["To"] = to_email
-    msg.set_content(
-        "您好,\n\n請點以下連結重設密碼(1 小時內有效):\n"
-        f"{link}\n\n若非您本人申請,請忽略本信。"
-    )
+    msg.set_content(body)
     try:
         with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", "587")), timeout=15) as s:
             s.starttls()
@@ -203,8 +200,28 @@ def _send_reset_email(to_email, link):
             s.send_message(msg)
         return True
     except Exception as e:
-        app.logger.warning("寄送重設信失敗 (%s: %s)", type(e).__name__, e)
+        app.logger.warning("寄信失敗 (%s: %s)", type(e).__name__, e)
         return False
+
+
+def _send_reset_email(to_email, link):
+    return _send_mail(
+        to_email, "命卦排盤 — 重設密碼",
+        "您好,\n\n請點以下連結重設密碼(1 小時內有效):\n"
+        f"{link}\n\n若非您本人申請,請忽略本信(您的密碼不會被改動)。",
+    )
+
+
+def _send_password_changed_notice(to_email):
+    """密碼變更/重設後的安全通知,讓本人能及早發現被盜。"""
+    if not to_email:
+        return
+    _send_mail(
+        to_email, "命卦排盤 — 您的密碼已變更",
+        "您好,\n\n您的帳號密碼剛剛被變更(或透過忘記密碼重設)。\n"
+        "若這是您本人操作,可忽略本信。\n"
+        "若非您本人,代表帳號可能遭冒用,請立即重設密碼並檢查您的 Email 安全。",
+    )
 
 
 def _do_forgot(email):
@@ -1066,6 +1083,7 @@ def _change_password(user, current_pw, new_pw, new_pw2):
         return perr
     if not db.update_password(user["id"], generate_password_hash(new_pw)):
         return "系統忙線,請稍後再試"
+    _send_password_changed_notice(user.get("email"))  # 安全通知
     return None
 
 
@@ -1601,6 +1619,10 @@ def reset_page():
         if perr:
             return render_template("reset.html", mode="login", token=token, error=perr)
         db.update_password(uid, generate_password_hash(new_pw))  # 改完舊 token 自動失效
+        db.set_user_locked(uid, False)  # 重設密碼即一併解鎖(本人證明了 Email 控制權)
+        u = db.get_user(uid)
+        if u:
+            _send_password_changed_notice(u.get("email"))  # 安全通知:讓本人能發現被盜
         return render_template("reset.html", mode="login", done=True)
     return render_template("reset.html", mode="login", token=token)
 
