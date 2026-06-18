@@ -883,6 +883,69 @@ def update_user_profile(user_id, display_name=None, gender=None, birth=None):
         return False
 
 
+def update_password(user_id, new_password_hash):
+    """更新會員密碼雜湊。回傳 True/False。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    "UPDATE users SET password_hash = %s WHERE id = %s",
+                    (str(new_password_hash), int(user_id)),
+                )
+        return True
+    except Exception as e:
+        log.warning("DB update_password failed (%s: %s)", type(e).__name__, e)
+        return False
+
+
+def delete_user(user_id):
+    """刪除會員及其所有資料(點數帳本、卜卦紀錄、付款訂單)。整筆交易內完成。
+    回傳 True/False。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                uid = int(user_id)
+                # 先刪有外鍵指向 users 的子表,最後刪 users 本身
+                cur.execute("DELETE FROM divination_questions WHERE user_id = %s", (uid,))
+                cur.execute("DELETE FROM point_ledger WHERE user_id = %s", (uid,))
+                cur.execute("DELETE FROM payment_orders WHERE user_id = %s", (uid,))
+                cur.execute("DELETE FROM users WHERE id = %s", (uid,))
+        return True
+    except Exception as e:
+        log.warning("DB delete_user failed (%s: %s)", type(e).__name__, e)
+        return False
+
+
+def list_user_questions(user_id, limit=100):
+    """列出某會員自己的卜卦問事紀錄(新到舊),供「我的紀錄」。回傳 list of dict。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return []
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, created_at, question, ben_gua, bian_gua, moving_lines
+                    FROM divination_questions
+                    WHERE user_id = %s
+                    ORDER BY created_at DESC LIMIT %s
+                    """,
+                    (int(user_id), int(limit)),
+                )
+                rows = cur.fetchall()
+        return [{
+            "id": r[0], "created_at": r[1], "question": r[2],
+            "ben_gua": r[3], "bian_gua": r[4], "moving_lines": r[5],
+        } for r in rows]
+    except Exception as e:
+        log.warning("DB list_user_questions failed (%s: %s)", type(e).__name__, e)
+        return []
+
+
 def add_points(user_id, points, reason, ref=None):
     """
     加點(儲值成功 / 管理員調整)。餘額與帳本在同一交易內更新。

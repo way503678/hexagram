@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}我的紀錄 — 命卦排盤{% endblock %}
+
+{% block content %}
+<a href="/member" class="back-link">← 回會員中心</a>
+<h1>我的卜卦紀錄</h1>
+<div class="note">共 {{ records|length }} 筆(最多顯示最近 100 筆)。</div>
+
+{% if records %}
+  <table class="history-table" style="width:100%;">
+    <thead>
+      <tr><th>時間</th><th>問題</th><th>卦象（本卦 → 變卦）</th><th>動爻</th></tr>
+    </thead>
+    <tbody>
+      {% for r in records %}
+        <tr>
+          <td style="white-space:nowrap; color:#666;">
+            {{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '' }}
+          </td>
+          <td>{{ r.question or '—' }}</td>
+          <td style="white-space:nowrap;">
+            <b>{{ r.ben_gua or '—' }}</b>
+            {% if r.bian_gua %}<span style="color:#888;"> → </span><b>{{ r.bian_gua }}</b>{% endif %}
+          </td>
+          <td style="color:#a02020;">{{ r.moving_lines or '—' }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>你還沒有任何卜卦紀錄。到
+    <a href="/manual" style="color:#8b0000;">卜卦問事</a>
+    並使用 AI（產生 Prompt / 解盤）後就會留下紀錄。</p>
+{% endif %}
+{% endblock %}

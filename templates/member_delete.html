@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}刪除帳號 — 命卦排盤{% endblock %}
+
+{% block content %}
+<a href="/member" class="back-link">← 回會員中心</a>
+<h1>刪除帳號</h1>
+<div style="max-width:440px; margin:10px 0; padding:12px; border:1px solid #e0b4b4;
+            border-radius:6px; background:#fdf3f3; color:#8b0000; line-height:1.7;">
+  ⚠️ 刪除後將<strong>永久移除</strong>你的會員資料、剩餘點數與所有卜卦紀錄,
+  且<strong>無法復原</strong>。
+</div>
+<form method="post" action="/member/delete" class="login-form"
+      onsubmit="return confirm('確定要永久刪除帳號嗎?此動作無法復原。');">
+  <input type="password" name="password" placeholder="輸入密碼以確認"
+         required autocomplete="current-password">
+  <button type="submit" style="background:#a02020;">永久刪除我的帳號</button>
+  {% if error %}<p class="err" style="margin-top:10px;">{{ error }}</p>{% endif %}
+</form>
+{% endblock %}

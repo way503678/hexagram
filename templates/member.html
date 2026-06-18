@@ -15,8 +15,10 @@
       剩餘點數：<strong style="font-size:28px; color:#8b0000;">{{ user.points_balance }}</strong> 點
     </div>
     <div style="font-size:12px; color:#999; margin-top:4px;">1 點 = 一次 AI 解盤</div>
-    <div style="margin-top:10px;">
+    <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:14px;">
       <a href="/member/profile" style="color:#8b0000; font-weight:bold;">修改會員資料</a>
+      <a href="/member/history" style="color:#8b0000; font-weight:bold;">我的紀錄</a>
+      <a href="/member/password" style="color:#8b0000; font-weight:bold;">修改密碼</a>
     </div>
   </div>
 
@@ -78,6 +80,10 @@
       {% endfor %}
     </tbody>
   </table>
+
+  <div style="margin-top:28px;">
+    <a href="/member/delete" style="color:#a02020; font-size:13px;">刪除帳號</a>
+  </div>
 {% else %}
   <p>請先登入會員。</p>
   <p style="margin-top:10px;">

@@ -6,7 +6,7 @@
 <form method="post" action="/register" class="login-form" id="regForm" style="max-width:440px;">
   <input type="email" name="email" placeholder="Email"
          value="{{ email or '' }}" required autofocus autocomplete="email">
-  <input type="password" name="password" placeholder="密碼(至少 6 個字)"
+  <input type="password" name="password" placeholder="密碼(至少 8 碼,英數混合)"
          required autocomplete="new-password">
   <input type="password" name="password2" placeholder="再次輸入密碼"
          required autocomplete="new-password">

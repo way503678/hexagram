@@ -87,8 +87,8 @@ def _email_is_admin(email):
 TOKEN_TTL_DAYS = int(os.environ.get("TOKEN_TTL_DAYS", "30"))
 # 新會員註冊時贈送的點數(方便在 App 上實測解盤流程;設 0 可關閉)
 NEW_USER_BONUS = int(os.environ.get("NEW_USER_BONUS", "3"))
-# 密碼最短長度
-_MIN_PASSWORD_LEN = 6
+# 密碼最短長度(政策:至少 8 碼、且英數混合)
+_MIN_PASSWORD_LEN = 8
 # 個資同意書 + 免責聲明的條文版本(改版時更新,會記在會員的 consent_version)
 CONSENT_VERSION = os.environ.get("CONSENT_VERSION", "2026-06-17")
 # 流年宜忌解讀(進階功能)每次扣的點數
@@ -781,13 +781,21 @@ def api_health():
 #   呼叫 db.get_or_create_user(provider, sub, ...) + make_token() 即可。
 # ============================================================
 # --- 註冊 / 登入共用核心(web 與 api 同一套,避免兩份各自維護) ---
+def _password_error(password):
+    """密碼政策檢查:至少 _MIN_PASSWORD_LEN 碼、且需英數混合。回傳 error_msg 或 None。"""
+    p = password or ""
+    if len(p) < _MIN_PASSWORD_LEN:
+        return f"密碼至少需 {_MIN_PASSWORD_LEN} 個字"
+    if not (re.search(r"[A-Za-z]", p) and re.search(r"\d", p)):
+        return "密碼需英數混合(同時包含英文字母與數字)"
+    return None
+
+
 def _validate_credentials(email, password):
     """Email/密碼基本驗證。回傳 error_msg 或 None(通過)。"""
     if not _EMAIL_RE.match((email or "").strip().lower()):
         return "Email 格式不正確"
-    if len(password or "") < _MIN_PASSWORD_LEN:
-        return f"密碼至少需 {_MIN_PASSWORD_LEN} 個字"
-    return None
+    return _password_error(password)
 
 
 def _create_member(email, password, display_name):
@@ -950,6 +958,82 @@ def api_member_profile():
                            gender=gender, birth=birth)
     updated = db.get_user(user["id"]) or user
     return jsonify({"user": _public_user(updated)})
+
+
+# --- 修改密碼 / 刪除帳號 共用核心(web 與 api 同一套) ---
+def _verify_current_password(user, password):
+    """驗證登入會員輸入的「目前密碼」是否正確。"""
+    row = db.get_email_user((user.get("email") or "").strip().lower())
+    return bool(row and row.get("password_hash")
+                and check_password_hash(row["password_hash"], password or ""))
+
+
+def _change_password(user, current_pw, new_pw, new_pw2):
+    """改密碼:驗目前密碼 → 檢查新密碼政策 + 兩次一致 → 更新。回傳 error_msg 或 None。"""
+    if not _verify_current_password(user, current_pw):
+        return "目前密碼不正確"
+    if new_pw != new_pw2:
+        return "兩次輸入的新密碼不一致"
+    perr = _password_error(new_pw)
+    if perr:
+        return perr
+    if not db.update_password(user["id"], generate_password_hash(new_pw)):
+        return "系統忙線,請稍後再試"
+    return None
+
+
+def _delete_account(user, password):
+    """刪除帳號:需驗密碼。回傳 error_msg 或 None(成功時已刪)。"""
+    if not _verify_current_password(user, password):
+        return "密碼不正確"
+    if not db.delete_user(user["id"]):
+        return "系統忙線,請稍後再試"
+    return None
+
+
+@app.route("/api/v1/member/password", methods=["POST"])
+def api_member_password():
+    """修改密碼。請求 {current_password, new_password, new_password2}。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "未登入或登入已逾期"}), 401
+    data = request.get_json(silent=True) or {}
+    err = _change_password(user, data.get("current_password") or "",
+                           data.get("new_password") or "",
+                           data.get("new_password2") or "")
+    if err:
+        return jsonify({"error": err}), 400
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v1/member/delete", methods=["POST"])
+def api_member_delete():
+    """刪除帳號。請求 {password}。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "未登入或登入已逾期"}), 401
+    data = request.get_json(silent=True) or {}
+    err = _delete_account(user, data.get("password") or "")
+    if err:
+        return jsonify({"error": err}), 400
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v1/member/questions", methods=["GET"])
+def api_member_questions():
+    """我的卜卦紀錄(只回自己的)。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "未登入或登入已逾期"}), 401
+    rows = db.list_user_questions(user["id"])
+    items = [{
+        "id": r["id"],
+        "created_at": r["created_at"].isoformat()
+            if hasattr(r["created_at"], "isoformat") else r["created_at"],
+        "question": r["question"], "ben_gua": r["ben_gua"],
+        "bian_gua": r["bian_gua"], "moving_lines": r["moving_lines"],
+    } for r in rows]
+    return jsonify({"questions": items})
 
 
 @app.route("/api/v1/chart", methods=["POST"])
@@ -1283,6 +1367,49 @@ def member_profile():
         return redirect(url_for("member"))
 
     return render_template("member_profile.html", mode="member", user=user)
+
+
+@app.route("/member/history", methods=["GET"])
+def member_history():
+    """我的卜卦紀錄(會員看自己的)。"""
+    user = current_user()
+    if not user:
+        return redirect(url_for("login_page", next="/member/history"))
+    records = db.list_user_questions(user["id"])
+    return render_template("member_history.html", mode="member",
+                           user=user, records=records)
+
+
+@app.route("/member/password", methods=["GET", "POST"])
+def member_password():
+    """修改密碼。"""
+    user = current_user()
+    if not user:
+        return redirect(url_for("login_page", next="/member/password"))
+    if request.method == "POST":
+        err = _change_password(user,
+                               request.form.get("current_password") or "",
+                               request.form.get("new_password") or "",
+                               request.form.get("new_password2") or "")
+        if err:
+            return render_template("member_password.html", mode="member", error=err)
+        return render_template("member_password.html", mode="member", success=True)
+    return render_template("member_password.html", mode="member")
+
+
+@app.route("/member/delete", methods=["GET", "POST"])
+def member_delete():
+    """刪除帳號(需確認密碼)。"""
+    user = current_user()
+    if not user:
+        return redirect(url_for("login_page", next="/member/delete"))
+    if request.method == "POST":
+        err = _delete_account(user, request.form.get("password") or "")
+        if err:
+            return render_template("member_delete.html", mode="member", error=err)
+        session.clear()
+        return redirect(url_for("landing"))
+    return render_template("member_delete.html", mode="member")
 
 
 # ============================================================
