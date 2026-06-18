@@ -205,6 +205,9 @@ def _send_mail(to_email, subject, body):
 
 
 def _send_reset_email(to_email, link):
+    # 開發用:未設 SMTP 時把連結寫進 log,才有辦法測試重設流程
+    if not os.environ.get("SMTP_HOST"):
+        app.logger.warning("SMTP 未設定;重設連結(僅 log):%s", link)
     return _send_mail(
         to_email, "命卦排盤 — 重設密碼",
         "您好,\n\n請點以下連結重設密碼(1 小時內有效):\n"
