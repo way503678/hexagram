@@ -883,6 +883,23 @@ def update_user_profile(user_id, display_name=None, gender=None, birth=None):
         return False
 
 
+def get_password_hash(user_id):
+    """依 id 取密碼雜湊(重設密碼 token 驗證用)。回傳字串或 None。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return None
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    "SELECT password_hash FROM users WHERE id = %s", (int(user_id),)
+                )
+                r = cur.fetchone()
+        return r[0] if r else None
+    except Exception as e:
+        log.warning("DB get_password_hash failed (%s: %s)", type(e).__name__, e)
+        return None
+
+
 def update_password(user_id, new_password_hash):
     """更新會員密碼雜湊。回傳 True/False。"""
     if not DB_ENABLED or not HAS_PSYCOPG:

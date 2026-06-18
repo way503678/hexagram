@@ -141,6 +141,80 @@ def verify_token(token):
         return None
 
 
+# --- 重設密碼 token(無資料表;用 SECRET_KEY + 該帳號目前密碼雜湊 簽章) ---
+# 一旦改了密碼,雜湊變了 → 舊連結自動失效(一次性)。預設 1 小時到期。
+RESET_TTL_SECONDS = int(os.environ.get("RESET_TTL_SECONDS", "3600"))
+
+
+def _reset_secret(pwhash):
+    return (app.config["SECRET_KEY"] + "|pwreset|" + (pwhash or "")).encode("utf-8")
+
+
+def make_reset_token(uid, pwhash):
+    payload = {"uid": int(uid), "exp": int(time.time()) + RESET_TTL_SECONDS}
+    si = _b64url(json.dumps(payload, separators=(",", ":")).encode())
+    sig = hmac.new(_reset_secret(pwhash), si.encode("ascii"), hashlib.sha256).digest()
+    return si + "." + _b64url(sig)
+
+
+def verify_reset_token(token):
+    """成功回傳 uid,失敗(過期/簽章錯/密碼已改/格式錯)回 None。"""
+    try:
+        si, sig_b64 = token.rsplit(".", 1)
+        payload = json.loads(_b64url_decode(si))
+        if int(payload.get("exp", 0)) < int(time.time()):
+            return None
+        uid = int(payload["uid"])
+        pwhash = db.get_password_hash(uid)
+        if not pwhash:
+            return None
+        expected = hmac.new(_reset_secret(pwhash), si.encode("ascii"), hashlib.sha256).digest()
+        if not hmac.compare_digest(_b64url(expected), sig_b64):
+            return None
+        return uid
+    except Exception:
+        return None
+
+
+def _send_reset_email(to_email, link):
+    """寄重設密碼信。未設定 SMTP 時把連結寫進 log(方便開發),回 False。"""
+    host = os.environ.get("SMTP_HOST")
+    if not host:
+        app.logger.warning("SMTP 未設定;重設連結(僅 log):%s", link)
+        return False
+    import smtplib
+    from email.message import EmailMessage
+    msg = EmailMessage()
+    msg["Subject"] = "命卦排盤 — 重設密碼"
+    msg["From"] = os.environ.get("MAIL_FROM") or os.environ.get("SMTP_USER", "")
+    msg["To"] = to_email
+    msg.set_content(
+        "您好,\n\n請點以下連結重設密碼(1 小時內有效):\n"
+        f"{link}\n\n若非您本人申請,請忽略本信。"
+    )
+    try:
+        with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", "587")), timeout=15) as s:
+            s.starttls()
+            user = os.environ.get("SMTP_USER")
+            if user:
+                s.login(user, os.environ.get("SMTP_PASS", ""))
+            s.send_message(msg)
+        return True
+    except Exception as e:
+        app.logger.warning("寄送重設信失敗 (%s: %s)", type(e).__name__, e)
+        return False
+
+
+def _do_forgot(email):
+    """email 存在就產生重設連結並寄信。不回傳是否存在(防帳號列舉)。"""
+    email = (email or "").strip().lower()
+    row = db.get_email_user(email)
+    if row and row.get("password_hash"):
+        token = make_reset_token(row["id"], row["password_hash"])
+        base = os.environ.get("PUBLIC_BASE_URL") or request.url_root.rstrip("/")
+        _send_reset_email(email, f"{base}/reset?token={token}")
+
+
 def _user_id_from_request():
     """從 Authorization: Bearer <token> 取出已驗證的 user_id(沒有則 None)。"""
     auth = request.headers.get("Authorization", "")
@@ -1478,6 +1552,46 @@ def login_page():
         return redirect(next_url)
 
     return render_template("login.html", mode="login", next_url=next_url)
+
+
+@app.route("/forgot", methods=["GET", "POST"])
+def forgot_page():
+    """忘記密碼:輸入 Email → 寄重設連結。不論存在與否都回相同訊息。"""
+    if current_user():
+        return redirect(url_for("member"))
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        _do_forgot(email)
+        return render_template("forgot.html", mode="login", sent=True, email=email)
+    return render_template("forgot.html", mode="login")
+
+
+@app.route("/reset", methods=["GET", "POST"])
+def reset_page():
+    """憑信中 token 設定新密碼。"""
+    token = (request.values.get("token") or "").strip()
+    uid = verify_reset_token(token)
+    if not uid:
+        return render_template("reset.html", mode="login", invalid=True)
+    if request.method == "POST":
+        new_pw = request.form.get("new_password") or ""
+        if new_pw != (request.form.get("new_password2") or ""):
+            return render_template("reset.html", mode="login", token=token,
+                                   error="兩次輸入的密碼不一致")
+        perr = _password_error(new_pw)
+        if perr:
+            return render_template("reset.html", mode="login", token=token, error=perr)
+        db.update_password(uid, generate_password_hash(new_pw))  # 改完舊 token 自動失效
+        return render_template("reset.html", mode="login", done=True)
+    return render_template("reset.html", mode="login", token=token)
+
+
+@app.route("/api/v1/auth/forgot", methods=["POST"])
+def api_auth_forgot():
+    """App 忘記密碼:寄重設連結(連結走網頁)。一律回成功訊息,防帳號列舉。"""
+    data = request.get_json(silent=True) or {}
+    _do_forgot((data.get("email") or "").strip().lower())
+    return jsonify({"ok": True})
 
 
 @app.route("/logout", methods=["GET", "POST"])

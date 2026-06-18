@@ -11,7 +11,10 @@
          required autocomplete="current-password">
   <button type="submit">登入</button>
   {% if error %}<p class="err" style="margin-top:10px;">{{ error }}</p>{% endif %}
-  <p style="margin-top:16px; text-align:center; font-size:14px;">
+  <p style="margin-top:12px; text-align:center; font-size:14px;">
+    <a href="/forgot" style="color:#8a8275;">忘記密碼?</a>
+  </p>
+  <p style="margin-top:4px; text-align:center; font-size:14px;">
     還沒有帳號?<a href="/register" style="color:#8b0000;">立即註冊</a>
   </p>
 </form>
