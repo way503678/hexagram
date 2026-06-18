@@ -34,11 +34,13 @@
     </span>
   </div>
 
-  {# ---- Tab 切換 ---- #}
+  {# ---- Tab 切換(下拉模式僅管理者可見;一般使用者只有擲卦)---- #}
+  {% if current_user and current_user.is_admin %}
   <div class="mode-tabs">
     <button type="button" class="mode-tab active" data-mode="coin">🪙 擲卦模式</button>
     <button type="button" class="mode-tab" data-mode="manual">▼ 下拉模式</button>
   </div>
+  {% endif %}
 
   {# ---- 問事類別固定 all(原 radio 已移除)---- #}
   <input type="hidden" name="aspect" value="all">
@@ -87,7 +89,8 @@
     </div>
   </div>
 
-  {# ---- 下拉模式 ---- #}
+  {# ---- 下拉模式(僅管理者)---- #}
+  {% if current_user and current_user.is_admin %}
   <div class="mode-panel" id="panelManual" style="display:none;">
     <div class="yao-input">
       {% for i in [5, 4, 3, 2, 1, 0] %}
@@ -102,6 +105,7 @@
       {% endfor %}
     </div>
   </div>
+  {% endif %}
 
   {# ---- 真正送到後端的 hidden:y0~y5 ---- #}
   {% for i in range(6) %}
@@ -546,10 +550,10 @@
 
   // ---------- Tab 切換 ----------
   var tabs = document.querySelectorAll('.mode-tab');
-  var panels = {
-    coin: document.getElementById('panelCoin'),
-    manual: document.getElementById('panelManual')
-  };
+  var panels = { coin: document.getElementById('panelCoin') };
+  // 下拉面板僅管理者才會渲染;存在時才納入切換
+  var panelManualEl = document.getElementById('panelManual');
+  if (panelManualEl) panels.manual = panelManualEl;
   tabs.forEach(function(t){
     t.addEventListener('click', function(){
       tabs.forEach(function(x){ x.classList.remove('active'); });
