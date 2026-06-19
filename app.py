@@ -762,6 +762,51 @@ def _fei_fu_relation(fu_element, fei_element):
 # → 金墓丑、木墓未、水墓辰、火墓戌、土墓戌。不可改用水土同論(辰),否則與旺衰矛盾。
 _MU_BRANCH = {"金": "丑", "木": "未", "水": "辰", "火": "戌", "土": "戌"}
 
+# 地支六合 + 對沖(應期推算用)
+_ZHI_ORDER = "子丑寅卯辰巳午未申酉戌亥"
+_LIUHE = {"子": "丑", "丑": "子", "寅": "亥", "亥": "寅", "卯": "戌", "戌": "卯",
+          "辰": "酉", "酉": "辰", "巳": "申", "申": "巳", "午": "未", "未": "午"}
+
+
+def _chong_zhi(branch):
+    """回傳地支的對沖支(相隔 6 位);非地支回空字串。"""
+    return _ZHI_ORDER[(_ZHI_ORDER.index(branch) + 6) % 12] if branch in _ZHI_ORDER else ""
+
+
+def _yingqi_candidates(zhi, states, day_branch):
+    """依用神爻當下狀態,給「候選應期日」(地支 + 緣由)。增刪卜易·應期總注章。
+
+    確定性:只列「逢值/逢沖/出空/填實/合/沖墓」等候選日地支,實際以哪個為準
+    仍須配合卦象(屬判讀),故回傳候選清單供 AI 擇取,不下定論。
+    """
+    if not zhi:
+        return []
+    out = []
+    chong = _chong_zhi(zhi)
+
+    def add(b, why):
+        if b and not any(c["應日地支"] == b for c in out):
+            out.append({"應日地支": b, "緣由": why})
+
+    rumu = states.get("入墓") or []
+    if states.get("空亡"):
+        add(zhi, "出空:值本支之日")
+        add(chong, "沖空填實之日")
+    elif states.get("月破"):
+        add(zhi, "填實:值本支之日(或出本月)")
+    elif rumu:
+        if "臨墓" in rumu:
+            add(chong, "沖開墓庫之日")
+        if "日墓" in rumu:
+            add(_chong_zhi(day_branch), "沖開日墓之日")
+    elif states.get("動爻"):
+        add(_LIUHE.get(zhi), "合住之日(動逢合則待沖而應)")
+        add(zhi, "動爻值日")
+    else:  # 靜而無病
+        add(zhi, "用神值日")
+        add(chong, "沖用神(暗動)之日")
+    return out
+
 
 def _enrich_chart_payload(chart, dt_obj, aspect):
     """卦象 + 排盤時間 → 算 aspects/旬空/對六爻,組出可序列化 payload。
@@ -832,6 +877,8 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
             _bian = (_e.get("動爻出去") or {}).get("地支")
             if _bian and _zhi in _ZHI and _bian == _ZHI[(_ZHI.index(_zhi) + 6) % 12]:
                 _e2["動化反吟"] = True
+        # L 應期候選(依本爻狀態給候選日地支 + 緣由,供 AI 擇取)
+        _e2["應期候選"] = _yingqi_candidates(_zhi, _e2, _day_branch)
         # 伏神:引擎補上五行、旺衰、與飛神(本爻)的生剋(出暴/長生/洩氣/傷身)
         _fei_ele = _e.get("五行")  # 本爻即飛神
         _fu_list = _e.get("伏神") or []
