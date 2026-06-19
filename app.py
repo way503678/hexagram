@@ -34,6 +34,7 @@ from hexagram_engine import (
     cast_hexagram, cast_hexagram_manual, analyze_chart_aspects,
 )
 from fortune_engine import analyze_fortune
+from core_data import BRANCH_ELEMENT
 import db
 
 # 啟動時初始化 DB
@@ -711,6 +712,28 @@ def _compute_chart(data):
     return chart_payload, None
 
 
+def _yao_wangshuai(element, month_branch, day_branch):
+    """依月令、日令算單一五行的旺衰(引擎確定性計算,讓 AI 免自推五行、不會算錯)。
+
+    回傳:月令/日令各自的十二長生與三級旺衰,加「綜合旺衰」(月令權重加倍、日令次之)。
+    綜合等級:旺 / 偏旺 / 持平 / 偏弱 / 弱。空亡、動爻化剋等另由既有訊號處理,不在此。
+    """
+    from divination.core.elements import twelve_phase, strength_tier
+    if not element or not month_branch or not day_branch:
+        return None
+    m_phase, m_tier = twelve_phase(element, month_branch), strength_tier(element, month_branch)
+    d_phase, d_tier = twelve_phase(element, day_branch), strength_tier(element, day_branch)
+    _w = {"旺": 1, "中": 0, "弱": -1}
+    score = _w.get(m_tier, 0) * 2 + _w.get(d_tier, 0)  # 月令為主(×2)、日令次之
+    overall = ("旺" if score >= 2 else "偏旺" if score == 1 else
+               "持平" if score == 0 else "偏弱" if score == -1 else "弱")
+    return {
+        "月令": {"地支": month_branch, "長生": m_phase, "旺衰": m_tier},
+        "日令": {"地支": day_branch, "長生": d_phase, "旺衰": d_tier},
+        "綜合旺衰": overall,
+    }
+
+
 def _enrich_chart_payload(chart, dt_obj, aspect):
     """卦象 + 排盤時間 → 算 aspects/旬空/對六爻,組出可序列化 payload。
 
@@ -731,17 +754,27 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
         xun_kong = [_ZHI[(_base + 10) % 12], _ZHI[(_base + 11) % 12]]
     _kong_set = set(xun_kong)
 
+    # 月令、日令的地支(判旺衰用):月支取四柱月柱、日支取日干支
+    _month_branch = ((chart.get("四柱") or {}).get("月") or "  ")[1:2]
+    _day_branch = _gz[1:2]
+
     liu_yao = []
     for _e in (aspects.get("對六爻", []) or []):
         _e2 = dict(_e)
         _e2["空亡"] = _e.get("地支") in _kong_set
+        # 旺衰交給引擎算(十二長生,確定性),AI 只翻白話、不自推五行
+        _ws = _yao_wangshuai(_e.get("五行"), _month_branch, _day_branch)
+        if _ws:
+            _e2["旺衰"] = _ws
         liu_yao.append(_e2)
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "排盤時間": dt_obj.strftime("%Y-%m-%d %H:00"),
         "問事類別": aspect,
         "卦象": chart,
+        "月令": {"地支": _month_branch, "五行": BRANCH_ELEMENT.get(_month_branch, "")},
+        "日令": {"地支": _day_branch, "五行": BRANCH_ELEMENT.get(_day_branch, "")},
         "旬空": xun_kong,
         "對六爻": liu_yao,
     }
