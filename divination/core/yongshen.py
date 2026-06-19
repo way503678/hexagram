@@ -17,7 +17,7 @@ divination.core.yongshen — 用神取捨與過旺反凶
   - 特化層：感情面的「陰陽異性 = 正配」、「臨應 = 正配」由 love.py 處理
 """
 from core_data import BRANCH_ELEMENT
-from .elements import strength_tier, twelve_phase
+from .elements import strength_tier, twelve_phase, element_relation
 
 
 # ============================================================
@@ -298,20 +298,33 @@ def check_overflowing(yongshen, outer_branch, all_yao_rows=None):
 # ============================================================
 # 用神動化判定
 # ============================================================
+# 進神/退神:動爻化出「同五行」之變爻,地支順進一位=進神、順退一位=退神。
+# (子午卯酉/寅申巳亥 各自±1;四土 丑→辰→未→戌 順為進、逆為退)
+_JINSHEN_PAIRS = {
+    ("亥", "子"), ("寅", "卯"), ("巳", "午"), ("申", "酉"),
+    ("丑", "辰"), ("辰", "未"), ("未", "戌"), ("戌", "丑"),
+}
+_TUISHEN_PAIRS = {
+    ("子", "亥"), ("卯", "寅"), ("午", "巳"), ("酉", "申"),
+    ("辰", "丑"), ("未", "辰"), ("戌", "未"), ("丑", "戌"),
+}
+
+
 def get_dong_direction(yongshen):
     """
-    判斷用神的動化方向。
+    判斷用神的動化方向（完全依「本爻 vs 變爻」自算,不依賴對外參照之生剋）。
 
     回傳：
-      "化進神"     — 變出去的爻與本爻比和或進階（金生水之類的進階）
-      "化退神"     — 變出去的爻與本爻退階
-      "化回頭生"   — 變出去的爻生本爻
-      "化回頭克"   — 變出去的爻克本爻
-      "化空"       — 變出去的爻在空亡
-      "化墓"       — 變出去的爻入墓
-      "化絕"       — 變出去的爻在絕地
-      "靜"         — 沒有動
-      ""           — 動但無特殊動化方向
+      "化進神"   — 變爻與本爻同五行,地支順進一位(亥→子、丑→辰…)
+      "化退神"   — 變爻與本爻同五行,地支順退一位(子→亥、戌→未…)
+      "化伏吟"   — 變爻與本爻同地支(伏吟,非進退)
+      "化回頭生" — 變爻生本爻
+      "化回頭克" — 變爻剋本爻
+      "化洩"     — 本爻生變爻(洩氣)
+      "靜"       — 沒有動
+      ""         — 動但無上述特殊方向
+
+    註:進/退神舊版誤用「比和→進、我生(洩氣)→退」判定,已改為地支對照表。
     """
     if not yongshen or not yongshen.get("動爻"):
         return "靜"
@@ -320,18 +333,25 @@ def get_dong_direction(yongshen):
     if not dong_out:
         return ""
 
-    sk = dong_out.get("生剋", "")
-    if sk == "生我":
-        return "化回頭生"
-    elif sk == "剋我":
-        return "化回頭克"
-    elif sk == "比和":
-        return "化進神"
+    ben_ele, ben_zhi = yongshen.get("五行"), yongshen.get("地支")
+    bian_ele, bian_zhi = dong_out.get("五行"), dong_out.get("地支")
+    if not (ben_ele and bian_ele):
+        return ""
 
-    # 化退神：需要更精細判斷，這裡先用「我生（洩氣）」當化退簡化判定
-    if sk == "我生":
-        return "化退神"
-
+    rel = element_relation(ben_ele, bian_ele)  # 從「本爻」看「變爻」
+    if rel == "生我":
+        return "化回頭生"          # 變爻生本爻
+    if rel == "剋我":
+        return "化回頭克"          # 變爻剋本爻
+    if rel == "我生":
+        return "化洩"              # 本爻生變爻(洩氣);舊版誤判為化退神
+    if rel == "比和":              # 同五行 → 依地支定進/退/伏吟
+        if (ben_zhi, bian_zhi) in _JINSHEN_PAIRS:
+            return "化進神"
+        if (ben_zhi, bian_zhi) in _TUISHEN_PAIRS:
+            return "化退神"
+        if ben_zhi == bian_zhi:
+            return "化伏吟"
     return ""
 
 
