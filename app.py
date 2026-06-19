@@ -758,6 +758,11 @@ def _fei_fu_relation(fu_element, fei_element):
     return {"關係": rel_name, "古名": classic, "吉凶": jixiong}
 
 
+# 五行墓庫地支 — 入墓偵測用。**與引擎十二長生表一致**:土寄火(火土同論)
+# → 金墓丑、木墓未、水墓辰、火墓戌、土墓戌。不可改用水土同論(辰),否則與旺衰矛盾。
+_MU_BRANCH = {"金": "丑", "木": "未", "水": "辰", "火": "戌", "土": "戌"}
+
+
 def _enrich_chart_payload(chart, dt_obj, aspect):
     """卦象 + 排盤時間 → 算 aspects/旬空/對六爻,組出可序列化 payload。
 
@@ -783,9 +788,11 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
     _day_branch = _gz[1:2]
 
     # 月破:爻地支正是「月支的對沖」者(沖=地支相隔 6 位)。純干支可定。
-    _yuepo_branch = ""
-    if _month_branch in _ZHI:
-        _yuepo_branch = _ZHI[(_ZHI.index(_month_branch) + 6) % 12]
+    _yuepo_branch = _ZHI[(_ZHI.index(_month_branch) + 6) % 12] if _month_branch in _ZHI else ""
+    # 日辰所沖之支(暗動/日破偵測用)
+    _ribo_branch = _ZHI[(_ZHI.index(_day_branch) + 6) % 12] if _day_branch in _ZHI else ""
+
+    from divination.core.yongshen import get_dong_direction
 
     liu_yao = []
     for _e in (aspects.get("對六爻", []) or []):
@@ -796,6 +803,35 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
         _ws = _yao_wangshuai(_e.get("五行"), _month_branch, _day_branch)
         if _ws:
             _e2["旺衰"] = _ws
+
+        # ---- 確定性狀態(增刪卜易/黃金策;batch 3-6)----
+        _tier = (_ws or {}).get("綜合旺衰", "")
+        _is_dong = bool(_e.get("動爻"))
+        _zhi = _e.get("地支")
+        # B2 真空/假空:旺或動為假空(待出空仍有用),休囚靜為真空
+        if _e2["空亡"]:
+            _e2["空亡性質"] = "假空" if (_tier in ("旺", "偏旺") or _is_dong) else "真空"
+        # E1 暗動/日破:靜爻被日辰沖 → 旺=暗動(雖靜實動)、衰=日破(沖散無用)
+        if (not _is_dong) and _ribo_branch and _zhi == _ribo_branch:
+            _e2["日沖"] = "暗動" if _tier in ("旺", "偏旺", "持平") else "日破"
+        # H1 入墓:臨墓(自臨墓庫支)、日墓(日辰為其墓庫)
+        _mu = _MU_BRANCH.get(_e.get("五行"))
+        if _mu:
+            _rumu = []
+            if _zhi == _mu:
+                _rumu.append("臨墓")
+            if _day_branch == _mu:
+                _rumu.append("日墓")
+            if _rumu:
+                _e2["入墓"] = _rumu
+        # D/I 動化方向(批1修正版)+ 爻反吟(動而化沖,主反覆)
+        if _is_dong:
+            _dir = get_dong_direction(_e)
+            if _dir and _dir != "靜":
+                _e2["動化方向"] = _dir
+            _bian = (_e.get("動爻出去") or {}).get("地支")
+            if _bian and _zhi in _ZHI and _bian == _ZHI[(_ZHI.index(_zhi) + 6) % 12]:
+                _e2["動化反吟"] = True
         # 伏神:引擎補上五行、旺衰、與飛神(本爻)的生剋(出暴/長生/洩氣/傷身)
         _fei_ele = _e.get("五行")  # 本爻即飛神
         _fu_list = _e.get("伏神") or []
