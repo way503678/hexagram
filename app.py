@@ -782,10 +782,16 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
     _month_branch = ((chart.get("四柱") or {}).get("月") or "  ")[1:2]
     _day_branch = _gz[1:2]
 
+    # 月破:爻地支正是「月支的對沖」者(沖=地支相隔 6 位)。純干支可定。
+    _yuepo_branch = ""
+    if _month_branch in _ZHI:
+        _yuepo_branch = _ZHI[(_ZHI.index(_month_branch) + 6) % 12]
+
     liu_yao = []
     for _e in (aspects.get("對六爻", []) or []):
         _e2 = dict(_e)
         _e2["空亡"] = _e.get("地支") in _kong_set
+        _e2["月破"] = bool(_yuepo_branch) and _e.get("地支") == _yuepo_branch
         # 旺衰交給引擎算(十二長生,確定性),AI 只翻白話、不自推五行
         _ws = _yao_wangshuai(_e.get("五行"), _month_branch, _day_branch)
         if _ws:
@@ -801,6 +807,7 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
                 if _fu_ele:
                     _f2["五行"] = _fu_ele
                     _f2["空亡"] = _fu.get("地支") in _kong_set
+                    _f2["月破"] = bool(_yuepo_branch) and _fu.get("地支") == _yuepo_branch
                     _fws = _yao_wangshuai(_fu_ele, _month_branch, _day_branch)
                     if _fws:
                         _f2["旺衰"] = _fws
@@ -818,6 +825,7 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
         "卦象": chart,
         "月令": {"地支": _month_branch, "五行": BRANCH_ELEMENT.get(_month_branch, "")},
         "日令": {"地支": _day_branch, "五行": BRANCH_ELEMENT.get(_day_branch, "")},
+        "月破地支": _yuepo_branch,
         "旬空": xun_kong,
         "對六爻": liu_yao,
     }
