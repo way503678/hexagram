@@ -838,6 +838,7 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
     _ribo_branch = _ZHI[(_ZHI.index(_day_branch) + 6) % 12] if _day_branch in _ZHI else ""
 
     from divination.core.yongshen import get_dong_direction
+    from divination.core.elements import twelve_phase as _twelve_phase
 
     liu_yao = []
     for _e in (aspects.get("對六爻", []) or []):
@@ -877,6 +878,18 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
             _bian = (_e.get("動爻出去") or {}).get("地支")
             if _bian and _zhi in _ZHI and _bian == _ZHI[(_ZHI.index(_zhi) + 6) % 12]:
                 _e2["動化反吟"] = True
+            # G2 化空/化墓/化絕(看變爻地支對本爻五行的狀態)
+            if _bian:
+                _hua = []
+                if _bian in _kong_set:
+                    _hua.append("化空")
+                _bph = _twelve_phase(_e.get("五行"), _bian)
+                if _bph == "墓":
+                    _hua.append("化墓")
+                elif _bph == "絕":
+                    _hua.append("化絕")
+                if _hua:
+                    _e2["動化變爻狀態"] = _hua
         # L 應期候選(依本爻狀態給候選日地支 + 緣由,供 AI 擇取)
         _e2["應期候選"] = _yingqi_candidates(_zhi, _e2, _day_branch)
         # 伏神:引擎補上五行、旺衰、與飛神(本爻)的生剋(出暴/長生/洩氣/傷身)
