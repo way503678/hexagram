@@ -808,6 +808,33 @@ def _yingqi_candidates(zhi, states, day_branch):
     return out
 
 
+def _sanhe_signals(yao_branches):
+    """掃卦中六爻地支,偵測三合局/半合/虛拱待補(純資訊,不下吉凶)。
+
+    成局=三支齊;半合=有帝旺支+另一支(真半合);虛拱=生墓兩支缺帝旺(待補帝旺支)。
+    待補支可作應期(該支值日或動出而成局)。增刪卜易·六合章。
+    """
+    from divination.core.elements import _SANHE_HUAI
+    bset = set(b for b in yao_branches if b)
+    out = []
+    for group, wang in _SANHE_HUAI.items():
+        present = [z for z in group if z in bset]
+        if len(present) < 2:
+            continue
+        missing = [z for z in group if z not in bset]
+        if len(present) == 3:
+            kind = "成局"
+        elif wang in present:
+            kind = "半合(有帝旺)"
+        else:
+            kind = "虛拱(待帝旺支)"
+        out.append({
+            "組": group, "局五行": BRANCH_ELEMENT.get(wang, ""),
+            "類型": kind, "已現": present, "待補": missing,
+        })
+    return out
+
+
 def _enrich_chart_payload(chart, dt_obj, aspect):
     """卦象 + 排盤時間 → 算 aspects/旬空/對六爻,組出可序列化 payload。
 
@@ -922,6 +949,7 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
         "月令": {"地支": _month_branch, "五行": BRANCH_ELEMENT.get(_month_branch, "")},
         "日令": {"地支": _day_branch, "五行": BRANCH_ELEMENT.get(_day_branch, "")},
         "月破地支": _yuepo_branch,
+        "三合": _sanhe_signals([e.get("地支") for e in liu_yao]),
         "旬空": xun_kong,
         "對六爻": liu_yao,
     }
