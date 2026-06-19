@@ -734,6 +734,30 @@ def _yao_wangshuai(element, month_branch, day_branch):
     }
 
 
+def _fei_fu_relation(fu_element, fei_element):
+    """飛神(本爻)與伏神的生剋關係 + 古法名稱與吉凶(確定性,讓 AI 免自推、不記錯)。
+
+    四象(《卜筮正宗》):伏剋飛=出暴(吉,能出)、飛生伏=得長生(吉,得助)、
+    伏生飛=洩氣(凶,難出)、飛剋伏=傷身(凶,最難出);比和=得助(吉)。
+    註:此僅飛伏生剋一項,伏神能否真出尚須合看伏神旺衰、飛神空破休囚、日辰沖飛等。
+    """
+    from divination.core.elements import element_relation
+    if not fu_element or not fei_element:
+        return None
+    rel = element_relation(fu_element, fei_element)  # 從「伏神」角度看「飛神」
+    table = {
+        "我剋": ("伏剋飛", "出暴", "吉"),   # 伏神剋飛神
+        "生我": ("飛生伏", "得長生", "吉"),  # 飛神生伏神
+        "我生": ("伏生飛", "洩氣", "凶"),   # 伏神生飛神
+        "剋我": ("飛剋伏", "傷身", "凶"),   # 飛神剋伏神
+        "比和": ("飛伏比和", "比和", "吉"),
+    }
+    if rel not in table:
+        return None
+    rel_name, classic, jixiong = table[rel]
+    return {"關係": rel_name, "古名": classic, "吉凶": jixiong}
+
+
 def _enrich_chart_payload(chart, dt_obj, aspect):
     """卦象 + 排盤時間 → 算 aspects/旬空/對六爻,組出可序列化 payload。
 
@@ -766,6 +790,25 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
         _ws = _yao_wangshuai(_e.get("五行"), _month_branch, _day_branch)
         if _ws:
             _e2["旺衰"] = _ws
+        # 伏神:引擎補上五行、旺衰、與飛神(本爻)的生剋(出暴/長生/洩氣/傷身)
+        _fei_ele = _e.get("五行")  # 本爻即飛神
+        _fu_list = _e.get("伏神") or []
+        if _fu_list:
+            _new_fu = []
+            for _fu in _fu_list:
+                _f2 = dict(_fu)
+                _fu_ele = BRANCH_ELEMENT.get(_fu.get("地支"), "")
+                if _fu_ele:
+                    _f2["五行"] = _fu_ele
+                    _f2["空亡"] = _fu.get("地支") in _kong_set
+                    _fws = _yao_wangshuai(_fu_ele, _month_branch, _day_branch)
+                    if _fws:
+                        _f2["旺衰"] = _fws
+                    _ff = _fei_fu_relation(_fu_ele, _fei_ele)
+                    if _ff:
+                        _f2["飛伏生剋"] = _ff
+                _new_fu.append(_f2)
+            _e2["伏神"] = _new_fu
         liu_yao.append(_e2)
 
     return {
