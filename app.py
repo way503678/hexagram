@@ -664,9 +664,10 @@ def manual():
 # 公開(僅管理員):手動排卦 AI 解讀 prompt 組裝
 # ============================================================
 # AI 解盤使用的模型(可由環境變數覆寫)
-# 2026-06-20:Sonnet 4.6 → Opus 4.8。對打實測 Opus 在「AI 自推」項(元神、
-# 世應生剋方向)較準、文筆較簡潔;成本約 +50~60%/篇(每篇仍僅幾毛美金)。
-_AI_READING_MODEL = os.environ.get("AI_READING_MODEL", "claude-opus-4-8")
+# 2026-06-20:Opus 4.8 → 改回 Sonnet 4.6。對打評估:取用神兩 model 皆 6/6 平手;
+# 之前 Opus 領先的「元神、世應生剋」已搬進引擎(回歸測試證明),不再靠 model。
+# 準確度兩者已等同 → 取 Sonnet 省約 4 成成本(只差一點文筆精煉度)。
+_AI_READING_MODEL = os.environ.get("AI_READING_MODEL", "claude-sonnet-4-6")
 
 
 def _compute_chart(data):
