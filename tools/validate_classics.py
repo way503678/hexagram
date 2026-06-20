@@ -84,8 +84,21 @@ for dy,dm,dd,dh in DATES:
         chk(pl["月破地支"]==chong(mb),"月破地支",(gz,mb,pl["月破地支"]))
         # 旬空
         chk(set(pl["旬空"])==kong,"旬空",(gz,pl["旬空"],sorted(kong)))
+        # 對世關係(獨立重算)— 世爻基準
+        _shi=next((x for x in pl["對六爻"] if x.get("世")),None)
+        shi_el=_shi["五行"] if _shi else ""; shi_zhi=_shi["地支"] if _shi else ""
+        LIUHE={("子","丑"),("丑","子"),("寅","亥"),("亥","寅"),("卯","戌"),("戌","卯"),("辰","酉"),("酉","辰"),("巳","申"),("申","巳"),("午","未"),("未","午")}
+        SK2={"我生":"生世","我剋":"剋世","生我":"世生","剋我":"世剋","比和":"比和"}
         for e in pl["對六爻"]:
             z=e["地支"]; el=e["五行"]; dong=e.get("動爻")
+            # 對世(非世爻才算)
+            if not e.get("世") and shi_el:
+                exp={}
+                sk=SK2.get(erel(el,shi_el),"")
+                if sk: exp["生剋"]=sk
+                if z==chong(shi_zhi): exp["合沖"]="沖世"
+                elif (z,shi_zhi) in LIUHE: exp["合沖"]="合世"
+                chk((e.get("對世") or {})==exp,"對世",(gz,z,el,shi_el,shi_zhi,exp,e.get("對世")))
             # 旺衰
             exp_ws=wangshuai(el,mb,db)
             got_ws=(e.get("旺衰") or {}).get("綜合旺衰")

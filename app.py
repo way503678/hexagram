@@ -867,7 +867,18 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
     _ribo_branch = _ZHI[(_ZHI.index(_day_branch) + 6) % 12] if _day_branch in _ZHI else ""
 
     from divination.core.yongshen import get_dong_direction
-    from divination.core.elements import twelve_phase as _twelve_phase
+    from divination.core.elements import (
+        twelve_phase as _twelve_phase,
+        element_relation as _elrel,
+        branch_relation as _brel,
+    )
+
+    # 世爻基準(算「對世關係」用):用神對世、世應之間都相對世爻,交引擎算免 AI 自推
+    _shi = next((x for x in (aspects.get("對六爻", []) or []) if x.get("世")), None)
+    _shi_ele = (_shi or {}).get("五行", "")
+    _shi_zhi = (_shi or {}).get("地支", "")
+    _SK2SHI = {"我生": "生世", "我剋": "剋世", "生我": "世生", "剋我": "世剋", "比和": "比和"}
+    _HC2SHI = {"相合": "合世", "相沖": "沖世"}
 
     # 神煞(元神/忌神/仇神,相對世爻):引擎已在本卦爻算好,併入對六爻,
     # 之後本卦/變卦的爻陣列即可從 AI payload 砍掉(對六爻為超集)。
@@ -885,6 +896,17 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
         _ss = _shensha.get(_e.get("爻序index"))
         if _ss:
             _e2["神煞對世"] = _ss  # 元神=生世 / 忌神=剋世 / 仇神=生忌神(相對世爻)
+        # 對世關係(生世/剋世/世生/世剋/比和 + 合世/沖世):引擎算,AI 只讀不自推
+        if not _e.get("世") and _shi_ele:
+            _dui_shi = {}
+            _sk = _SK2SHI.get(_elrel(_e.get("五行"), _shi_ele), "")
+            if _sk:
+                _dui_shi["生剋"] = _sk
+            _hc = _HC2SHI.get(_brel(_e.get("地支"), _shi_zhi), "")
+            if _hc:
+                _dui_shi["合沖"] = _hc
+            if _dui_shi:
+                _e2["對世"] = _dui_shi
         # 旺衰交給引擎算(十二長生,確定性),AI 只翻白話、不自推五行
         _ws = _yao_wangshuai(_e.get("五行"), _month_branch, _day_branch)
         if _ws:
