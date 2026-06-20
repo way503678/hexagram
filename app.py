@@ -867,11 +867,22 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
     from divination.core.yongshen import get_dong_direction
     from divination.core.elements import twelve_phase as _twelve_phase
 
+    # 神煞(元神/忌神/仇神,相對世爻):引擎已在本卦爻算好,併入對六爻,
+    # 之後本卦/變卦的爻陣列即可從 AI payload 砍掉(對六爻為超集)。
+    _shensha = {}
+    for _by in ((chart.get("本卦") or {}).get("爻") or []):
+        _ss = _by.get("神煞") or ""
+        if _ss:
+            _shensha[_by.get("爻序index")] = _ss
+
     liu_yao = []
     for _e in (aspects.get("對六爻", []) or []):
         _e2 = dict(_e)
         _e2["空亡"] = _e.get("地支") in _kong_set
         _e2["月破"] = bool(_yuepo_branch) and _e.get("地支") == _yuepo_branch
+        _ss = _shensha.get(_e.get("爻序index"))
+        if _ss:
+            _e2["神煞對世"] = _ss  # 元神=生世 / 忌神=剋世 / 仇神=生忌神(相對世爻)
         # 旺衰交給引擎算(十二長生,確定性),AI 只翻白話、不自推五行
         _ws = _yao_wangshuai(_e.get("五行"), _month_branch, _day_branch)
         if _ws:
@@ -955,6 +966,27 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
     }
 
 
+def _slim_payload_for_ai(payload):
+    """產生送 AI 的精簡卦象 JSON(只瘦身,不改網頁用的原 payload)。
+
+    砍掉與「對六爻」100% 重複的本卦/變卦爻陣列(神煞已併入對六爻),
+    以及顯示用欄位(卦辭/公曆/農曆/時辰/起卦法)。保留卦名、卦宮、四柱、
+    卦變總論、月令日令、三合、旬空、對六爻等全部判讀資料。約省 1,360 token。
+    """
+    import copy
+    p = copy.deepcopy(payload)
+    ch = p.get("卦象") or {}
+    for g in ("本卦", "變卦"):
+        if isinstance(ch.get(g), dict):
+            ch[g].pop("爻", None)
+            ch[g].pop("卦辭", None)
+    for k in ("公曆", "農曆", "時辰", "起卦法"):
+        ch.pop(k, None)
+    p.pop("schema_version", None)
+    p.pop("排盤時間", None)
+    return p
+
+
 def _build_manual_reading(data):
     """從 POST data 解析、重排盤、組出 (系統規則文字, 問事+卦象JSON文字, 卦象payload)。
 
@@ -976,8 +1008,9 @@ def _build_manual_reading(data):
     if err:
         return None, None, None, err
 
+    # 送 AI 的 JSON 用精簡版(省 token、減雜訊);回傳的 chart_payload 仍為完整版(網頁/紀錄用)
     chart_json_str = json.dumps(
-        chart_payload, ensure_ascii=False, separators=(",", ":")
+        _slim_payload_for_ai(chart_payload), ensure_ascii=False, separators=(",", ":")
     )
     user_text = (
         "【所問之事】\n" + question
