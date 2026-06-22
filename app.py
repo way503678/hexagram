@@ -1012,6 +1012,111 @@ def _slim_payload_for_ai(payload):
     return p
 
 
+# ============================================================
+# 每日運勢(六爻終身卦流日):命卦對「今日干支」算,世爻為軸,純規則、零 AI。
+# 定位為「每日參考」,非鐵口斷語(忠於六爻法則 + 誠實標參考)。
+# 判斷標準(查證來源,見 CLASSICS / 六爻六大規律):
+#   - 日辰為一日之主宰:生扶世爻=順、刑沖克害=逆
+#   - 用神/世爻旺衰:旺相吉、休囚空破弱
+#   - 各六親被日辰沖/剋 → 該生活面向今日被觸動;六神定其性質
+# ============================================================
+_LIUSHEN_HINT = {
+    "青龍": "偏正向、喜慶、人緣財喜",
+    "朱雀": "口舌、文書、訊息與爭論",
+    "勾陳": "遲滯、拖延、田土房產、慢性糾纏",
+    "螣蛇": "反覆、虛驚、心緒不寧、怪異瑣事",
+    "白虎": "意外、衝突、血光、開刀傷病、口角",
+    "玄武": "暗事、遺失、盜竊、曖昧、心思不定",
+}
+_LIUQIN_ASPECT = {
+    "妻財": "財務 / 收入 / 開銷",
+    "官鬼": "工作 / 壓力 / 是非(女性亦主感情)",
+    "父母": "長輩 / 文書合約 / 車房 / 奔波",
+    "子孫": "健康 / 心情 / 子女晚輩",
+    "兄弟": "朋友同輩 / 破費 / 競爭",
+}
+
+
+def analyze_daily(ming_chart, today_dt):
+    """以命卦(終身卦)對「今日干支」算每日運勢——六爻流日、世爻為軸、純規則。
+
+    回傳 dict:今日干支、本命世爻今日狀態、總評(白話)、面向提醒、定位語。
+    """
+    from divination.core.elements import element_relation, branch_relation
+    _GAN = "甲乙丙丁戊己庚辛壬癸"
+    _ZHI = "子丑寅卯辰巳午未申酉戌亥"
+
+    # 今日干支:用今日起一張卦,只為取四柱/日干支(純確定值)
+    tchart = cast_hexagram(today_dt)
+    _sz = tchart.get("四柱") or {}
+    t_month = (_sz.get("月") or "  ")[1:2]
+    t_daygz = tchart.get("日干支", "")
+    t_day = t_daygz[1:2]
+    t_day_ele = BRANCH_ELEMENT.get(t_day, "")
+
+    # 今日旬空
+    t_kong = set()
+    if len(t_daygz) >= 2 and t_daygz[0] in _GAN and t_daygz[1] in _ZHI:
+        _b = (_ZHI.index(t_daygz[1]) - _GAN.index(t_daygz[0])) % 12
+        t_kong = {_ZHI[(_b + 10) % 12], _ZHI[(_b + 11) % 12]}
+
+    yao = (ming_chart.get("本卦") or {}).get("爻") or []
+    shi = next((y for y in yao if y.get("世")), None)
+
+    overall, shi_info = [], {}
+    if shi:
+        s_ele, s_zhi = shi.get("五行"), shi.get("地支")
+        s_ws = (_yao_wangshuai(s_ele, t_month, t_day) or {}).get("綜合旺衰", "")
+        rel = element_relation(s_ele, t_day_ele)  # 從世看日辰:生我=日生世…
+        hc = branch_relation(s_zhi, t_day)
+        shi_info = {"六親": shi.get("六親"), "地支": s_zhi, "五行": s_ele,
+                    "今日旺衰": s_ws, "日辰對世": rel + (("·" + hc) if hc else "")}
+        _SHI_REL = {
+            "生我": "今天日辰來生你——容易得到幫助、有貴人運,做事較順、心情也較穩。",
+            "我生": "今天你比較會付出、操心、為人忙,留意精神耗損與口舌。",
+            "剋我": "今天日辰剋你——壓力與阻力偏多,容易累、易卡關,放慢些、別硬撐。",
+            "我剋": "今天你想主動掌控、推進,動能不錯,但別與人硬碰、過剛易折。",
+            "比和": "今天大致平穩,自身狀態還行,留意同輩或合作之間的拉扯。",
+        }
+        if _SHI_REL.get(rel):
+            overall.append(_SHI_REL[rel])
+        if hc == "相沖":
+            overall.append("世逢日沖:今天較動盪奔波、心緒易不寧,計畫可能有變,順勢別強求。")
+        elif hc == "相合":
+            overall.append("世逢日合:今天易被人事牽絆、放不開,或有合作、牽連之事。")
+        if s_zhi in t_kong:
+            overall.append("世爻逢空:今天較使不上力、提不起勁,宜緩不宜衝,待時機。")
+        elif s_ws in ("弱", "偏弱"):
+            overall.append("本命今日偏弱:底氣不足,宜養精蓄銳、別逞強。")
+        elif s_ws in ("旺", "偏旺"):
+            overall.append("本命今日偏旺:狀態在線,可把握、適合主動處理重要的事。")
+
+    # 各面向:被今日日辰「沖」或「剋」的六親 → 該面向今日被觸動
+    aspects, seen = [], set()
+    for y in yao:
+        if y.get("世"):
+            continue
+        lq, z, ele, ls = y.get("六親"), y.get("地支"), y.get("五行"), y.get("六神", "")
+        hc = branch_relation(z, t_day)
+        touched_by = "沖" if hc == "相沖" else ("剋" if element_relation(ele, t_day_ele) == "剋我" else "")
+        if touched_by and lq not in seen:
+            seen.add(lq)
+            hint = _LIUSHEN_HINT.get(ls, "")
+            aspects.append({
+                "面向": _LIUQIN_ASPECT.get(lq, lq), "六親": lq, "六神": ls,
+                "提醒": f"{_LIUQIN_ASPECT.get(lq, lq)} 今天較受牽動(日辰{touched_by})"
+                        + (f";留意{hint}。" if hint else ";可多留意。"),
+            })
+
+    return {
+        "今日干支": t_daygz,
+        "本命世爻": shi_info,
+        "總評": overall,
+        "面向提醒": aspects,
+        "定位": "依六爻終身卦法則計算的每日參考,非鐵口斷語。",
+    }
+
+
 def _build_manual_reading(data):
     """從 POST data 解析、重排盤、組出 (系統規則文字, 問事+卦象JSON文字, 卦象payload)。
 
@@ -1713,7 +1818,19 @@ def member():
     if not user:
         return redirect(url_for("login_page", next="/member"))
     ledger = db.list_ledger(user["id"])
-    return render_template("member.html", mode="member", user=user, ledger=ledger)
+    # 每日運勢(命卦對今日):有完整生日才算;純引擎、零 AI
+    daily, ming_name = None, None
+    if all(user.get(k) is not None for k in ("birth_y", "birth_m", "birth_d", "birth_h")):
+        try:
+            birth_dt = datetime(int(user["birth_y"]), int(user["birth_m"]),
+                                int(user["birth_d"]), int(user["birth_h"]))
+            ming = cast_hexagram(birth_dt)
+            ming_name = ming.get("本卦", {}).get("卦名")
+            daily = analyze_daily(ming, datetime.now())
+        except Exception as e:  # noqa: BLE001
+            app.logger.warning("每日運勢計算失敗: %s", e)
+    return render_template("member.html", mode="member", user=user, ledger=ledger,
+                           daily=daily, ming_name=ming_name)
 
 
 @app.route("/member/profile", methods=["GET", "POST"])
