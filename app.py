@@ -1029,11 +1029,11 @@ _LIUSHEN_HINT = {
     "玄武": "暗事、遺失、盜竊、曖昧、心思不定",
 }
 _LIUQIN_ASPECT = {
-    "妻財": "財務 / 收入 / 開銷",
-    "官鬼": "工作 / 壓力 / 是非(女性亦主感情)",
-    "父母": "長輩 / 文書合約 / 車房 / 奔波",
-    "子孫": "健康 / 心情 / 子女晚輩",
-    "兄弟": "朋友同輩 / 破費 / 競爭",
+    "妻財": "錢財、收入、開銷",
+    "官鬼": "工作、壓力、人際是非",
+    "父母": "長輩、文件合約、車子房子、奔波",
+    "子孫": "身體健康、心情、孩子晚輩",
+    "兄弟": "朋友同輩、花費、競爭",
 }
 
 
@@ -1063,57 +1063,60 @@ def analyze_daily(ming_chart, today_dt):
     yao = (ming_chart.get("本卦") or {}).get("爻") or []
     shi = next((y for y in yao if y.get("世")), None)
 
-    overall, shi_info = [], {}
+    # 全程白話,不露任何術語(世爻/日辰/六親/旺衰/干支一律翻成口語)
+    overall, status = [], ""
     if shi:
         s_ele, s_zhi = shi.get("五行"), shi.get("地支")
         s_ws = (_yao_wangshuai(s_ele, t_month, t_day) or {}).get("綜合旺衰", "")
-        rel = element_relation(s_ele, t_day_ele)  # 從世看日辰:生我=日生世…
+        rel = element_relation(s_ele, t_day_ele)  # 從世看今日:生我=今日助你…
         hc = branch_relation(s_zhi, t_day)
-        shi_info = {"六親": shi.get("六親"), "地支": s_zhi, "五行": s_ele,
-                    "今日旺衰": s_ws, "日辰對世": rel + (("·" + hc) if hc else "")}
         _SHI_REL = {
-            "生我": "今天日辰來生你——容易得到幫助、有貴人運,做事較順、心情也較穩。",
-            "我生": "今天你比較會付出、操心、為人忙,留意精神耗損與口舌。",
-            "剋我": "今天日辰剋你——壓力與阻力偏多,容易累、易卡關,放慢些、別硬撐。",
-            "我剋": "今天你想主動掌控、推進,動能不錯,但別與人硬碰、過剛易折。",
-            "比和": "今天大致平穩,自身狀態還行,留意同輩或合作之間的拉扯。",
+            "生我": "今天外在的助力比較多,容易遇到幫忙、有貴人,做事順、心情也比較穩。",
+            "我生": "今天你比較會付出、為別人忙,容易累一點,也要留意說話、別惹口舌。",
+            "剋我": "今天壓力和阻力偏多,容易卡關、覺得累,放慢腳步、別硬撐就好。",
+            "我剋": "今天你想主動掌控、把事情往前推,動力不錯,但別跟人硬碰、太過強勢。",
+            "比和": "今天大致平穩,自己狀態還可以,留意一下同輩或合作之間的拉扯。",
         }
         if _SHI_REL.get(rel):
             overall.append(_SHI_REL[rel])
         if hc == "相沖":
-            overall.append("世逢日沖:今天較動盪奔波、心緒易不寧,計畫可能有變,順勢別強求。")
+            overall.append("今天比較動盪、容易奔波或心緒不寧,計畫可能有變動,順著走、別強求。")
         elif hc == "相合":
-            overall.append("世逢日合:今天易被人事牽絆、放不開,或有合作、牽連之事。")
+            overall.append("今天容易被人或事牽絆、放不太開,或有合作、牽連的事情。")
+        # 整體狀態(把旺衰翻成白話,放最前面當一句總綱)
         if s_zhi in t_kong:
-            overall.append("世爻逢空:今天較使不上力、提不起勁,宜緩不宜衝,待時機。")
+            status = "今天比較使不上力、提不起勁,適合緩一緩、別急著衝。"
         elif s_ws in ("弱", "偏弱"):
-            overall.append("本命今日偏弱:底氣不足,宜養精蓄銳、別逞強。")
+            status = "今天精神和底氣比較弱,適合養精蓄銳、別逞強。"
         elif s_ws in ("旺", "偏旺"):
-            overall.append("本命今日偏旺:狀態在線,可把握、適合主動處理重要的事。")
+            status = "今天整體狀態不錯,精神和底氣都在,可以好好把握。"
+        else:
+            status = "今天整體狀態平穩。"
 
-    # 各面向:被今日日辰「沖」或「剋」的六親 → 該面向今日被觸動
+    # 各面向:今天比較容易出狀況的生活面向(被沖或被剋的六親),全白話
     aspects, seen = [], set()
     for y in yao:
         if y.get("世"):
             continue
         lq, z, ele, ls = y.get("六親"), y.get("地支"), y.get("五行"), y.get("六神", "")
         hc = branch_relation(z, t_day)
-        touched_by = "沖" if hc == "相沖" else ("剋" if element_relation(ele, t_day_ele) == "剋我" else "")
-        if touched_by and lq not in seen:
+        touched = (hc == "相沖") or (element_relation(ele, t_day_ele) == "剋我")
+        if touched and lq not in seen:
             seen.add(lq)
             hint = _LIUSHEN_HINT.get(ls, "")
-            aspects.append({
-                "面向": _LIUQIN_ASPECT.get(lq, lq), "六親": lq, "六神": ls,
-                "提醒": f"{_LIUQIN_ASPECT.get(lq, lq)} 今天較受牽動(日辰{touched_by})"
-                        + (f";留意{hint}。" if hint else ";可多留意。"),
-            })
+            aspects.append(
+                f"「{_LIUQIN_ASPECT.get(lq, lq)}」方面今天比較容易有狀況"
+                + (f",留意{hint}。" if hint else ",可以多留意一下。")
+            )
 
     return {
-        "今日干支": t_daygz,
-        "本命世爻": shi_info,
-        "總評": overall,
+        "日期": today_dt.strftime("%Y/%m/%d"),
+        "整體狀態": status,
+        "今日提醒": overall,
         "面向提醒": aspects,
-        "定位": "依六爻終身卦法則計算的每日參考,非鐵口斷語。",
+        "定位": "這是依命盤推算的每日參考,給你一個方向,不是鐵口直斷;最終怎麼走,還是看你自己。",
+        # 內部除錯用(不顯示給使用者)
+        "_debug": {"今日干支": t_daygz, "世爻": (shi or {}).get("六親")},
     }
 
 

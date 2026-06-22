@@ -49,35 +49,34 @@
     {% endif %}
   </div>
 
-  {# ---- 今日運勢(命卦對今日,純引擎)---- #}
+  {# ---- 今日運勢(依命盤對今日推算,純白話)---- #}
   {% if daily %}
   <div style="border:1px solid #e6c200; border-radius:8px; padding:16px;
               background:#fffdf2; max-width:480px; margin-bottom:16px;">
-    <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px;">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px;">
       <span style="font-weight:bold;">今日運勢</span>
-      <span style="font-size:13px; color:#888;">命卦{% if ming_name %}「{{ ming_name }}」{% endif %} · 今日 {{ daily['今日干支'] }}</span>
+      <span style="font-size:13px; color:#888;">{{ daily['日期'] }}</span>
     </div>
 
-    {% if daily['本命世爻'] %}
-      <div style="font-size:13px; color:#666; margin-bottom:8px;">
-        本命星(世爻):{{ daily['本命世爻']['六親'] }}{{ daily['本命世爻']['地支'] }}{{ daily['本命世爻']['五行'] }}
-        ・今日{{ daily['本命世爻']['今日旺衰'] }}
+    {% if daily['整體狀態'] %}
+      <div style="font-size:15px; line-height:1.7; color:#333; margin-bottom:10px;">
+        {{ daily['整體狀態'] }}
       </div>
     {% endif %}
 
-    {% if daily['總評'] %}
-      <ul style="margin:0 0 10px; padding-left:20px; font-size:14px; line-height:1.7; color:#333;">
-        {% for s in daily['總評'] %}<li>{{ s }}</li>{% endfor %}
+    {% if daily['今日提醒'] %}
+      <ul style="margin:0 0 10px; padding-left:20px; font-size:14px; line-height:1.8; color:#333;">
+        {% for s in daily['今日提醒'] %}<li>{{ s }}</li>{% endfor %}
       </ul>
     {% endif %}
 
     {% if daily['面向提醒'] %}
-      <div style="font-size:13px; font-weight:600; color:#8b0000; margin:6px 0 4px;">今日較受牽動的面向</div>
-      <ul style="margin:0 0 10px; padding-left:20px; font-size:14px; line-height:1.7; color:#333;">
-        {% for a in daily['面向提醒'] %}<li>{{ a['提醒'] }}</li>{% endfor %}
+      <div style="font-size:13px; font-weight:600; color:#8b0000; margin:6px 0 4px;">今天可以多留意的</div>
+      <ul style="margin:0 0 10px; padding-left:20px; font-size:14px; line-height:1.8; color:#333;">
+        {% for s in daily['面向提醒'] %}<li>{{ s }}</li>{% endfor %}
       </ul>
     {% else %}
-      <div style="font-size:14px; color:#555; margin-bottom:8px;">今日各面向大致平穩,無明顯被沖剋的訊號。</div>
+      <div style="font-size:14px; color:#555; margin-bottom:8px;">今天各方面大致平穩,沒有特別要留意的。</div>
     {% endif %}
 
     <div style="font-size:12px; color:#999; border-top:1px dashed #e6c200; padding-top:8px;">
