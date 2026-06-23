@@ -23,6 +23,8 @@ services:
       # Claude API 金鑰（值放在 .env，不進 git；此處僅引用變數）
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       # 寄信（忘記密碼用）；值放 .env，未設定則連結只進 log
+      # 優先用 Resend API（設了 RESEND_API_KEY 就走它），否則退回下方 SMTP
+      RESEND_API_KEY: "${RESEND_API_KEY:-}"
       SMTP_HOST: "${SMTP_HOST:-}"
       SMTP_PORT: "${SMTP_PORT:-587}"
       SMTP_USER: "${SMTP_USER:-}"

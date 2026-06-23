@@ -46,6 +46,12 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-06-23
+- **寄信加 Resend API 後端**。`_send_mail` 改成:設了 `RESEND_API_KEY` 就走 Resend HTTP API(`_send_via_resend`,stdlib urllib、無新套件),否則自動退回原本 SMTP;兩者皆無則只寫 log。向下相容(舊 SMTP 設定不受影響)。
+  - **踩雷**:urllib 預設 UA 被 Cloudflare 擋(error 1010 / HTTP 403)→ 加 `User-Agent: hexagram-mailer/1.0` 後正常打到 Resend(假金鑰回乾淨的 401 JSON)。
+  - docker-compose 加 `RESEND_API_KEY` 環境變數透傳。
+  - **上線設定**:`.env` 填 `RESEND_API_KEY=re_...` + `MAIL_FROM=命卦排盤 <noreply@已驗證網域>`;Resend 後台驗證網域並到 DNS 設 SPF/DKIM/DMARC。或零改程式走 Resend SMTP(SMTP_HOST=smtp.resend.com / USER=resend / PASS=API key)。
+
 ### 2026-06-22
 - **每日運勢 MVP(六爻終身卦流日)**(`5fd3151`)。會員中心「我的命盤」下加「今日運勢」卡——命卦對今日干支算運勢與可能問題。**純引擎、零 AI、零 token、0.4ms 可快取**。
   - **命理定位(查證後)**:六爻有「終身卦排運/流日」傳統,以世爻為軸、日辰為一日主宰、生扶=順刑沖克害=逆、用神旺衰定吉凶。**雖非野鶴一事一占(屬李洪成系),使用者接受**;誠實標「每日參考、非鐵口」。判斷標準明確可程式化(同我們驗證過的生克/旺衰那套)。

@@ -179,11 +179,56 @@ def verify_reset_token(token):
         return None
 
 
+def _send_via_resend(to_email, subject, body):
+    """走 Resend HTTP API 寄信(stdlib,無額外套件)。成功回 True。"""
+    import json
+    import urllib.request
+    import urllib.error
+    key = os.environ.get("RESEND_API_KEY")
+    sender = os.environ.get("MAIL_FROM") or os.environ.get("RESEND_FROM", "")
+    if not sender:
+        app.logger.warning("Resend:未設定 MAIL_FROM(寄件人),改走 SMTP")
+        return None
+    payload = json.dumps({
+        "from": sender,
+        "to": [to_email],
+        "subject": subject,
+        "text": body,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.resend.com/emails", data=payload, method="POST",
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            # Cloudflare 會擋預設的 Python-urllib UA(error 1010),帶一個正常 UA
+            "User-Agent": "hexagram-mailer/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            app.logger.info("Resend 已送出 → %s (id=%s)", to_email, data.get("id"))
+            return True
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")
+        app.logger.warning("Resend 寄信失敗 HTTP %s:%s", e.code, detail)
+        return False
+    except Exception as e:
+        app.logger.warning("Resend 寄信失敗 (%s: %s)", type(e).__name__, e)
+        return False
+
+
 def _send_mail(to_email, subject, body):
-    """寄信(SMTP,供應商無關)。未設定 SMTP 時寫 log,回 False。"""
+    """寄信(供應商無關)。優先用 Resend API,其次 SMTP;皆未設定則只寫 log 回 False。"""
+    # 1) 有設 RESEND_API_KEY → 走 Resend HTTP API
+    if os.environ.get("RESEND_API_KEY"):
+        ok = _send_via_resend(to_email, subject, body)
+        if ok is not None:       # None = 設定不全(缺寄件人),往下退回 SMTP
+            return ok
+    # 2) 退回標準 SMTP(含 Resend SMTP:smtp.resend.com)
     host = os.environ.get("SMTP_HOST")
     if not host:
-        app.logger.warning("SMTP 未設定;信件(僅 log) → %s | %s", to_email, subject)
+        app.logger.warning("寄信未設定(無 RESEND_API_KEY 也無 SMTP_HOST);信件(僅 log) → %s | %s", to_email, subject)
         return False
     import smtplib
     from email.message import EmailMessage
@@ -206,9 +251,9 @@ def _send_mail(to_email, subject, body):
 
 
 def _send_reset_email(to_email, link):
-    # 開發用:未設 SMTP 時把連結寫進 log,才有辦法測試重設流程
-    if not os.environ.get("SMTP_HOST"):
-        app.logger.warning("SMTP 未設定;重設連結(僅 log):%s", link)
+    # 開發用:未設寄信(Resend/SMTP 皆無)時把連結寫進 log,才有辦法測試重設流程
+    if not os.environ.get("RESEND_API_KEY") and not os.environ.get("SMTP_HOST"):
+        app.logger.warning("寄信未設定;重設連結(僅 log):%s", link)
     return _send_mail(
         to_email, "命卦排盤 — 重設密碼",
         "您好,\n\n請點以下連結重設密碼(1 小時內有效):\n"
