@@ -2125,7 +2125,7 @@ def member():
     user = current_user()
     if not user:
         return redirect(url_for("login_page", next="/member"))
-    ledger = db.list_ledger(user["id"])
+    ledger = db.list_ledger(user["id"], limit=5)  # 會員中心只顯示最新 5 筆,完整在「我的紀錄」
     # 每日運勢(命卦對今日):有完整生日才算;純引擎、零 AI
     daily, ming_name = None, None
     if all(user.get(k) is not None for k in ("birth_y", "birth_m", "birth_d", "birth_h")):

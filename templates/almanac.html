@@ -4,8 +4,8 @@
 {% block content %}
 <style>
   .alm-head { display:flex; align-items:center; gap:12px; margin-bottom:4px; }
-  .alm-title { font-size:26px; font-weight:800; color:#A78BFA; }
-  .alm-nav a { text-decoration:none; font-size:20px; color:#5E548E; padding:0 8px; }
+  .alm-title { font-size:26px; font-weight:800; color:var(--accent); }
+  .alm-nav a { text-decoration:none; font-size:20px; color:var(--primary); padding:0 8px; }
   .alm-jq { color:#7a3b9e; font-size:14px; margin-bottom:10px; }
   .alm-jq .t { color:#999; margin-left:2px; }
   .alm-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:#ddd;
@@ -14,9 +14,9 @@
   .alm-grid .wd { background:#EDEAF4; text-align:center; padding:5px 0; font-size:14px; font-weight:700; color:#555; }
   .alm-grid .wd.sun { color:#c0392b; }
   .cell { background:#fff; min-height:66px; padding:3px 4px; position:relative; cursor:pointer; }
-  .cell:hover { background:#F3F1F8; box-shadow:inset 0 0 0 2px #A78BFA; z-index:5; }
+  .cell:hover { background:#F3F1F8; box-shadow:inset 0 0 0 2px var(--accent); z-index:5; }
   .cell-pop { display:none; position:absolute; top:100%; left:0; width:280px; max-width:78vw;
-              background:#fff; border:1px solid #A78BFA; border-radius:8px; padding:10px 12px;
+              background:#fff; border:1px solid var(--accent); border-radius:8px; padding:10px 12px;
               box-shadow:0 6px 20px rgba(0,0,0,.18); z-index:50; font-size:13px; line-height:1.7;
               text-align:left; white-space:normal; }
   .cell:hover .cell-pop { display:block; }

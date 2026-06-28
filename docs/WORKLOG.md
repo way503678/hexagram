@@ -46,6 +46,14 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-06-29 — 會員中心點數限 5 筆 + 跑版修正(實機截圖檢視)
+- **點數紀錄限 5 筆**:member 路由 `db.list_ledger(user["id"], limit=5)`(完整在「我的紀錄」)。
+- **用 playwright + chromium 實際開網頁截圖檢視**(桌面 1280 + 手機 390,公開頁 + 註冊登入後 member/history),逐頁看跑版:
+  - **修:會員中心長 email 橫向溢出撐破卡片** → 會員資訊 div 加 `overflow-wrap:anywhere`(手機已驗證會換行)。
+  - **修:模板內嵌舊 theme 色沒跟著換**(11 模板共 ~26 處 `#5E548E` 等)→ sed 全域換成 `var(--primary/--accent/--gold/--primary-dark)`(模板都 extends base.html,以後換色自動跟)。命理功能色不動。
+  - 其餘頁(landing/login/register/almanac/manual/history)桌機手機皆正常;cast 六爻表手機偏擠但有「左右滑動」提示,屬半刻意,暫不動。
+- 截圖工具裝在 scratchpad(非專案);臨時測試帳號 `ptest_*@example.com` 會留在 DB。
+
 ### 2026-06-29 — 首頁設計規範換色(配色/風格/排版,兩平台)
 - 使用者提供「命果 設計規範」HTML 稿,套**配色+風格+排版**(中文字體不動、latin 載 Cormorant),App+web 一起。tab/結構不動,只換視覺。
 - **Web `static/style.css`**:**注意有兩層 `:root`**——line 7 原始層 + line ~1318「MINGO v2 覆蓋層」,**v2 那層才真正生效**(會蓋掉前者),兩層都要改。全部對齊:`--primary #6F5E9B`、`--accent #8A79B3`、`--gold #E9B34A`、`--bg-light #F1E9DC`、`--text #2C2942`、漸層/陰影/圓角(lg 26)同步;body 背景改暖米線性漸層(`#F5EFE4→#E9E0D2`)+ 一抹頂部微光金,桌面與 `@media` 手機版都改;殘留硬編舊色(remark 中性 `#8E8AA3`、reset 鈕灰紫、側欄品牌白)一併清。grep 確認 0 殘留。

@@ -7,8 +7,8 @@
 {% if r %}
   <button type="button" id="toggleFormBtn"
           style="margin-bottom:10px; padding:8px 16px; cursor:pointer;
-                 border:1px solid #5E548E; border-radius:6px;
-                 background:#fff; color:#5E548E;
+                 border:1px solid var(--primary); border-radius:6px;
+                 background:#fff; color:var(--primary);
                  font-size:15px; font-weight:600;">
     ▼ 展開排盤設定
   </button>
@@ -193,7 +193,7 @@
       </button>
       {# 🔮 AI 解盤暫時隱藏(避免誤按);要還原把 display:none 拿掉即可 #}
       <button type="button" class="ai-btn export-btn" id="manual-reading-btn"
-              style="background:#5E548E; margin-left:8px; display:none;">
+              style="background:var(--primary); margin-left:8px; display:none;">
         🔮 AI 解盤（扣 1 點）
       </button>
       <div class="note" style="margin-top:6px;">
