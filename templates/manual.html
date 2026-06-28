@@ -253,9 +253,24 @@
     <div class="ai-modal-body">
       <div id="manual-reading-output"
            style="white-space:pre-wrap; word-break:break-word; line-height:1.7;
-                  font-size:15px; padding:12px; border:1px solid #eee;
-                  border-radius:6px; min-height:200px; max-height:60vh;
+                  font-size:15px; padding:12px; border:1px solid var(--border-soft);
+                  border-radius:12px; min-height:200px; max-height:52vh;
                   overflow:auto; background:#fff;"></div>
+
+      {# ---- 解讀後「繼續聊」(教練式對話)---- #}
+      <div id="manual-chat" style="display:none; margin-top:14px;">
+        <div class="mingo-chat-cta">想再多聊聊嗎?我可以陪你把選擇想清楚 ✦</div>
+        <div id="manual-chat-msgs"></div>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <input id="manual-chat-input" type="text" autocomplete="off"
+                 placeholder="例如:如果我選擇留下,要注意什麼?"
+                 style="flex:1; padding:10px 12px; font-size:14px; text-align:left;
+                        border:1px solid var(--border-soft); border-radius:999px;">
+          <button type="button" id="manual-chat-send"
+                  style="margin-left:0; padding:9px 18px;">送出</button>
+        </div>
+        <div class="note" id="manual-chat-hint" style="margin-top:6px;">每則回覆扣 1 點</div>
+      </div>
     </div>
     <div class="ai-modal-footer">
       <button type="button" class="ai-btn" id="manual-reading-close-btn"
@@ -309,6 +324,60 @@
     return html;
   }
 
+  // ---- 解讀後「繼續聊」(教練式對話)----
+  var chatBox = document.getElementById('manual-chat');
+  var chatMsgs = document.getElementById('manual-chat-msgs');
+  var chatInput = document.getElementById('manual-chat-input');
+  var chatSend = document.getElementById('manual-chat-send');
+  var chatHint = document.getElementById('manual-chat-hint');
+  var lastReading = '', lastPayload = null, chatHistory = [], chatBusy = false;
+
+  function setMemberBalance(b){
+    var el = document.getElementById('member-balance');
+    if (el && b != null) el.textContent = b;
+  }
+  function addBubble(role, text){
+    var row = document.createElement('div');
+    row.className = 'mingo-chat-row ' + (role === 'user' ? 'user' : 'ai');
+    var b = document.createElement('div');
+    b.className = 'mingo-chat-bubble';
+    b.textContent = text;
+    row.appendChild(b); chatMsgs.appendChild(row);
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+    return b;
+  }
+  function sendChat(){
+    if (chatBusy || !chatInput) return;
+    var msg = (chatInput.value || '').trim();
+    if (!msg || !lastPayload || !lastReading) return;
+    chatBusy = true; chatInput.value = '';
+    addBubble('user', msg);
+    var aiB = addBubble('ai', '…');
+    if (chatHint) chatHint.textContent = '命果回覆中…';
+    var body = Object.assign({}, lastPayload,
+      { reading: lastReading, history: chatHistory, message: msg });
+    fetch('/api/v1/chat', {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    })
+    .then(function(res){ return res.json().then(function(d){ return {ok:res.ok, status:res.status, d:d}; }); })
+    .then(function(r){
+      chatBusy = false;
+      if (!r.ok) { aiB.textContent = (r.d && r.d.error) || ('錯誤 ' + r.status); if (chatHint) chatHint.textContent = ''; return; }
+      aiB.textContent = r.d.reply;
+      chatHistory.push({role:'user', content: msg});
+      chatHistory.push({role:'assistant', content: r.d.reply});
+      setMemberBalance(r.d.balance);
+      if (chatHint) chatHint.textContent = '每則回覆扣 1 點';
+      chatMsgs.scrollTop = chatMsgs.scrollHeight;
+    })
+    .catch(function(){ chatBusy = false; aiB.textContent = '連線失敗,請稍後再試'; if (chatHint) chatHint.textContent = ''; });
+  }
+  if (chatSend) chatSend.addEventListener('click', sendChat);
+  if (chatInput) chatInput.addEventListener('keydown', function(e){
+    if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+  });
+
   function closeM(){ modal.style.display = 'none'; }
   document.getElementById('manual-reading-close-x').addEventListener('click', closeM);
   document.getElementById('manual-reading-close-btn').addEventListener('click', closeM);
@@ -335,6 +404,10 @@
     outEl.textContent = '';
     outEl.dataset.started = '';
     rawText = '';
+    // 重置對話
+    lastPayload = payload; lastReading = ''; chatHistory = [];
+    if (chatBox) chatBox.style.display = 'none';
+    if (chatMsgs) chatMsgs.innerHTML = '';
     statusEl.style.color = '#666';
     statusEl.textContent = '⏳ 連線中(將扣 1 點)…';
     openBtn.disabled = true;
@@ -361,7 +434,11 @@
         outEl.scrollTop = outEl.scrollHeight;
       } else if (ev === 'done') {
         statusEl.textContent = '';
-        if (rawText.trim()) outEl.innerHTML = renderMingo(rawText);  // 完成後分段渲染
+        if (rawText.trim()) {
+          outEl.innerHTML = renderMingo(rawText);  // 完成後分段渲染
+          lastReading = rawText;                   // 供「繼續聊」帶上下文
+          if (chatBox) chatBox.style.display = 'block';
+        }
         outEl.scrollTop = 0;
         setBalance(d.balance);
       } else if (ev === 'error') {

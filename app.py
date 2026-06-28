@@ -96,6 +96,8 @@ LOGIN_MAX_FAILS = int(os.environ.get("LOGIN_MAX_FAILS", "3"))
 CONSENT_VERSION = os.environ.get("CONSENT_VERSION", "2026-06-17")
 # 流年宜忌解讀(進階功能)每次扣的點數
 FORTUNE_AI_COST = int(os.environ.get("FORTUNE_AI_COST", "1"))
+# 解讀後「繼續聊」每則訊息扣的點數(教練式對話;0 = 免費)
+CHAT_AI_COST = int(os.environ.get("CHAT_AI_COST", "1"))
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -1890,6 +1892,97 @@ def api_reading():
         return jsonify({"error": "請先登入會員"}), 401
     body, code = _reading_and_charge(user, request.get_json(silent=True) or {})
     return jsonify(body), code
+
+
+# ---- 解讀後「繼續聊」:把卦象 + 解讀帶進多輪對話(人生教練)----
+_CHAT_TURN_INSTRUCTION = (
+    "\n\n---\n以上是這次卜卦的規則、所問之事與卦象。你已先依規則產出過一段完整解讀"
+    "(見下一則 assistant 訊息)。接下來是使用者的**追問對話**:請以「懂易經的人生教練」"
+    "身分,**自然、簡短地回應**(2–5 句,口語、有陪伴感),不必再重跑九段格式。"
+    "務必守住:**不下會成/不會成、不替使用者做決定**;若被逼問結論,描述卦象顯示什麼、"
+    "把決定權交還對方。只在必要時引用卦象,以陪對方把選擇想清楚為目標。"
+)
+
+
+def _build_chat(data):
+    """組多輪對話的 (system_text, messages, err)。
+    data 需含:解讀請求欄位(question/y/m/d/h/yao_vals)+ reading(先前解讀)
+    + history(先前對話 [{role,content}]) + message(這次的話)。"""
+    message = (data.get("message") or "").strip()
+    if not message:
+        return None, None, ({"error": "請輸入訊息"}, 400)
+    if len(message) > 1000:
+        return None, None, ({"error": "訊息過長(上限 1000 字)"}, 400)
+    system_text, user_text, _payload, err = _build_manual_reading(data)
+    if err:
+        return None, None, err
+    reading = (data.get("reading") or "").strip()
+    if not reading:
+        return None, None, ({"error": "缺少先前解讀內容"}, 400)
+
+    messages = [
+        {"role": "user", "content": user_text + _CHAT_TURN_INSTRUCTION},
+        {"role": "assistant", "content": reading},
+    ]
+    # 帶入先前追問對話(限最近 12 則,避免過長)
+    for turn in (data.get("history") or [])[-12:]:
+        role = turn.get("role")
+        content = (turn.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": message})
+    return system_text, messages, None
+
+
+def _call_claude_chat(system_text, messages):
+    """多輪對話呼叫 Claude;回傳回覆文字,失敗丟例外。"""
+    import anthropic
+    client = anthropic.Anthropic()
+    resp = client.messages.create(
+        model=_AI_READING_MODEL,
+        max_tokens=1024,
+        system=[{
+            "type": "text",
+            "text": system_text,
+            "cache_control": {"type": "ephemeral"},
+        }],
+        messages=messages,
+    )
+    text = "\n".join(
+        b.text for b in resp.content if getattr(b, "type", "") == "text"
+    ).strip()
+    if not text:
+        raise RuntimeError("AI 回傳空內容")
+    return text
+
+
+@app.route("/api/v1/chat", methods=["POST"])
+def api_chat():
+    """解讀後的追問對話(教練式,非串流):每則扣 CHAT_AI_COST 點,失敗退點。
+    回傳 {"reply","balance"}。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "請先登入會員"}), 401
+    system_text, messages, err = _build_chat(request.get_json(silent=True) or {})
+    if err:
+        body, code = err
+        return jsonify(body), code
+    bal = user.get("points_balance", 0)
+    if CHAT_AI_COST > 0:
+        ok, bal, msg = db.try_deduct_point(user["id"], CHAT_AI_COST, "chat")
+        if not ok:
+            if msg == "insufficient":
+                return jsonify({"error": "點數不足,請先儲值",
+                                "balance": user.get("points_balance", 0)}), 402
+            return jsonify({"error": "系統忙線,請稍後再試"}), 503
+    try:
+        reply = _call_claude_chat(system_text, messages)
+    except Exception as e:  # noqa: BLE001
+        if CHAT_AI_COST > 0:
+            db.add_points(user["id"], CHAT_AI_COST, "refund", ref="chat_failed")
+        app.logger.warning("AI chat failed (%s: %s)", type(e).__name__, e)
+        return jsonify({"error": "回覆產生失敗,已退還點數,請稍後再試"}), 502
+    return jsonify({"reply": reply, "balance": bal}), 200
 
 
 # ============================================================

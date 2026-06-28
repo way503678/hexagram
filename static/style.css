@@ -449,6 +449,61 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 .ai-btn.export-btn:hover { background: #4a7349; }
 .ai-deep .note { display: block; margin-top: 6px; }
 
+/* ============================================================
+   命果 MINGO 解讀分段渲染(教練式 Mingo 1.0)+ 繼續聊對話
+   ============================================================ */
+.mingo-sec { margin: 0 0 16px; }
+.mingo-h {
+  font-size: 12px; font-weight: 700; letter-spacing: 3px;
+  color: var(--primary); margin-bottom: 6px;
+}
+.mingo-body { font-size: 15px; line-height: 1.9; color: var(--text); }
+.mingo-oneliner {
+  background: var(--grad-bright); color: #fff;
+  border-radius: 16px; padding: 16px 18px; margin-bottom: 18px;
+  box-shadow: 0 6px 20px rgba(43, 45, 66, 0.08);
+}
+.mingo-oneliner .mingo-body { color: #fff; font-size: 17px; font-weight: 600; line-height: 1.7; }
+.mingo-encourage {
+  border-left: 3px solid var(--gold); background: #FBF8FF;
+  border-radius: 0 12px 12px 0; padding: 12px 16px; margin-top: 18px;
+}
+.mingo-encourage .mingo-body { color: var(--primary-dark); font-size: 15px; }
+.mingo-encourage::before { content: "✦ "; color: var(--gold); font-weight: 700; }
+details.mingo-collapse {
+  border: 1px solid var(--border-soft); border-radius: 14px;
+  padding: 10px 14px; margin: 0 0 12px; background: var(--surface);
+}
+details.mingo-collapse summary {
+  cursor: pointer; font-weight: 700; color: var(--primary);
+  font-size: 14px; letter-spacing: 1px; list-style: none;
+}
+details.mingo-collapse summary::-webkit-details-marker { display: none; }
+details.mingo-collapse summary::before { content: "▸ "; color: var(--accent); }
+details.mingo-collapse[open] summary::before { content: "▾ "; }
+details.mingo-collapse[open] summary { margin-bottom: 10px; }
+details.mingo-collapse .mingo-body { font-size: 14px; color: #4a4862; }
+
+/* 解讀後「繼續聊」對話 */
+.mingo-chat-cta {
+  font-size: 13px; color: var(--primary); font-weight: 600;
+  letter-spacing: 1px; margin-bottom: 10px; text-align: center;
+}
+#manual-chat-msgs { display: flex; flex-direction: column; gap: 8px; }
+.mingo-chat-row { display: flex; }
+.mingo-chat-row.user { justify-content: flex-end; }
+.mingo-chat-row.ai { justify-content: flex-start; }
+.mingo-chat-bubble {
+  max-width: 82%; padding: 9px 13px; border-radius: 16px;
+  font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word;
+}
+.mingo-chat-row.user .mingo-chat-bubble {
+  background: var(--accent); color: #fff; border-bottom-right-radius: 4px;
+}
+.mingo-chat-row.ai .mingo-chat-bubble {
+  background: #F3F1F8; color: var(--text); border-bottom-left-radius: 4px;
+}
+
 /* AI 資料 Modal */
 .ai-modal {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
