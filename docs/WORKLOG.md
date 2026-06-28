@@ -46,6 +46,10 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-06-28(晚)— landing 去詩句 + App 啟動流程重整
+- **Web `templates/landing.html`**:刪除整段 `landing-main` 詩句(明日何如/舉杯邀月/所往者…),落地頁只留 wordmark + slogan(對齊 App「只有 logo+slogan」)。
+- **App**(詳見 App WORKLOG 0c):落地頁只留 logo+slogan、首次彈同意 Modal(按一次不再顯示)、同意後才出登入/註冊入口;已登入直接進主頁、主頁今日黃曆卡 — 後三項本就滿足。
+
 ### 2026-06-28(下午)— 解卦改人生教練式(Mingo 1.0)
 - **理念**:Mingo 不當算命老師,當「懂易經的人生教練」——不給答案,陪使用者從迷惘走向行動。守兩條鐵線:**強度照實、不代做決定**。
 - **Phase 1 完成(prompt + 兩平台渲染)**:
