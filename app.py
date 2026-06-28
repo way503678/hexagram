@@ -1654,6 +1654,27 @@ def api_almanac_day():
     return jsonify(almanac.day_info(y, m, d))
 
 
+@app.route("/api/v1/daily", methods=["GET"])
+def api_daily():
+    """今日指引(命盤對今日,純引擎、零 AI)。需登入且已設生日。
+    回傳 analyze_daily 結果;未設生日回 {needs_birthday: true}。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "請先登入會員"}), 401
+    if not all(user.get(k) is not None for k in ("birth_y", "birth_m", "birth_d", "birth_h")):
+        return jsonify({"needs_birthday": True}), 200
+    try:
+        birth_dt = datetime(int(user["birth_y"]), int(user["birth_m"]),
+                            int(user["birth_d"]), int(user["birth_h"]))
+        ming = cast_hexagram(birth_dt)
+        daily = analyze_daily(ming, datetime.now())
+    except Exception as e:  # noqa: BLE001
+        app.logger.warning("api_daily 失敗: %s", e)
+        return jsonify({"error": "今日指引計算失敗"}), 500
+    daily.pop("_debug", None)  # 不外露內部術語
+    return jsonify(daily), 200
+
+
 @app.route("/api/v1/fortune", methods=["GET"])
 def api_fortune():
     """流年分析(免費、免登入):?y&m&d&h&gender&year。
