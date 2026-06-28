@@ -46,6 +46,14 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-06-29 — 首頁設計規範換色(配色/風格/排版,兩平台)
+- 使用者提供「命果 設計規範」HTML 稿,套**配色+風格+排版**(中文字體不動、latin 載 Cormorant),App+web 一起。tab/結構不動,只換視覺。
+- **Web `static/style.css`**:**注意有兩層 `:root`**——line 7 原始層 + line ~1318「MINGO v2 覆蓋層」,**v2 那層才真正生效**(會蓋掉前者),兩層都要改。全部對齊:`--primary #6F5E9B`、`--accent #8A79B3`、`--gold #E9B34A`、`--bg-light #F1E9DC`、`--text #2C2942`、漸層/陰影/圓角(lg 26)同步;body 背景改暖米線性漸層(`#F5EFE4→#E9E0D2`)+ 一抹頂部微光金,桌面與 `@media` 手機版都改;殘留硬編舊色(remark 中性 `#8E8AA3`、reset 鈕灰紫、側欄品牌白)一併清。grep 確認 0 殘留。
+- **`base.html`**:加 Google Fonts `<link>` 載 Cormorant Garamond 500;CSS `.brand-en/.landing-wordmark/.landing-subtitle-en` 走 Cormorant(中文維持思源黑體)。
+- **`DESIGN_SYSTEM.md`**:基準文件色票/漸層/圓角/陰影/字體段全面更新為新規範。
+- 已 build 上線、curl 驗證(新色就位、舊色歸 0、Cormorant link 在)。App 對等見 App WORKLOG 0d。
+- **教訓**:style.css 有 v2 覆蓋層,只改第一層 `:root` 不會生效;改色要先 grep 找出**所有硬編色**+ 確認生效的是哪層。
+
 ### 2026-06-28(晚)— landing 去詩句 + App 啟動流程重整
 - **Web `templates/landing.html`**:刪除整段 `landing-main` 詩句(明日何如/舉杯邀月/所往者…),落地頁只留 wordmark + slogan(對齊 App「只有 logo+slogan」)。
 - **App**(詳見 App WORKLOG 0c):落地頁只留 logo+slogan、首次彈同意 Modal(按一次不再顯示)、同意後才出登入/註冊入口;已登入直接進主頁、主頁今日黃曆卡 — 後三項本就滿足。

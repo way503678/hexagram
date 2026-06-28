@@ -5,21 +5,21 @@
    吉凶綠紅/動爻)維持判讀正確性,不在換膚範圍。
    ============================================================ */
 :root {
-  --primary-dark: #2B2D42;
-  --primary: #5E548E;
-  --accent: #A78BFA;
-  --gold: #F6BD60;
-  --bg-light: #F7F4EE;
+  --primary-dark: #2C2942;
+  --primary: #6F5E9B;
+  --accent: #8A79B3;
+  --gold: #E9B34A;
+  --bg-light: #F1E9DC;
   --surface: #FFFFFF;
-  --text: #2B2D42;
-  --text-muted: #8E8AA3;
-  --border-soft: #E8E4DC;
-  --grad-deep: linear-gradient(135deg, #5E548E 0%, #2B2D42 100%);
-  --grad-bright: linear-gradient(135deg, #A78BFA 0%, #5E548E 100%);
-  --radius-sm: 12px;
-  --radius-md: 16px;
-  --radius-lg: 20px;
-  --shadow-soft: 0 6px 20px rgba(43, 45, 66, 0.08);
+  --text: #2C2942;
+  --text-muted: #6B6385;
+  --border-soft: #E5DDCF;
+  --grad-deep: linear-gradient(135deg, #6F5E9B 0%, #2C2942 100%);
+  --grad-bright: linear-gradient(135deg, #8A79B3 0%, #6F5E9B 100%);
+  --radius-sm: 14px;
+  --radius-md: 18px;
+  --radius-lg: 26px;
+  --shadow-soft: 0 10px 30px rgba(95, 82, 135, 0.14);
   /* 命理功能色(換膚不動):動爻/忌神紅、凶警紅 */
   --moving: #c0392b;
   --danger: #a02020;
@@ -30,12 +30,11 @@ body {
   font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
   margin: 0; padding: 0; line-height: 1.6; color: var(--text);
   background-color: var(--bg-light);
-  background-image:
-    radial-gradient(circle at 12% 0%, rgba(167, 139, 250, 0.12) 0%, transparent 42%),
-    radial-gradient(circle at 92% 8%, rgba(94, 84, 142, 0.10) 0%, transparent 40%),
-    radial-gradient(circle at 50% 100%, rgba(246, 189, 96, 0.07) 0%, transparent 55%);
+  background-image: linear-gradient(180deg, #F5EFE4 0%, #F1E9DC 60%, #E9E0D2 100%);
   background-attachment: fixed;
 }
+/* latin 標語 / MINGO 字樣走 Cormorant(中文維持思源黑體) */
+.brand-en, .landing-wordmark, .landing-subtitle-en { font-family: "Cormorant Garamond", serif; }
 .layout { display: flex; min-height: 100vh; }
 .sidebar {
   width: 180px; background: var(--primary-dark); color: #ddd;
@@ -383,8 +382,8 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 }
 .remark-吉 { border-color: #2d7a2d; background: #f0faf0; }
 .remark-吉 .remark-tag { background: #2d7a2d; }
-.remark-中 { border-color: #8E8AA3; background: #F3F1F8; }
-.remark-中 .remark-tag { background: #8E8AA3; }
+.remark-中 { border-color: #8C84A6; background: #F3F1F8; }
+.remark-中 .remark-tag { background: #8C84A6; }
 .remark-警 { border-color: #c87000; background: #fff7eb; }
 .remark-警 .remark-tag { background: #c87000; }
 .remark-凶 { border-color: #a02020; background: #fdf0f0; }
@@ -1128,7 +1127,7 @@ details.mingo-collapse .mingo-body { font-size: 14px; color: #4a4862; }
 }
 .conclusion-card {
   padding: 12px 14px;
-  border-left: 4px solid #8E8AA3;
+  border-left: 4px solid #8C84A6;
   background: #F3F1F8;
   border-radius: 4px;
 }
@@ -1317,36 +1316,36 @@ details.mingo-collapse .mingo-body { font-size: 14px; color: #4a4862; }
    ============================================================ */
 
 :root {
-  --primary-dark: #2B2D42;
-  --primary-deeper: #24263B;
-  --primary: #5E548E;
-  --primary-soft: #7D72AE;
-  --accent: #A78BFA;
-  --accent-soft: #DDD2FF;
-  --gold: #F6BD60;
-  --gold-soft: #FFE4B1;
-  --cream: #F7F4EE;
-  --bg-light: #F7F4EE;
-  --surface: #FFFDF8;
+  --primary-dark: #2C2942;
+  --primary-deeper: #211F33;
+  --primary: #6F5E9B;
+  --primary-soft: #8A79B3;
+  --accent: #8A79B3;
+  --accent-soft: #D9CEEC;
+  --gold: #E9B34A;
+  --gold-soft: #F6DFA6;
+  --cream: #F5EFE4;
+  --bg-light: #F1E9DC;
+  --surface: #FFFDFA;
   --surface-strong: #FFFFFF;
-  --surface-glass: rgba(255, 253, 248, 0.82);
-  --text: #2B2D42;
-  --text-muted: #817C99;
-  --text-soft: #A49FB5;
-  --border-soft: rgba(94, 84, 142, 0.13);
-  --border-gold: rgba(246, 189, 96, 0.42);
-  --grad-deep: linear-gradient(145deg, #5E548E 0%, #3B365F 48%, #2B2D42 100%);
-  --grad-bright: linear-gradient(135deg, #A78BFA 0%, #7D72AE 45%, #5E548E 100%);
-  --grad-gold: linear-gradient(135deg, #FFE4B1 0%, #F6BD60 100%);
-  --grad-card: linear-gradient(145deg, rgba(255, 253, 248, 0.94), rgba(245, 238, 255, 0.72));
+  --surface-glass: rgba(255, 253, 250, 0.85);
+  --text: #2C2942;
+  --text-muted: #6B6385;
+  --text-soft: #8C84A6;
+  --border-soft: rgba(120, 104, 160, 0.16);
+  --border-gold: rgba(233, 179, 74, 0.42);
+  --grad-deep: linear-gradient(145deg, #6F5E9B 0%, #423B66 48%, #2C2942 100%);
+  --grad-bright: linear-gradient(135deg, #8A79B3 0%, #7A6AA6 45%, #6F5E9B 100%);
+  --grad-gold: linear-gradient(135deg, #F6DFA6 0%, #E9B34A 100%);
+  --grad-card: linear-gradient(160deg, rgba(255, 253, 250, 0.85), rgba(232, 226, 240, 0.78));
   --radius-sm: 14px;
-  --radius-md: 20px;
-  --radius-lg: 28px;
-  --radius-xl: 34px;
-  --shadow-soft: 0 12px 34px rgba(43, 45, 66, 0.08);
-  --shadow-card: 0 18px 54px rgba(43, 45, 66, 0.11);
-  --shadow-glow: 0 18px 48px rgba(167, 139, 250, 0.18);
-  --shadow-gold: 0 10px 30px rgba(246, 189, 96, 0.22);
+  --radius-md: 18px;
+  --radius-lg: 26px;
+  --radius-xl: 32px;
+  --shadow-soft: 0 12px 34px rgba(95, 82, 135, 0.12);
+  --shadow-card: 0 14px 34px rgba(95, 82, 135, 0.2);
+  --shadow-glow: 0 18px 48px rgba(138, 121, 179, 0.18);
+  --shadow-gold: 0 10px 30px rgba(233, 179, 74, 0.22);
 }
 
 html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
@@ -1354,10 +1353,8 @@ body {
   color: var(--text);
   background-color: var(--bg-light);
   background-image:
-    radial-gradient(circle at 18% 4%, rgba(246, 189, 96, 0.18) 0%, transparent 31%),
-    radial-gradient(circle at 88% 7%, rgba(167, 139, 250, 0.16) 0%, transparent 35%),
-    radial-gradient(circle at 50% 100%, rgba(94, 84, 142, 0.12) 0%, transparent 50%),
-    linear-gradient(180deg, #FFFDF8 0%, #F7F4EE 45%, #F2EEF8 100%);
+    radial-gradient(circle at 50% 0%, rgba(233, 179, 74, 0.08) 0%, transparent 40%),
+    linear-gradient(180deg, #F5EFE4 0%, #F1E9DC 60%, #E9E0D2 100%);
   background-attachment: fixed;
 }
 body::before {
@@ -1395,7 +1392,7 @@ body::before {
   padding: 0 22px 22px;
   margin-bottom: 12px;
   border-bottom: 1px solid rgba(255,255,255,0.12);
-  color: #FFFDF8;
+  color: #FFFDFA;
   font-family: "Noto Serif TC", "Songti TC", "Source Han Serif TC", serif;
   font-size: 23px;
   font-weight: 600;
@@ -1862,7 +1859,7 @@ table.hex-table tr.dong td {
 .coin-yao-row.coin-yao-moving { background: rgba(246,189,96,0.20); border-color: rgba(246,189,96,0.72); }
 .coin-symbol { color: var(--primary-dark); }
 .coin-yao-label { color: var(--primary); }
-.coin-btn-reset { background: linear-gradient(135deg, #A8A2BC, #817C99); }
+.coin-btn-reset { background: linear-gradient(135deg, #9A93AD, #6B6385); }
 
 /* Flash */
 .flash {
@@ -1878,9 +1875,8 @@ table.hex-table tr.dong td {
 @media (max-width: 768px) {
   body {
     background-image:
-      radial-gradient(circle at 50% -2%, rgba(246,189,96,0.16) 0%, transparent 42%),
-      radial-gradient(circle at 100% 35%, rgba(167,139,250,0.13) 0%, transparent 38%),
-      linear-gradient(180deg, #FFFDF8 0%, #F7F4EE 52%, #F1EDF7 100%);
+      radial-gradient(circle at 50% -2%, rgba(233,179,74,0.10) 0%, transparent 42%),
+      linear-gradient(180deg, #F5EFE4 0%, #F1E9DC 60%, #E9E0D2 100%);
   }
   .hamburger {
     top: 12px;

@@ -6,37 +6,41 @@
 
 ## 品牌
 - 名稱:**命果 MINGO**(中文「命果」+ 英文 wordmark「MINGO」大寫、字距 4–8)。
-- 調性:溫暖、正向、柔和、現代命理生活感。低飽和紫色系、米白底、大圓角、柔和陰影、漸層、星點裝飾。
+- 調性:溫暖、平靜、療癒、引導內心。暖米色底 + 靜謐藍紫主色 + 微光金點綴,大圓角、柔和陰影、漸層、星點裝飾。
 - 標語:看懂變化・走向更好的自己 / Know the change, walk your path.
 
 ## 色票(Design Tokens)
 | 用途 | Token | Hex |
 |------|-------|-----|
-| 主色(深紫藍) | `primaryDark` | `#2B2D42` |
-| 次色(中紫) | `primary` | `#5E548E` |
-| 強調(亮紫) | `accent` | `#A78BFA` |
-| 點綴(金黃) | `gold` | `#F6BD60` |
-| 背景(米白) | `bgLight` | `#F7F4EE` |
+| 主色(深墨紫) | `primaryDark` | `#2C2942` |
+| 主色(靜謐紫) | `primary` | `#6F5E9B` |
+| 強調(漸層淺端) | `accent` | `#8A79B3` |
+| 點綴(微光金) | `gold` | `#E9B34A` |
+| 背景(暖米) | `bgLight` | `#F1E9DC`(漸層主調) |
 | 卡片白 | `surface` | `#FFFFFF` |
-| 主文字 | `text` | `#2B2D42`(= primaryDark) |
-| 次要文字 | `textMuted` | `#8E8AA3` |
-| 分隔線 | `borderSoft` | `#E8E4DC` |
+| 標題文字 | `text` | `#2C2942`(= primaryDark) |
+| 內文文字 | `body` | `#5D5675` |
+| 次要文字 | `textMuted` | `#6B6385` |
+| 弱化標籤 / latin | `faint` | `#8C84A6` |
+| 導覽未選 | `navIdle` | `#9A93AD` |
+| 分隔線 | `borderSoft` | `rgba(120,104,160,0.16)` |
 
 漸層:
-- 深紫卡:`#5E548E → #2B2D42`
-- 亮紫卡:`#A78BFA → #5E548E`
-- 淺底:`#F7F4EE → #FFFFFF`
+- 頁面背景(上→下暖米,180deg):`#F5EFE4 → #F1E9DC → #E9E0D2`
+- 主按鈕(135deg):`#8A79B3 → #6F5E9B`
+- 霧面卡(160deg):`rgba(255,253,250,.85) → rgba(232,226,240,.78)`
+- 深紫卡:`#6F5E9B → #2C2942`
 
 ## 圓角 / 間距
-- radius:`sm 12` / `md 16` / `lg 20` / `pill 999`
+- radius:`sm 14` / `md 18` / `btn 22` / `card/lg 26` / `pill 999`
 - spacing:`xs 4` / `sm 8` / `md 16` / `lg 24` / `xl 32`
-- 陰影(soft):柔和、低透明度,例 `0 6px 20px rgba(43,45,66,0.08)`
+- 陰影:卡片 `0 14px 34px rgba(95,82,135,.2)`;按鈕 `0 6px 16px rgba(111,94,155,.35)`
+  - (Web `--shadow-soft` 全站通用版略淡:`0 10px 30px rgba(95,82,135,.14)`)
 
 ## 字體 / 排版
-- 中文標題:纖細襯線(Noto Serif TC Light)。
-- 英文品牌字 MINGO:大寫 + `letterSpacing` 4–8。
-- 內文:無襯線(Noto Sans TC)。
-- 字級:標題 28 / 卦名 32 / 區塊標題 18 / 內文 15 / 次要 13。
+- 中文:思源黑體 **Noto Sans TC**(400/500/700/900),標題與內文皆用,**不另用襯線**。
+- latin 標語 / MINGO 字樣:**Cormorant Garamond 500**(App 走 `@expo-google-fonts/cormorant-garamond`、Web 走 Google Fonts `<link>`);大寫 + `letterSpacing` 6–8。
+- 字級:問候 30/900 · 區段標題 26/900 · 卡片標題 17/900 · 內文 15/500 · 次要 14/500 · 導覽標籤 11/700。
 
 ## 共用元件(命名 App ↔ Web 一致)
 | 元件 | 說明 |
