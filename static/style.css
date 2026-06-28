@@ -270,7 +270,7 @@ td.yao { font-family: monospace; font-size: 18px; letter-spacing: 2px; }
   box-sizing: border-box;
 }
 .login-form button { width: 100%; padding: 10px; font-size: 16px; margin: 12px 0 0; }
-.login-form button:disabled { background: #b9a9a9; cursor: not-allowed; }
+.login-form button:disabled { background: #B9B6C9; cursor: not-allowed; }
 
 /* 註冊同意書區塊 */
 .consent-block {
@@ -279,7 +279,7 @@ td.yao { font-family: monospace; font-size: 18px; letter-spacing: 2px; }
 }
 .consent-title {
   padding: 8px 12px; font-weight: 700; font-size: 14px;
-  background: #EDEAF4; border-bottom: 1px solid var(--border-soft); color: #5a3a2a;
+  background: #EDEAF4; border-bottom: 1px solid var(--border-soft); color: var(--text);
 }
 .consent-body {
   max-height: 150px; overflow-y: auto; padding: 10px 12px;
@@ -289,7 +289,7 @@ td.yao { font-family: monospace; font-size: 18px; letter-spacing: 2px; }
 .consent-check {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 10px 12px; border-top: 1px solid var(--border-soft);
-  font-size: 13.5px; color: #2b2620; cursor: pointer;
+  font-size: 13.5px; color: var(--text); cursor: pointer;
 }
 .consent-check input { margin-top: 3px; flex-shrink: 0; }
 .back-link {
@@ -1133,7 +1133,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.mode-tab:hover { background: #DED9EC; color: #3a2a1a; }
+.mode-tab:hover { background: #DED9EC; color: var(--text); }
 .mode-tab.active {
   background: #fff;
   color: var(--primary);
@@ -1238,7 +1238,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 .coin-btn:hover { background: #6f63a6; }
 .coin-btn:disabled { background: #a6a2bb; cursor: not-allowed; }
 .coin-btn-reset { background: var(--text-muted); }
-.coin-btn-reset:hover { background: #8a7a4a; }
+.coin-btn-reset:hover { background: #6f6a8c; }
 
 @media (max-width: 768px) {
   .mode-tab { font-size: 18px; padding: 10px 14px; }

@@ -81,7 +81,7 @@
        data-year="{{ fortune_year }}" data-gender="{{ chart_gender or '' }}">
     {% if current_user %}
       <button type="button" class="ai-btn export-btn" id="fortune-ai-btn"
-              style="background:#6b2d8b;">🔮 流年宜忌 AI 解讀(扣 {{ fortune_ai_cost }} 點)</button>
+              style="background:#5E548E;">🔮 流年宜忌 AI 解讀(扣 {{ fortune_ai_cost }} 點)</button>
       <button type="button" class="ai-btn export-btn" id="fortune-prompt-btn"
               style="margin-left:8px;">🤖 產生流年 Prompt(扣 {{ fortune_ai_cost }} 點)</button>
       <span id="fortune-ai-msg" style="font-size:13px; color:#666; margin-left:8px;"></span>
@@ -92,8 +92,8 @@
                   style="width:100%; min-height:200px; padding:10px; font-size:13px;
                          border:1px solid #ccc; border-radius:6px; box-sizing:border-box; white-space:pre; font-family:monospace;"></textarea>
         <button type="button" id="fortune-prompt-copy"
-                style="margin-top:6px; padding:6px 12px; cursor:pointer; border:1px solid #6b2d8b;
-                       border-radius:6px; background:#fff; color:#6b2d8b;">複製</button>
+                style="margin-top:6px; padding:6px 12px; cursor:pointer; border:1px solid #5E548E;
+                       border-radius:6px; background:#fff; color:#5E548E;">複製</button>
       </div>
     {% else %}
       <div class="note">登入會員後可使用「流年宜忌 AI 解讀」(白話告訴你今年各面向宜做/忌做)。
