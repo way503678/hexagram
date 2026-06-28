@@ -52,7 +52,7 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
   - **修:會員中心長 email 橫向溢出撐破卡片** → 會員資訊 div 加 `overflow-wrap:anywhere`(手機已驗證會換行)。
   - **修:模板內嵌舊 theme 色沒跟著換**(11 模板共 ~26 處 `#5E548E` 等)→ sed 全域換成 `var(--primary/--accent/--gold/--primary-dark)`(模板都 extends base.html,以後換色自動跟)。命理功能色不動。
   - 其餘頁(landing/login/register/almanac/manual/history)桌機手機皆正常;cast 六爻表手機偏擠但有「左右滑動」提示,屬半刻意,暫不動。
-- 截圖工具裝在 scratchpad(非專案);臨時測試帳號 `ptest_*@example.com` 會留在 DB。
+- 截圖工具裝在 scratchpad(非專案),事後已清(playwright+chromium ~664MB);臨時測試帳號 `ptest_*@example.com`(4 個,id 100-103)及其 ledger 已從 DB 刪除,真實帳號未動。
 
 ### 2026-06-29 — 首頁設計規範換色(配色/風格/排版,兩平台)
 - 使用者提供「命果 設計規範」HTML 稿,套**配色+風格+排版**(中文字體不動、latin 載 Cormorant),App+web 一起。tab/結構不動,只換視覺。
