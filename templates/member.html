@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}會員中心 — 命卦排盤{% endblock %}
+{% block title %}會員中心 — 命果 MINGO{% endblock %}
 
 {% block content %}
 <h1>會員中心</h1>
@@ -12,13 +12,13 @@
       <span style="font-size:12px; color:#999;">({{ user.auth_provider }})</span>
     </div>
     <div style="font-size:15px;">
-      剩餘點數：<strong style="font-size:28px; color:#8b0000;">{{ user.points_balance }}</strong> 點
+      剩餘點數：<strong style="font-size:28px; color:#5E548E;">{{ user.points_balance }}</strong> 點
     </div>
     <div style="font-size:12px; color:#999; margin-top:4px;">1 點 = 一次 AI 解盤</div>
     <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:14px;">
-      <a href="/member/profile" style="color:#8b0000; font-weight:bold;">修改會員資料</a>
-      <a href="/member/history" style="color:#8b0000; font-weight:bold;">我的紀錄</a>
-      <a href="/member/password" style="color:#8b0000; font-weight:bold;">修改密碼</a>
+      <a href="/member/profile" style="color:#5E548E; font-weight:bold;">修改會員資料</a>
+      <a href="/member/history" style="color:#5E548E; font-weight:bold;">我的紀錄</a>
+      <a href="/member/password" style="color:#5E548E; font-weight:bold;">修改密碼</a>
     </div>
   </div>
 
@@ -32,7 +32,7 @@
         {{ '%02d'%user.birth_h }} 時
       </div>
       <a href="/cast?y={{ user.birth_y }}&m={{ user.birth_m }}&d={{ user.birth_d }}&h={{ user.birth_h }}&name={{ (user.display_name or '本人')|urlencode }}{% if user.gender %}&gender={{ user.gender }}{% endif %}&view=1"
-         style="display:inline-block; padding:9px 16px; background:#8b0000; color:#fff;
+         style="display:inline-block; padding:9px 16px; background:#5E548E; color:#fff;
                 border-radius:6px; text-decoration:none; font-weight:bold;">
         查看我的命盤
       </a>
@@ -41,11 +41,11 @@
         您尚未設定生日。設定後即可在這裡快速查看您的命盤。
       </div>
       <a href="/member/profile"
-         style="display:inline-block; padding:9px 16px; background:#8b0000; color:#fff;
+         style="display:inline-block; padding:9px 16px; background:#5E548E; color:#fff;
                 border-radius:6px; text-decoration:none; font-weight:bold;">
         設定生日
       </a>
-      <a href="/cast" style="margin-left:10px; color:#8b0000;">或直接前往命盤排卦</a>
+      <a href="/cast" style="margin-left:10px; color:#5E548E;">或直接前往命盤排卦</a>
     {% endif %}
   </div>
 
@@ -71,7 +71,7 @@
     {% endif %}
 
     {% if daily['面向提醒'] %}
-      <div style="font-size:13px; font-weight:600; color:#8b0000; margin:6px 0 4px;">今天可以多留意的</div>
+      <div style="font-size:13px; font-weight:600; color:#5E548E; margin:6px 0 4px;">今天可以多留意的</div>
       <ul style="margin:0 0 10px; padding-left:20px; font-size:14px; line-height:1.8; color:#333;">
         {% for s in daily['面向提醒'] %}<li>{{ s }}</li>{% endfor %}
       </ul>
@@ -123,9 +123,9 @@
 {% else %}
   <p>請先登入會員。</p>
   <p style="margin-top:10px;">
-    <a href="/login" style="color:#8b0000; font-weight:bold;">會員登入</a>
+    <a href="/login" style="color:#5E548E; font-weight:bold;">會員登入</a>
     或
-    <a href="/register" style="color:#8b0000; font-weight:bold;">註冊新帳號</a>
+    <a href="/register" style="color:#5E548E; font-weight:bold;">註冊新帳號</a>
   </p>
 {% endif %}
 {% endblock %}

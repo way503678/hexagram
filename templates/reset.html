@@ -1,17 +1,17 @@
 {% extends "base.html" %}
-{% block title %}重設密碼 — 命卦排盤{% endblock %}
+{% block title %}重設密碼 — 命果 MINGO{% endblock %}
 
 {% block content %}
 <h1>重設密碼</h1>
 {% if invalid %}
   <div style="max-width:400px; margin:10px 0; padding:12px; border:1px solid #e0b4b4;
-              border-radius:6px; background:#fdf3f3; color:#8b0000;">
+              border-radius:6px; background:#fdf3f3; color:#5E548E;">
     連結無效或已過期,請重新申請。
   </div>
-  <p><a href="/forgot" style="color:#8b0000; font-weight:bold;">重新申請</a></p>
+  <p><a href="/forgot" style="color:#5E548E; font-weight:bold;">重新申請</a></p>
 {% elif done %}
   <div class="flash flash-ok" style="max-width:360px; margin:10px 0;">✓ 密碼已重設,請用新密碼登入。</div>
-  <p><a href="/login" style="color:#8b0000; font-weight:bold;">前往登入</a></p>
+  <p><a href="/login" style="color:#5E548E; font-weight:bold;">前往登入</a></p>
 {% else %}
 <form method="post" action="/reset" class="login-form">
   <input type="hidden" name="token" value="{{ token }}">

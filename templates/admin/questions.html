@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}卜卦紀錄 — 命卦排盤{% endblock %}
+{% block title %}卜卦紀錄 — 命果 MINGO{% endblock %}
 
 {% block content %}
 <h1>卜卦紀錄</h1>
@@ -37,7 +37,7 @@
       {% for r in records %}
         <tr>
           <td style="white-space:nowrap;">
-            <a href="/admin/questions/{{ r.id }}" style="color:#8b0000; font-weight:bold;">
+            <a href="/admin/questions/{{ r.id }}" style="color:#5E548E; font-weight:bold;">
               {{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '查看' }}
             </a>
           </td>

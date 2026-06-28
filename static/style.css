@@ -1,12 +1,39 @@
+/* ============================================================
+   命果 MINGO 設計 tokens(單一真實來源:docs/DESIGN_SYSTEM.md)
+   低飽和紫 + 米白 + 大圓角 + 柔和陰影 + 漸層。
+   ⚠️ 舊「朱紅水墨」風已廢除,不再沿用。命理功能色(五行/世應/
+   吉凶綠紅/動爻)維持判讀正確性,不在換膚範圍。
+   ============================================================ */
+:root {
+  --primary-dark: #2B2D42;
+  --primary: #5E548E;
+  --accent: #A78BFA;
+  --gold: #F6BD60;
+  --bg-light: #F7F4EE;
+  --surface: #FFFFFF;
+  --text: #2B2D42;
+  --text-muted: #8E8AA3;
+  --border-soft: #E8E4DC;
+  --grad-deep: linear-gradient(135deg, #5E548E 0%, #2B2D42 100%);
+  --grad-bright: linear-gradient(135deg, #A78BFA 0%, #5E548E 100%);
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --shadow-soft: 0 6px 20px rgba(43, 45, 66, 0.08);
+  /* 命理功能色(換膚不動):動爻/忌神紅、凶警紅 */
+  --moving: #c0392b;
+  --danger: #a02020;
+}
+
 * { box-sizing: border-box; }
 body {
   font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
-  margin: 0; padding: 0; line-height: 1.6; color: #222;
-  background: #fafafa;
+  margin: 0; padding: 0; line-height: 1.6; color: var(--text);
+  background: var(--bg-light);
 }
 .layout { display: flex; min-height: 100vh; }
 .sidebar {
-  width: 180px; background: #2a1a1a; color: #ddd;
+  width: 180px; background: var(--primary-dark); color: #ddd;
   padding: 20px 0; flex-shrink: 0;
   position: sticky; top: 0; align-self: flex-start;
   height: 100vh;
@@ -16,21 +43,25 @@ body {
 }
 .sidebar .brand {
   padding: 0 18px 16px;
-  border-bottom: 1px solid #4a3030; margin-bottom: 8px;
-  font-size: 17px; font-weight: bold;
-  color: #fff; letter-spacing: 1px;
+  border-bottom: 1px solid #3a3c56; margin-bottom: 8px;
+  font-size: 18px; font-weight: bold;
+  color: #fff; letter-spacing: 2px;
+}
+.sidebar .brand .brand-en {
+  color: var(--accent); letter-spacing: 4px; font-size: 13px;
+  font-weight: 700; margin-left: 2px;
 }
 .sidebar nav { flex: 1; }
 
 /* 可收合的分類(管理介面) */
-.sidebar nav .nav-section { margin-top: 8px; border-top: 1px solid #4a3030; }
+.sidebar nav .nav-section { margin-top: 8px; border-top: 1px solid #3a3c56; }
 .sidebar nav .nav-section-toggle {
   display: flex; align-items: center; justify-content: space-between;
   width: 100%; box-sizing: border-box;
   padding: 11px 18px; margin: 0;
   border: none; border-radius: 0; cursor: pointer;
   font-family: inherit; font-size: 13px; letter-spacing: 2px;
-  color: #9a8585; text-align: left;
+  color: #9b97b3; text-align: left;
   -webkit-tap-highlight-color: transparent;
   transition: color 0.15s;
 }
@@ -42,10 +73,10 @@ body {
   background: transparent;
   outline: none;
 }
-.sidebar nav .nav-section-toggle:hover { color: #e6d2d2; }
-.sidebar nav .nav-section-toggle:hover .nav-caret { color: #b89a9a; }
+.sidebar nav .nav-section-toggle:hover { color: #e8e4f0; }
+.sidebar nav .nav-section-toggle:hover .nav-caret { color: #b3aecb; }
 .sidebar nav .nav-caret {
-  font-size: 16px; line-height: 1; color: #7a6060;
+  font-size: 16px; line-height: 1; color: #6f6a8c;
   transition: transform 0.18s ease;
 }
 .sidebar nav .nav-section-toggle.open .nav-caret { transform: rotate(90deg); }
@@ -57,15 +88,15 @@ body {
   border-left: 3px solid transparent;
   transition: background 0.15s, color 0.15s;
 }
-.sidebar nav a:hover { background: #3a2424; color: #fff; }
+.sidebar nav a:hover { background: #3a3c56; color: #fff; }
 .sidebar nav a.active {
-  background: #8b0000; color: #fff;
-  border-left-color: #ffd700; font-weight: bold;
+  background: var(--primary); color: #fff;
+  border-left-color: var(--gold); font-weight: bold;
 }
 .sidebar .auth-area {
   padding: 12px 18px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0));
-  border-top: 1px solid #4a3030;
+  border-top: 1px solid #3a3c56;
   font-size: 13px; color: #999;
 }
 .sidebar .auth-area a {
@@ -73,14 +104,14 @@ body {
 }
 .sidebar .auth-area a:hover { color: #fff; }
 .sidebar .auth-area .logged-in {
-  color: #ffd700; font-weight: bold;
+  color: var(--gold); font-weight: bold;
   display: block; margin-bottom: 4px;
 }
 .content { flex: 1; padding: 20px 30px; max-width: 960px; }
 
 .hamburger {
   display: none; position: fixed; top: 10px; left: 10px;
-  z-index: 1100; background: #8b0000; color: #fff; border: none;
+  z-index: 1100; background: var(--primary); color: #fff; border: none;
   width: 44px; height: 44px; font-size: 22px;
   border-radius: 6px; cursor: pointer;
   box-shadow: 0 2px 6px rgba(0,0,0,0.3);
@@ -90,9 +121,18 @@ body {
   background: rgba(0,0,0,0.5); z-index: 999;
 }
 
-h1 { border-bottom: 2px solid #555; padding-bottom: 6px; margin: 0 0 16px; }
-h2 { margin-top: 28px; color: #8b0000; }
-form { background: #f7f7f2; padding: 12px; border-radius: 6px; }
+h1 {
+  border-bottom: 2px solid var(--border-soft); padding-bottom: 8px; margin: 0 0 16px;
+  font-family: "Noto Serif TC", "Songti TC", serif; font-weight: 500;
+  color: var(--text); letter-spacing: 2px;
+}
+h2 { margin-top: 28px; color: var(--primary); }
+form {
+  background: var(--surface); padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-soft);
+}
 .field { display: inline-block; margin-right: 10px; }
 input[type=number], input[type=text], input[type=password], select {
   padding: 6px; font-size: 15px; text-align: center;
@@ -101,11 +141,13 @@ input.y { width: 5em; }
 input.md { width: 3em; }
 select.h { padding: 6px; }
 button {
-  padding: 6px 14px; font-size: 15px; cursor: pointer; margin-left: 6px;
-  background: #8b0000; color: #fff; border: none; border-radius: 4px;
+  padding: 7px 18px; font-size: 15px; cursor: pointer; margin-left: 6px;
+  background: var(--primary); color: #fff; border: none; border-radius: 999px;
+  transition: background 0.15s, transform 0.1s;
 }
-button:hover { background: #a00; }
-.meta { background: #fafaf4; padding: 10px 14px; border-left: 4px solid #8b0000; margin-bottom: 10px; }
+button:hover { background: #6f63a6; }
+button:active { transform: scale(0.97); }
+.meta { background: #fafaf4; padding: 10px 14px; border-left: 4px solid var(--primary); margin-bottom: 10px; }
 .sizhu { font-size: 18px; font-weight: bold; letter-spacing: 1px; }
 .guaci { color: #555; font-style: italic; margin: 6px 0 12px; }
 
@@ -119,7 +161,7 @@ button:hover { background: #a00; }
 }
 .hex-title .hex-stamp {
   display: inline-block;
-  background: #a8281f;
+  background: var(--primary);
   color: #fff;
   font-family: "Songti TC", "Source Han Serif TC", "Noto Serif TC", serif;
   font-size: 14px;
@@ -135,7 +177,7 @@ button:hover { background: #a00; }
   font-family: "Songti TC", "Source Han Serif TC", "Noto Serif TC", serif;
   font-size: 28px;
   font-weight: 600;
-  color: #2a1a10;
+  color: var(--text);
   letter-spacing: 8px;
   padding-left: 8px;
 }
@@ -168,7 +210,7 @@ button:hover { background: #a00; }
   display: none;
   text-align: center;
   font-size: 12px;
-  color: #b8861e;
+  color: var(--gold);
   letter-spacing: 2px;
   margin: -6px 0 14px;
   font-family: "Songti TC", "Source Han Serif TC", "Noto Serif TC", serif;
@@ -212,7 +254,7 @@ td.yao { font-family: monospace; font-size: 18px; letter-spacing: 2px; }
 .history-table th, .history-table td { text-align: left; padding: 8px 12px; }
 .history-table th { background: #efefe6; }
 .history-table tr:hover { background: #fff8e1; }
-.history-table a { color: #8b0000; font-weight: bold; text-decoration: none; }
+.history-table a { color: var(--primary); font-weight: bold; text-decoration: none; }
 .history-table a:hover { text-decoration: underline; }
 .login-form { max-width: 320px; margin: 30px auto; }
 .login-form input[type=password],
@@ -247,7 +289,7 @@ td.yao { font-family: monospace; font-size: 18px; letter-spacing: 2px; }
 .consent-check input { margin-top: 3px; flex-shrink: 0; }
 .back-link {
   display: inline-block; margin-bottom: 12px;
-  color: #8b0000; text-decoration: none;
+  color: var(--primary); text-decoration: none;
 }
 .back-link:hover { text-decoration: underline; }
 
@@ -295,14 +337,14 @@ button.del-btn:focus-visible {
 
 /* 流月折疊區塊 */
 details.flow-month {
-  background: #fafaf4; border-left: 4px solid #8b0000;
+  background: #fafaf4; border-left: 4px solid var(--primary);
   padding: 8px 14px; margin-bottom: 8px; border-radius: 0 4px 4px 0;
 }
 details.flow-month summary {
   cursor: pointer; padding: 4px 0;
   font-size: 15px; user-select: none;
 }
-details.flow-month summary:hover { color: #8b0000; }
+details.flow-month summary:hover { color: var(--primary); }
 details.flow-month[open] summary { margin-bottom: 8px; border-bottom: 1px dashed #ccc; }
 details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 
@@ -365,7 +407,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 }
 .aspect-title {
   font-weight: bold;
-  color: #8b0000;
+  color: var(--primary);
   margin-bottom: 6px;
   font-size: 14px;
   border-bottom: 1px dashed #e5e0d0;
@@ -386,11 +428,11 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 /* AI 深度解讀按鈕 */
 .ai-deep {
   margin: 18px 0; padding: 12px 14px;
-  background: #f4f0e8; border: 1px dashed #c4a060;
+  background: #f4f0e8; border: 1px dashed var(--gold);
   border-radius: 6px; text-align: center;
 }
 .ai-btn {
-  background: #c4a060; color: #fff; font-size: 15px;
+  background: var(--gold); color: #fff; font-size: 15px;
   padding: 8px 18px; border: none; border-radius: 4px;
   cursor: not-allowed; opacity: 0.7; margin-left: 0;
 }
@@ -458,11 +500,11 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 
   /* ----- 紙頁背景 ----- */
   body {
-    background-color: #f4ecd8;
+    background-color: var(--bg-light);
     background-image:
-      radial-gradient(circle at 20% 10%, rgba(184, 134, 30, 0.04) 0%, transparent 50%),
-      radial-gradient(circle at 80% 90%, rgba(168, 40, 31, 0.03) 0%, transparent 50%);
-    color: #2a2418;
+      radial-gradient(circle at 20% 10%, rgba(246, 189, 96, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 80% 90%, rgba(167, 139, 250, 0.07) 0%, transparent 50%);
+    color: var(--text);
   }
   .content {
     padding: 60px 14px 24px;
@@ -474,19 +516,19 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   h1 {
     font-size: clamp(22px, 6vw, 26px);
     font-family: "Songti TC", "Source Han Serif TC", "Noto Serif TC", serif;
-    border-bottom: 1px solid #b8861e;
+    border-bottom: 1px solid var(--gold);
     padding-bottom: 8px;
     letter-spacing: 4px;
-    color: #2a1a10;
+    color: var(--text);
   }
 
   /* 表單 - 紙頁感 */
   form {
     background: rgba(255, 255, 255, 0.5);
-    border: 1px solid #d9cda8;
+    border: 1px solid var(--border-soft);
     border-radius: 3px;
     padding: 14px;
-    box-shadow: 0 1px 3px rgba(60, 40, 20, 0.05);
+    box-shadow: 0 1px 3px rgba(43, 45, 66, 0.06);
   }
   input[type=number], input[type=text], input[type=password], select, button {
     font-size: 17px;
@@ -498,7 +540,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   /* ----- meta 區(時間 / 動爻 / 卦象提要) ----- */
   .meta {
     background: rgba(255, 255, 255, 0.55);
-    border-left: 3px solid #b8861e;
+    border-left: 3px solid var(--gold);
     padding: 12px 14px;
     font-family: "Songti TC", "Source Han Serif TC", "Noto Serif TC", serif;
     font-size: 14px;
@@ -510,18 +552,18 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   .sizhu {
     font-size: clamp(16px, 4.8vw, 19px);
     font-weight: 600;
-    color: #2a1a10;
+    color: var(--text);
     letter-spacing: 2px;
     margin: 2px 0;
   }
-  .meta b { color: #a8281f; font-weight: 600; }
+  .meta b { color: var(--primary); font-weight: 600; }
 
   /* ----- 卦象標題(印章 + 大字 + 副標) ----- */
   .hex-title {
     margin: 28px 0 8px;
     padding: 14px 0 10px;
-    border-top: 1px solid #d4bf8a;
-    border-bottom: 1px solid #d4bf8a;
+    border-top: 1px solid var(--border-soft);
+    border-bottom: 1px solid var(--border-soft);
     position: relative;
   }
   .hex-title::before,
@@ -530,7 +572,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     position: absolute;
     left: 0; right: 0;
     height: 1px;
-    background: #d4bf8a;
+    background: var(--border-soft);
   }
   .hex-title::before { top: -3px; }
   .hex-title::after { bottom: -3px; }
@@ -538,16 +580,16 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     font-size: 13px;
     letter-spacing: 3px;
     padding: 3px 8px 3px 11px;
-    background: #a8281f;
+    background: var(--primary);
     color: #fff;
-    box-shadow: 0 1px 2px rgba(168, 40, 31, 0.3);
+    box-shadow: 0 1px 2px rgba(94, 84, 142, 0.25);
     margin-right: 10px;
     top: -3px;
   }
   .hex-title .hex-name {
     font-size: clamp(24px, 7vw, 32px);
     letter-spacing: clamp(4px, 2vw, 10px);
-    color: #1a1410;
+    color: var(--text);
     padding-left: clamp(4px, 2vw, 10px);
   }
   .hex-title .hex-sub {
@@ -574,7 +616,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     display: block;
     width: 30px;
     height: 1px;
-    background: #b8861e;
+    background: var(--gold);
     margin: 0 auto 8px;
   }
 
@@ -595,7 +637,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     height: 4px;
   }
   .hex-table-wrap::-webkit-scrollbar-thumb {
-    background: #c4a060;
+    background: var(--gold);
     border-radius: 2px;
   }
   .hex-table-wrap::-webkit-scrollbar-track {
@@ -621,7 +663,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     letter-spacing: 1px;
     padding: 6px 8px;
     border: none;
-    border-bottom: 1px solid #b8861e;
+    border-bottom: 1px solid var(--gold);
     white-space: nowrap;
   }
   table.hex-table th.narrow {
@@ -637,11 +679,11 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   /* 內容格 - 點線分隔,墨色字 */
   table.hex-table td {
     background: transparent;
-    color: #2a1a10;
+    color: var(--text);
     font-size: 15px;
     padding: 12px 10px;
     border: none;
-    border-bottom: 1px dotted #c4b890;
+    border-bottom: 1px dotted var(--border-soft);
     white-space: nowrap;
   }
   table.hex-table td.narrow {
@@ -669,7 +711,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     font-size: clamp(20px, 5.5vw, 24px);
     font-weight: 600;
     letter-spacing: 3px;
-    color: #1a1410;
+    color: var(--text);
     padding: 10px 14px;
   }
 
@@ -681,18 +723,18 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     font-weight: 500;
   }
   table.hex-table tr.dong td.yao {
-    color: #a8281f;
+    color: var(--moving);
     font-weight: 700;
   }
   table.hex-table tr.dong td:first-child {
-    color: #a8281f;
+    color: var(--moving);
     font-weight: 600;
   }
 
   /* 世 / 應 - 印章感小標籤 */
   .shi, .ying {
     display: inline-block;
-    background: #a8281f;
+    background: var(--primary);
     color: #fff !important;
     font-size: 12px;
     padding: 2px 5px 1px;
@@ -700,7 +742,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     letter-spacing: 1px;
     font-weight: 600;
     line-height: 1;
-    box-shadow: 0 1px 1px rgba(168, 40, 31, 0.2);
+    box-shadow: 0 1px 1px rgba(94, 84, 142, 0.2);
   }
   .ying {
     background: #2a4d7a;
@@ -709,14 +751,14 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 
   /* 神煞色彩維持但更柔和 */
   .yuan { color: #2d7a2d; font-weight: 600; }
-  .ji   { color: #a8281f; font-weight: 600; }
+  .ji   { color: var(--moving); font-weight: 600; }
   .chou { color: #8a6a3a; font-weight: 600; }
 
   /* 滑動提示 */
   .hex-scroll-hint {
     display: block;
     margin: 6px 14px 14px;
-    color: #b8861e;
+    color: var(--gold);
     font-size: 11px;
     letter-spacing: 2px;
     opacity: 0.7;
@@ -726,17 +768,17 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   .aspects-grid { grid-template-columns: 1fr; gap: 10px; }
   .aspect-card {
     background: rgba(255, 255, 255, 0.6);
-    border: 1px solid #d9cda8;
+    border: 1px solid var(--border-soft);
     border-radius: 3px;
     padding: 12px 14px;
-    box-shadow: 0 1px 3px rgba(60, 40, 20, 0.05);
+    box-shadow: 0 1px 3px rgba(43, 45, 66, 0.06);
   }
   .aspect-title {
-    color: #a8281f;
+    color: var(--primary);
     font-size: 15px;
     font-family: "Songti TC", "Source Han Serif TC", "Noto Serif TC", serif;
     letter-spacing: 2px;
-    border-bottom: 1px solid #d9cda8;
+    border-bottom: 1px solid var(--border-soft);
     padding-bottom: 6px;
     margin-bottom: 8px;
   }
@@ -755,12 +797,12 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   .remark-吉 { background: rgba(45, 122, 45, 0.06); border-left-color: #2d7a2d; }
   .remark-中 { background: rgba(122, 108, 80, 0.05); border-left-color: #8a7a5a; }
   .remark-警 { background: rgba(200, 112, 0, 0.06); border-left-color: #c87000; }
-  .remark-凶 { background: rgba(168, 40, 31, 0.06); border-left-color: #a8281f; }
+  .remark-凶 { background: rgba(160, 32, 32, 0.06); border-left-color: var(--danger); }
 
   /* 四面向 meta 資訊 */
   .manual-aspects-meta {
     background: rgba(255, 255, 255, 0.5);
-    border: 1px solid #d9cda8;
+    border: 1px solid var(--border-soft);
     border-radius: 3px;
     font-size: 13px;
     color: #4a3a26;
@@ -768,7 +810,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     letter-spacing: 1px;
     line-height: 1.8;
   }
-  .manual-aspects-meta strong { color: #a8281f; }
+  .manual-aspects-meta strong { color: var(--primary); }
 
   /* 變卦結論 */
   .conclusion-card {
@@ -799,9 +841,9 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   .aspects-section h3 {
     font-family: "Songti TC", "Source Han Serif TC", "Noto Serif TC", serif;
     font-size: 17px;
-    color: #2a1a10;
+    color: var(--text);
     letter-spacing: 4px;
-    border-bottom: 1px solid #b8861e;
+    border-bottom: 1px solid var(--gold);
     padding-bottom: 6px;
     margin: 20px 0 10px;
     text-align: center;
@@ -824,16 +866,16 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
     display: block;
     padding: 8px 4px;
     margin: 2px 0;
-    color: #a8281f;
+    color: var(--primary);
     font-weight: 600;
     text-decoration: none;
-    border-bottom: 1px dotted #d4bf8a;
+    border-bottom: 1px dotted var(--border-soft);
   }
   table.history-table td.action-cell .action-btn:last-child {
     border-bottom: none;
   }
   table.history-table td.action-cell .action-btn:hover {
-    background: rgba(168, 40, 31, 0.06);
+    background: rgba(94, 84, 142, 0.07);
   }
   /* 隱藏分隔符與箭頭 */
   table.history-table td.action-cell .action-sep,
@@ -878,29 +920,38 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 }
 .landing-top { text-align: center; max-width: 600px; width: 100%; }
 .landing-symbol {
-  font-size: 48px; color: #8b0000; line-height: 1;
+  font-size: 48px; color: var(--primary); line-height: 1;
   margin-bottom: 20px;
   font-family: "Songti TC", "Source Han Serif TC", "Noto Serif TC", serif;
 }
 .landing-title {
-  font-family: "Songti TC", "Source Han Serif TC", "Noto Serif TC", serif;
-  font-size: 40px; font-weight: 500; color: #222;
-  letter-spacing: 14px; margin: 0 0 14px;
-  padding-left: 14px;
+  font-family: "Noto Serif TC", "Songti TC", "Source Han Serif TC", serif;
+  font-size: 44px; font-weight: 500; color: var(--text);
+  letter-spacing: 16px; margin: 0 0 6px;
+  padding-left: 16px;
+  border-bottom: none;
+}
+.landing-wordmark {
+  font-size: 20px; color: var(--accent); font-weight: 700;
+  letter-spacing: 10px; margin-bottom: 16px; padding-left: 10px;
 }
 .landing-subtitle {
-  font-size: 14px; color: #8b6e3a;
-  letter-spacing: 8px; margin-bottom: 18px;
-  padding-left: 8px;
+  font-size: 15px; color: var(--primary);
+  letter-spacing: 6px; margin-bottom: 6px;
+  padding-left: 6px;
+}
+.landing-subtitle-en {
+  font-size: 11px; color: var(--text-muted);
+  letter-spacing: 4px; margin-bottom: 18px;
 }
 .landing-divider {
   display: flex; align-items: center; justify-content: center;
   gap: 14px; margin: 0 0 32px;
 }
 .landing-divider .line {
-  flex: 0 0 70px; height: 1px; background: #c4a060;
+  flex: 0 0 70px; height: 1px; background: var(--gold);
 }
-.landing-divider .dot { color: #c4a060; font-size: 12px; }
+.landing-divider .dot { color: var(--gold); font-size: 12px; }
 .landing-main {
   max-width: 540px; width: 100%; text-align: center;
   font-family: "Songti TC", "Source Han Serif TC", "Noto Serif TC", serif;
@@ -954,7 +1005,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 
 /* 卦變總論 */
 .gua-change {
-  border-left: 5px solid #8b0000;
+  border-left: 5px solid var(--primary);
   background: #fff;
   padding: 12px 16px;
   margin: 14px 0;
@@ -963,7 +1014,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 .gua-change-title {
   font-weight: bold;
   font-size: 16px;
-  color: #8b0000;
+  color: var(--primary);
   margin-bottom: 6px;
   letter-spacing: 1px;
 }
@@ -1063,12 +1114,12 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   display: flex;
   gap: 4px;
   margin: 12px 0 0;
-  border-bottom: 1px solid #d0c8b8;
+  border-bottom: 1px solid var(--border-soft);
 }
 .mode-tab {
   background: #ece6d6;
   color: #6a5a3a;
-  border: 1px solid #d0c8b8;
+  border: 1px solid var(--border-soft);
   border-bottom: none;
   border-radius: 6px 6px 0 0;
   padding: 8px 16px;
@@ -1080,7 +1131,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 .mode-tab:hover { background: #ddd3bc; color: #3a2a1a; }
 .mode-tab.active {
   background: #fff;
-  color: #8b0000;
+  color: var(--primary);
   font-weight: bold;
   border-bottom: 1px solid #fff;
   margin-bottom: -1px;
@@ -1090,7 +1141,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 
 .mode-panel {
   background: #fff;
-  border: 1px solid #d0c8b8;
+  border: 1px solid var(--border-soft);
   border-top: none;
   padding: 14px 16px;
   border-radius: 0 0 6px 6px;
@@ -1102,7 +1153,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   color: #6a5a3a;
   background: #faf6ec;
   padding: 8px 12px;
-  border-left: 3px solid #c4a060;
+  border-left: 3px solid var(--gold);
   border-radius: 0 4px 4px 0;
   margin-bottom: 12px;
 }
@@ -1126,11 +1177,11 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
 }
 .coin-yao-row.coin-yao-rolling {
   background: #f5f0e0;
-  border-color: #c4a060;
+  border-color: var(--gold);
 }
 .coin-yao-row.coin-yao-done {
   background: #fff;
-  border-color: #c4a060;
+  border-color: var(--gold);
 }
 .coin-yao-row.coin-yao-moving {
   background: #fff3c4;
@@ -1142,7 +1193,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   text-align: right;
 }
 .coin-yao-row.coin-yao-done .coin-yao-label,
-.coin-yao-row.coin-yao-moving .coin-yao-label { color: #8b0000; }
+.coin-yao-row.coin-yao-moving .coin-yao-label { color: #c87000; }
 
 .coin-symbol {
   font-family: monospace;
@@ -1168,7 +1219,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   margin: 12px 0 4px;
 }
 .coin-btn {
-  background: #8b0000;
+  background: var(--primary);
   color: #fff;
   border: none;
   border-radius: 5px;
@@ -1179,7 +1230,7 @@ details.flow-month table { margin: 8px auto 4px; direction: ltr; }
   letter-spacing: 1px;
   transition: background 0.15s;
 }
-.coin-btn:hover { background: #a00; }
+.coin-btn:hover { background: #6f63a6; }
 .coin-btn:disabled { background: #aaa; cursor: not-allowed; }
 .coin-btn-reset { background: #6a5a3a; }
 .coin-btn-reset:hover { background: #8a7a4a; }

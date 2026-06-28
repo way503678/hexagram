@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if detail_name %}{{ detail_name }} ・ {% endif %}{{ fortune_year }} 流年 — 命卦排盤{% endblock %}
+{% block title %}{% if detail_name %}{{ detail_name }} ・ {% endif %}{{ fortune_year }} 流年 — 命果 MINGO{% endblock %}
 
 {% block content %}
 <h1>{% if detail_name %}{{ detail_name }} ・ {% endif %}{{ fortune_year }} 流年</h1>
@@ -97,7 +97,7 @@
       </div>
     {% else %}
       <div class="note">登入會員後可使用「流年宜忌 AI 解讀」(白話告訴你今年各面向宜做/忌做)。
-        <a href="/login" style="color:#8b0000; font-weight:bold;">會員登入</a></div>
+        <a href="/login" style="color:#5E548E; font-weight:bold;">會員登入</a></div>
     {% endif %}
   </div>
 

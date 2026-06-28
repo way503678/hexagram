@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-命卦排盤 Flask 網頁介面
+命果 MINGO Flask 網頁介面
 
 路由總覽:
   /                  首頁(landing page)
@@ -255,7 +255,7 @@ def _send_reset_email(to_email, link):
     if not os.environ.get("RESEND_API_KEY") and not os.environ.get("SMTP_HOST"):
         app.logger.warning("寄信未設定;重設連結(僅 log):%s", link)
     return _send_mail(
-        to_email, "命卦排盤 — 重設密碼",
+        to_email, "命果 MINGO — 重設密碼",
         "您好,\n\n請點以下連結重設密碼(1 小時內有效):\n"
         f"{link}\n\n若非您本人申請,請忽略本信(您的密碼不會被改動)。",
     )
@@ -266,7 +266,7 @@ def _send_password_changed_notice(to_email):
     if not to_email:
         return
     _send_mail(
-        to_email, "命卦排盤 — 您的密碼已變更",
+        to_email, "命果 MINGO — 您的密碼已變更",
         "您好,\n\n您的帳號密碼剛剛被變更(或透過忘記密碼重設)。\n"
         "若這是您本人操作,可忽略本信。\n"
         "若非您本人,代表帳號可能遭冒用,請立即重設密碼並檢查您的 Email 安全。",

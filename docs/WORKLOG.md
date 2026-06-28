@@ -46,6 +46,14 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-06-28
+- **改名「命果 MINGO」+ 全面換膚(MINGO 設計系統)**。使用者提供 MINGO 規格書,決議:全面改名、先換視覺(新功能後議)、App+Web 一起做、舊風格廢除。
+  - **基準文件**:新增 `docs/DESIGN_SYSTEM.md`(色票/圓角/字體/元件,單一真實來源);記憶 `mingo-design.md`。設計語言:低飽和紫(primary `#5E548E`、accent 亮紫 `#A78BFA`、primaryDark `#2B2D42`)+ 米白 `#F7F4EE` + 金黃 `#F6BD60`、大圓角、柔和陰影、紫色漸層。
+  - **舊風格廢除**:Web 朱紅水墨(`#8b0000`/宣紙/印章/朱砂)、App 舊紫米色票全部移除。**命理功能色保留**(五行/世應/吉凶綠紅/動爻紅/凶警紅)——CSS 用 `--moving`/`--danger` token 還原被誤轉的功能紅。
+  - **Web**:`static/style.css` 加 `:root` MINGO tokens,sed 全域換品牌色(紫),sidebar 深紫、按鈕大圓角 pill、form 加柔和陰影;`base.html`/landing/所有模板標題改「命果 MINGO」,landing 改 wordmark + 標語「看懂變化・走向更好的自己」。email 主旨改名。各頁 200 OK。
+  - **App**(見 App WORKLOG):theme.ts MINGO tokens、共用元件 ui.tsx、首頁重做、改名 app.json。
+  - **待辦(第二階段新功能)**:AI 問答 tab、今日指引詳情頁(接 analyze_daily)、探索頁、tab 改 首頁/探索/指引/記錄/我的。各內頁(member/cast/admin)細部漸層卡可再精修。
+
 ### 2026-06-23
 - **寄信加 Resend API 後端**。`_send_mail` 改成:設了 `RESEND_API_KEY` 就走 Resend HTTP API(`_send_via_resend`,stdlib urllib、無新套件),否則自動退回原本 SMTP;兩者皆無則只寫 log。向下相容(舊 SMTP 設定不受影響)。
   - **踩雷**:urllib 預設 UA 被 Cloudflare 擋(error 1010 / HTTP 403)→ 加 `User-Agent: hexagram-mailer/1.0` 後正常打到 Resend(假金鑰回乾淨的 401 JSON)。

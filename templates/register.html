@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}註冊會員 — 命卦排盤{% endblock %}
+{% block title %}註冊會員 — 命果 MINGO{% endblock %}
 
 {% block content %}
 <h1>註冊會員</h1>
@@ -17,7 +17,7 @@
   <div class="consent-block">
     <div class="consent-title">個人資料蒐集、處理及利用同意書</div>
     <div class="consent-body">
-      <p>命卦排盤（以下稱本服務）依《個人資料保護法》規定，向您說明並徵得同意：</p>
+      <p>命果 MINGO（以下稱本服務）依《個人資料保護法》規定，向您說明並徵得同意：</p>
       <p>一、蒐集目的：會員註冊與身分驗證、提供占卜排盤與 AI 解讀服務、點數與交易管理、卜卦紀錄保存、客戶服務與通知。</p>
       <p>二、蒐集之個資類別：電子郵件、密碼（加密儲存）、暱稱，及您使用服務時產生之卜卦問題內容、卦象結果、登入與操作時間。</p>
       <p>三、利用期間：自您註冊起至您刪除帳號或本服務停止營運之日止，及法令要求保存之期間。</p>
@@ -49,7 +49,7 @@
   <button type="submit" id="regBtn" disabled>註冊</button>
   {% if error %}<p class="err" style="margin-top:10px;">{{ error }}</p>{% endif %}
   <p style="margin-top:16px; text-align:center; font-size:14px;">
-    已經有帳號了?<a href="/login" style="color:#8b0000;">改用登入</a>
+    已經有帳號了?<a href="/login" style="color:#5E548E;">改用登入</a>
   </p>
 </form>
 
