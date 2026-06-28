@@ -272,6 +272,42 @@
   if (!openBtn || !modal) return;
   var outEl = document.getElementById('manual-reading-output');
   var statusEl = document.getElementById('manual-reading-status');
+  var rawText = '';
+
+  function escHtml(s){
+    return s.replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; });
+  }
+  // 把 Mingo 1.0 的【標記】分段渲染:原文/理論收合,一句話/陪你一句加樣式
+  function renderMingo(text){
+    var COLLAPSE = { '易經原文':1, '深入理論':1 };
+    var re = /【([^】]+)】/g, marks = [], m;
+    while ((m = re.exec(text))) { marks.push({ title: m[1].trim(), idx: m.index, end: re.lastIndex }); }
+    if (!marks.length) return '<div class="mingo-body">' + escHtml(text).replace(/\n/g,'<br>') + '</div>';
+    var html = '';
+    for (var i = 0; i < marks.length; i++){
+      var title = marks[i].title;
+      var bodyEnd = (i + 1 < marks.length) ? marks[i+1].idx : text.length;
+      var body = text.slice(marks[i].end, bodyEnd)
+        .replace(/\*\*/g, '')                       // 去粗體標記
+        .replace(/（[^）]*展開[^）]*）/g, '')          // 去「(點開展開)」字樣
+        .replace(/^[\s:：]*\n?/, '')                 // 去開頭冒號/空白
+        .replace(/\s*-{3,}\s*$/, '')                 // 去結尾分隔線
+        .trim();
+      var bodyHtml = escHtml(body).replace(/\n/g, '<br>');
+      if (COLLAPSE[title]) {
+        html += '<details class="mingo-collapse"><summary>' + escHtml(title) +
+                '</summary><div class="mingo-body">' + bodyHtml + '</div></details>';
+      } else if (title === '一句話') {
+        html += '<div class="mingo-sec mingo-oneliner"><div class="mingo-body">' + bodyHtml + '</div></div>';
+      } else if (title === '陪你一句') {
+        html += '<div class="mingo-sec mingo-encourage"><div class="mingo-body">' + bodyHtml + '</div></div>';
+      } else {
+        html += '<div class="mingo-sec"><div class="mingo-h">' + escHtml(title) +
+                '</div><div class="mingo-body">' + bodyHtml + '</div></div>';
+      }
+    }
+    return html;
+  }
 
   function closeM(){ modal.style.display = 'none'; }
   document.getElementById('manual-reading-close-x').addEventListener('click', closeM);
@@ -297,6 +333,8 @@
 
     modal.style.display = 'flex';
     outEl.textContent = '';
+    outEl.dataset.started = '';
+    rawText = '';
     statusEl.style.color = '#666';
     statusEl.textContent = '⏳ 連線中(將扣 1 點)…';
     openBtn.disabled = true;
@@ -318,10 +356,13 @@
       try { d = JSON.parse(dataStr); } catch (e) { return; }
       if (ev === 'delta' && d.t != null) {
         if (!outEl.dataset.started) { outEl.dataset.started = '1'; statusEl.textContent = '解讀中…'; }
-        outEl.textContent += d.t;
+        rawText += d.t;
+        outEl.textContent = rawText;            // 串流期間先顯示純文字(即時感)
         outEl.scrollTop = outEl.scrollHeight;
       } else if (ev === 'done') {
         statusEl.textContent = '';
+        if (rawText.trim()) outEl.innerHTML = renderMingo(rawText);  // 完成後分段渲染
+        outEl.scrollTop = 0;
         setBalance(d.balance);
       } else if (ev === 'error') {
         statusEl.style.color = '#a02020';

@@ -1857,6 +1857,41 @@ def api_fortune_reading():
                                     FORTUNE_AI_COST, "fortune_reading_failed")
 
 
+def _reading_and_charge(user, data):
+    """即時 AI 解讀(非串流,供 App 用):驗證 → 扣 1 點 → 呼叫 Claude → 回完整解讀。
+    失敗自動退點。回傳 (body_dict, status_code);成功 body = {"reading","balance"}。"""
+    system_text, user_text, chart_payload, err = _build_manual_reading(data)
+    if err:
+        return err
+    ok, bal, msg = db.try_deduct_point(user["id"], 1, "divination")
+    if not ok:
+        if msg == "insufficient":
+            return ({"error": "點數不足,請先儲值",
+                     "balance": user.get("points_balance", 0)}, 402)
+        return ({"error": "系統忙線,請稍後再試"}, 503)
+    _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI → 記錄
+    try:
+        reading = _call_claude_reading(system_text, user_text)
+        if not (reading or "").strip():
+            raise RuntimeError("AI 回傳空內容")
+    except Exception as e:  # noqa: BLE001
+        db.add_points(user["id"], 1, "refund", ref="reading_failed")
+        app.logger.warning("AI reading failed (%s: %s)", type(e).__name__, e)
+        return ({"error": "解讀產生失敗,已退還點數,請稍後再試"}, 502)
+    return ({"reading": reading, "balance": bal}, 200)
+
+
+@app.route("/api/v1/reading", methods=["POST"])
+def api_reading():
+    """即時 AI 解讀(命果 MINGO 教練式,非串流):扣 1 點 → 回完整解讀文字。
+    請求 JSON 同 /api/v1/prompt(含 question)。回傳 {"reading","balance"}。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "請先登入會員"}), 401
+    body, code = _reading_and_charge(user, request.get_json(silent=True) or {})
+    return jsonify(body), code
+
+
 # ============================================================
 # 會員頁面:會員資料 + 剩餘點數 + 點數異動紀錄
 # ============================================================
