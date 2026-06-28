@@ -46,6 +46,10 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-06-29 — hamburger 置中 + 移除卦辭裝飾星號(截圖確認)
+- **手機版 hamburger `☰` 偏右沒置中** → `.hamburger` 加 `display:flex/align/justify/padding:0/line-height:1`(手機 `display:block`→`flex`)。截圖確認已置中。桌面版本就隱藏(有 sidebar),不受影響。
+- **本卦↔卦辭之間的金色星號 `✦`**(v2 `.guaci::before content:"✦"`,純裝飾)→ 移除該規則。手機版回到原本低調的金色細線分隔(`@media` 內 `.guaci::before` 30px 線),桌面則無裝飾。
+
 ### 2026-06-29 — 會員中心點數限 5 筆 + 跑版修正(實機截圖檢視)
 - **點數紀錄限 5 筆**:member 路由 `db.list_ledger(user["id"], limit=5)`(完整在「我的紀錄」)。
 - **用 playwright + chromium 實際開網頁截圖檢視**(桌面 1280 + 手機 390,公開頁 + 註冊登入後 member/history),逐頁看跑版:
