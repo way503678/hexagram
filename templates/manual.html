@@ -271,6 +271,22 @@
         </div>
         <div class="note" id="manual-chat-hint" style="margin-top:6px;">每則回覆扣 1 點</div>
       </div>
+
+      {# ---- 🌱 成長反思(免費):最有感一句 → 本週小目標 ---- #}
+      <div id="manual-reflect" style="display:none; margin-top:16px;
+           border-top:1px dashed var(--border-soft); padding-top:14px;">
+        <div class="mingo-chat-cta">🌱 看完這次解讀,你覺得最有感的是哪一句?</div>
+        <div id="manual-reflect-form" style="display:flex; gap:8px;">
+          <input id="manual-reflect-input" type="text" autocomplete="off"
+                 placeholder="例如:我覺得我一直太急了"
+                 style="flex:1; padding:10px 12px; font-size:14px; text-align:left;
+                        border:1px solid var(--border-soft); border-radius:999px;">
+          <button type="button" id="manual-reflect-save"
+                  style="margin-left:0; padding:9px 18px;">記下來</button>
+        </div>
+        <div class="note" style="margin-top:6px;">免費。我會幫你變成這週可以做到的一件小事,下週再提醒你。</div>
+        <div id="manual-reflect-result" style="display:none;"></div>
+      </div>
     </div>
     <div class="ai-modal-footer">
       <button type="button" class="ai-btn" id="manual-reading-close-btn"
@@ -378,6 +394,48 @@
     if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
   });
 
+  // ---- 🌱 成長反思 ----
+  var reflectBox = document.getElementById('manual-reflect');
+  var reflectInput = document.getElementById('manual-reflect-input');
+  var reflectSave = document.getElementById('manual-reflect-save');
+  var reflectForm = document.getElementById('manual-reflect-form');
+  var reflectResult = document.getElementById('manual-reflect-result');
+  var reflectBusy = false;
+  function resetReflect(){
+    if (reflectBox) reflectBox.style.display = 'none';
+    if (reflectForm) reflectForm.style.display = 'flex';
+    if (reflectResult) { reflectResult.style.display = 'none'; reflectResult.innerHTML = ''; }
+    if (reflectInput) reflectInput.value = '';
+  }
+  function saveReflection(){
+    if (reflectBusy || !reflectInput) return;
+    var feeling = (reflectInput.value || '').trim();
+    if (!feeling) return;
+    reflectBusy = true; reflectSave.disabled = true; reflectSave.textContent = '記錄中…';
+    var q = lastPayload ? lastPayload.question : '';
+    fetch('/api/v1/reflection', {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ question: q, feeling: feeling })
+    })
+    .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
+    .then(function(r){
+      reflectBusy = false; reflectSave.disabled = false; reflectSave.textContent = '記下來';
+      if (!r.ok) { alert((r.d && r.d.error) || '儲存失敗'); return; }
+      reflectForm.style.display = 'none';
+      reflectResult.style.display = 'block';
+      reflectResult.innerHTML =
+        '<div class="mingo-encourage"><div class="mingo-body">那這週,我們設定一件小事:<br><strong>' +
+        escHtml(r.d.goal || '') +
+        '</strong><br><br>下週我會在會員中心(或寄信)提醒你,一起看看它帶來哪些變化。</div></div>';
+    })
+    .catch(function(){ reflectBusy = false; reflectSave.disabled = false; reflectSave.textContent = '記下來'; alert('連線失敗,請稍後再試'); });
+  }
+  if (reflectSave) reflectSave.addEventListener('click', saveReflection);
+  if (reflectInput) reflectInput.addEventListener('keydown', function(e){
+    if (e.key === 'Enter') { e.preventDefault(); saveReflection(); }
+  });
+
   function closeM(){ modal.style.display = 'none'; }
   document.getElementById('manual-reading-close-x').addEventListener('click', closeM);
   document.getElementById('manual-reading-close-btn').addEventListener('click', closeM);
@@ -404,10 +462,11 @@
     outEl.textContent = '';
     outEl.dataset.started = '';
     rawText = '';
-    // 重置對話
+    // 重置對話 + 成長反思
     lastPayload = payload; lastReading = ''; chatHistory = [];
     if (chatBox) chatBox.style.display = 'none';
     if (chatMsgs) chatMsgs.innerHTML = '';
+    resetReflect();
     statusEl.style.color = '#666';
     statusEl.textContent = '⏳ 連線中(將扣 1 點)…';
     openBtn.disabled = true;
@@ -438,6 +497,7 @@
           outEl.innerHTML = renderMingo(rawText);  // 完成後分段渲染
           lastReading = rawText;                   // 供「繼續聊」帶上下文
           if (chatBox) chatBox.style.display = 'block';
+          if (reflectBox) reflectBox.style.display = 'block';  // 🌱 成長反思
         }
         outEl.scrollTop = 0;
         setBalance(d.balance);

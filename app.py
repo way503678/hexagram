@@ -1986,6 +1986,117 @@ def api_chat():
 
 
 # ============================================================
+# 🌱 成長反思(Phase 3):最有感一句 → 本週小目標 → 下週回訪(站內 + Email)
+# ============================================================
+_GOAL_SYSTEM = (
+    "你是命果 MINGO 的人生教練。使用者剛做完一次卜卦解讀,說出他最有感的一句話/感受。"
+    "請把它轉成『這週可以做到的一件很小的事』——具體、溫和、可執行、過程導向"
+    "(釐清 / 觀察 / 練習 / 反思型),**不替他做人生決定**(不可出現離職/分手/投資等決定)。"
+    "只回一句話(40 字內),直接給這件小事,不要任何前後綴或引號。"
+)
+
+
+def _craft_growth_goal(question, feeling):
+    """用 Claude 把「最有感的一句」轉成本週一件小事。失敗回 None(由呼叫端 fallback)。"""
+    try:
+        import anthropic
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model=_AI_READING_MODEL,
+            max_tokens=160,
+            system=[{"type": "text", "text": _GOAL_SYSTEM}],
+            messages=[{"role": "user", "content":
+                       f"所問之事:{question or '(未填)'}\n最有感的:{feeling}\n"
+                       "請給這週的一件小事:"}],
+        )
+        text = "\n".join(b.text for b in resp.content
+                         if getattr(b, "type", "") == "text").strip()
+        return text or None
+    except Exception as e:  # noqa: BLE001
+        app.logger.warning("craft goal failed (%s: %s)", type(e).__name__, e)
+        return None
+
+
+@app.route("/api/v1/reflection", methods=["POST"])
+def api_reflection_create():
+    """建立成長反思:{question?, feeling, goal?}。未給 goal 則由 AI 生成本週小事。
+    免費(屬陪伴功能)。回傳 {id, goal}。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "請先登入會員"}), 401
+    data = request.get_json(silent=True) or {}
+    feeling = (data.get("feeling") or "").strip()
+    if not feeling:
+        return jsonify({"error": "請寫下你最有感的一句"}), 400
+    if len(feeling) > 500:
+        return jsonify({"error": "內容過長(上限 500 字)"}), 400
+    question = (data.get("question") or "").strip()[:500]
+    goal = (data.get("goal") or "").strip()
+    if not goal:
+        goal = _craft_growth_goal(question, feeling) or \
+            "這週,當你又想起這件事時,先停三個深呼吸,問自己:我現在真正想要的是什麼?"
+    rid = db.create_reflection(user["id"], question, feeling, goal, remind_days=7)
+    if rid is None:
+        return jsonify({"error": "儲存失敗,請稍後再試"}), 503
+    return jsonify({"id": rid, "goal": goal}), 200
+
+
+@app.route("/api/v1/reflections/due", methods=["GET"])
+def api_reflections_due():
+    """到回訪時間、尚未回顧的反思(站內提醒用)。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "請先登入會員"}), 401
+    items = db.list_due_reflections(user["id"])
+    for it in items:  # datetime → ISO 字串
+        for k in ("created_at", "remind_at"):
+            if it.get(k):
+                it[k] = it[k].isoformat()
+    return jsonify({"reflections": items}), 200
+
+
+@app.route("/api/v1/reflection/done", methods=["POST"])
+def api_reflection_done():
+    """使用者回顧完成 → 標記 done。{id}。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "請先登入會員"}), 401
+    rid = (request.get_json(silent=True) or {}).get("id")
+    if not rid:
+        return jsonify({"error": "缺少 id"}), 400
+    ok = db.mark_reflection_reviewed(user["id"], rid)
+    return jsonify({"ok": ok}), (200 if ok else 404)
+
+
+@app.route("/api/v1/reflections/dispatch_reminders", methods=["POST"])
+def api_reflections_dispatch():
+    """寄出到期的「下週回訪」Email 提醒(供每日排程/管理員呼叫)。
+    授權:管理員登入,或帶 X-Cron-Token 比對環境變數 CRON_TOKEN。"""
+    token = request.headers.get("X-Cron-Token", "")
+    cron_token = os.environ.get("CRON_TOKEN", "")
+    user = current_user()
+    authed = (user and _email_is_admin(user.get("email"))) or \
+             (cron_token and token == cron_token)
+    if not authed:
+        return jsonify({"error": "未授權"}), 403
+    sent, failed = 0, 0
+    for r in db.list_reminders_to_send(limit=200):
+        name = r.get("display_name") or "朋友"
+        body = (
+            f"{name},你好:\n\n上週你在命果做了一次卜卦,當時最有感的是:\n"
+            f"「{r.get('feeling')}」\n\n你給自己設了一件小事:\n"
+            f"✦ {r.get('goal')}\n\n這週過得如何?有沒有試著做做看?\n"
+            "回到命果,我陪你一起看看這件事帶來了哪些變化。\n\n— 命果 MINGO"
+        )
+        if _send_mail(r["email"], "命果 MINGO — 這週,還記得你給自己的那件小事嗎?", body):
+            db.mark_reflection_reminded(r["id"])
+            sent += 1
+        else:
+            failed += 1
+    return jsonify({"sent": sent, "failed": failed}), 200
+
+
+# ============================================================
 # 會員頁面:會員資料 + 剩餘點數 + 點數異動紀錄
 # ============================================================
 @app.route("/member", methods=["GET"])
@@ -2005,8 +2116,10 @@ def member():
             daily = analyze_daily(ming, datetime.now())
         except Exception as e:  # noqa: BLE001
             app.logger.warning("每日運勢計算失敗: %s", e)
+    due_reflections = db.list_due_reflections(user["id"])  # 🌱 到期回訪
     return render_template("member.html", mode="member", user=user, ledger=ledger,
-                           daily=daily, ming_name=ming_name)
+                           daily=daily, ming_name=ming_name,
+                           due_reflections=due_reflections)
 
 
 @app.route("/member/profile", methods=["GET", "POST"])

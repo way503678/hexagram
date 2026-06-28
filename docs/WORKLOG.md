@@ -52,7 +52,12 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
   - prompt **v2.0**(`AI_INTERPRETER_MANUAL_PROMPT_v1.md`):命理判讀規則(§一~§五)不動,只把 §三 原 6 段改成「內部判讀依據」,新增 §三之二 **Mingo 1.0 輸出格式**:【一句話】【現在的你】【這一卦在說】【為什麼是這一卦】【可以怎麼做(今/週/月)】【可能的發展】【易經原文(收合)】【深入理論(收合)】【陪你一句】。先講人再講卦、漸進揭露、術語只進【深入理論】;§六 加【可以怎麼做】界線(只能釐清/準備型、不可代決定)。端到端實測(離職占)九段齊全。
   - **Web**:`manual.html` 解讀完成後 `renderMingo()` 依【標記】分段渲染(一句話=亮紫卡、陪你一句=金、原文/理論=`<details>` 收合);`style.css` 加 `.mingo-*`。
   - **App 對等**:新增後端 `POST /api/v1/reading`(非串流即時解讀,扣 1 點失敗退點);App `components/MingoReading.tsx` 同邏輯渲染,CastScreen 主按鈕「✨ 命果為你解讀」,複製 Prompt 降為次要。
-- **待辦 Phase 2/3**:② Chat CTA(把卦象帶進對話、可追問選 A/B);③ 🌱成長反思(問「最有感的一句」→ 轉本週小目標 → 持久化 → 下週提醒,接 routine/推播)。
+- **Phase 2 完成 — Chat CTA**:解讀後「繼續聊」。後端 `POST /api/v1/chat`(多輪、帶卦象+先前解讀上下文、每則扣 `CHAT_AI_COST` 點失敗退點、守不代決定);Web 解讀 modal 加泡泡對話、App `MingoChat` 對等。
+- **Phase 3 完成 — 🌱成長反思 + 回訪**:
+  - DB:`growth_reflections` 表(feeling/goal/remind_at/status/reminded_at)+ `db.create_reflection / list_due_reflections / mark_reflection_reviewed / list_reminders_to_send / mark_reflection_reminded`。
+  - 後端:`POST /api/v1/reflection`(最有感一句 → AI `_craft_growth_goal` 生本週小事,**免費**,remind_at=+7天)、`GET /api/v1/reflections/due`、`POST /api/v1/reflection/done`、`POST /api/v1/reflections/dispatch_reminders`(寄 Email 回訪,授權:管理員或 `X-Cron-Token`=env `CRON_TOKEN`)。
+  - 前端:Web 解讀 modal 加 🌱 反思捕捉;會員中心顯示「上週你給自己的小事」到期回訪卡(可「我回顧過了」)。App:CastScreen `MingoReflect`、MemberScreen 到期回訪卡,均對等。
+  - **回訪管道**:站內(會員中心,已可用,零外部依賴)+ Email(Resend,需設 `CRON_TOKEN` 並由每日排程 curl 打 dispatch 端點;站內不受影響)。推播留待之後做推播時一起。
 
 ### 2026-06-28
 - **改名「命果 MINGO」+ 全面換膚(MINGO 設計系統)**。使用者提供 MINGO 規格書,決議:全面改名、先換視覺(新功能後議)、App+Web 一起做、舊風格廢除。

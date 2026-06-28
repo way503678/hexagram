@@ -303,6 +303,27 @@ CREATE INDEX IF NOT EXISTS idx_divq_user
 """
 
 
+# 🌱 成長反思(解讀後的「最有感一句」→ 本週小目標 → 下週回訪)
+REFLECTIONS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS growth_reflections (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    question    TEXT,                            -- 當次所問之事(脈絡)
+    feeling     TEXT,                            -- 使用者最有感的一句 / 感受
+    goal        TEXT,                            -- 本週小目標
+    remind_at   TIMESTAMPTZ,                     -- 下次回訪時間(預設 +7 天)
+    status      TEXT NOT NULL DEFAULT 'active',  -- active / done
+    reviewed_at TIMESTAMPTZ,                     -- 使用者回顧的時間
+    reminded_at TIMESTAMPTZ                      -- email 提醒已寄出時間(避免重寄)
+);
+CREATE INDEX IF NOT EXISTS idx_refl_user
+    ON growth_reflections (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_refl_remind
+    ON growth_reflections (status, remind_at);
+"""
+
+
 # 對舊資料庫升級:users 表若缺 password_hash 欄位則補上(Email 帳號登入用)
 MIGRATE_USERS = """
 DO $$
@@ -350,6 +371,7 @@ def init_db():
                 cur.execute(POINTS_SCHEMA)
                 cur.execute(MIGRATE_USERS)
                 cur.execute(QUESTIONS_SCHEMA)
+                cur.execute(REFLECTIONS_SCHEMA)
         log.info("DB ready: %s@%s/%s",
                  PG_CONF["user"], PG_CONF["host"], PG_CONF["dbname"])
         _ensure_search_indexes()
@@ -1136,3 +1158,144 @@ def list_ledger(user_id, limit=50):
     except Exception as e:
         log.warning("DB list_ledger failed (%s: %s)", type(e).__name__, e)
         return []
+
+
+# ============================================================
+# 🌱 成長反思(Phase 3)
+# ============================================================
+def create_reflection(user_id, question, feeling, goal, remind_days=7):
+    """建立一筆成長反思(最有感一句 → 本週小目標,remind_at = now + remind_days)。
+    回傳新 id 或 None。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return None
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO growth_reflections
+                        (user_id, question, feeling, goal, remind_at)
+                    VALUES (%s, %s, %s, %s, NOW() + (%s || ' days')::interval)
+                    RETURNING id
+                    """,
+                    (int(user_id), question, feeling, goal, int(remind_days)),
+                )
+                return cur.fetchone()[0]
+    except Exception as e:
+        log.warning("DB create_reflection failed (%s: %s)", type(e).__name__, e)
+        return None
+
+
+def _refl_rows_to_dicts(rows):
+    return [{
+        "id": r[0], "created_at": r[1], "question": r[2],
+        "feeling": r[3], "goal": r[4], "remind_at": r[5], "status": r[6],
+    } for r in rows]
+
+
+def list_due_reflections(user_id):
+    """該會員「已到回訪時間、尚未回顧」的反思(站內提醒用)。新到舊。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return []
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, created_at, question, feeling, goal, remind_at, status
+                    FROM growth_reflections
+                    WHERE user_id = %s AND status = 'active' AND remind_at <= NOW()
+                    ORDER BY remind_at ASC
+                    """,
+                    (int(user_id),),
+                )
+                return _refl_rows_to_dicts(cur.fetchall())
+    except Exception as e:
+        log.warning("DB list_due_reflections failed (%s: %s)", type(e).__name__, e)
+        return []
+
+
+def list_reflections(user_id, limit=20):
+    """該會員所有成長反思(新到舊)。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return []
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, created_at, question, feeling, goal, remind_at, status
+                    FROM growth_reflections
+                    WHERE user_id = %s
+                    ORDER BY created_at DESC LIMIT %s
+                    """,
+                    (int(user_id), int(limit)),
+                )
+                return _refl_rows_to_dicts(cur.fetchall())
+    except Exception as e:
+        log.warning("DB list_reflections failed (%s: %s)", type(e).__name__, e)
+        return []
+
+
+def mark_reflection_reviewed(user_id, rid):
+    """使用者回顧完成 → status=done。回傳是否更新成功。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE growth_reflections SET status = 'done', reviewed_at = NOW()
+                    WHERE id = %s AND user_id = %s
+                    """,
+                    (int(rid), int(user_id)),
+                )
+                return cur.rowcount > 0
+    except Exception as e:
+        log.warning("DB mark_reflection_reviewed failed (%s: %s)", type(e).__name__, e)
+        return False
+
+
+def list_reminders_to_send(limit=200):
+    """到期、未回顧、且尚未寄過 email 提醒的反思(含會員 email)。供排程派送。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return []
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT r.id, r.goal, r.feeling, r.question, u.email, u.display_name
+                    FROM growth_reflections r JOIN users u ON u.id = r.user_id
+                    WHERE r.status = 'active' AND r.remind_at <= NOW()
+                          AND r.reminded_at IS NULL AND u.email IS NOT NULL
+                    ORDER BY r.remind_at ASC LIMIT %s
+                    """,
+                    (int(limit),),
+                )
+                rows = cur.fetchall()
+        return [{
+            "id": r[0], "goal": r[1], "feeling": r[2], "question": r[3],
+            "email": r[4], "display_name": r[5],
+        } for r in rows]
+    except Exception as e:
+        log.warning("DB list_reminders_to_send failed (%s: %s)", type(e).__name__, e)
+        return []
+
+
+def mark_reflection_reminded(rid):
+    """標記某反思的 email 提醒已寄出(避免重寄)。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    "UPDATE growth_reflections SET reminded_at = NOW() WHERE id = %s",
+                    (int(rid),),
+                )
+                return cur.rowcount > 0
+    except Exception as e:
+        log.warning("DB mark_reflection_reminded failed (%s: %s)", type(e).__name__, e)
+        return False

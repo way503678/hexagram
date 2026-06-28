@@ -85,6 +85,44 @@
   </div>
   {% endif %}
 
+  {# ---- 🌱 成長反思回訪(到期才出現)---- #}
+  {% if due_reflections %}
+  <div style="border:1px solid #E8E4DC; border-radius:16px; padding:16px;
+              background:#FBF8FF; max-width:480px; margin-bottom:16px;">
+    <div style="font-weight:bold; margin-bottom:10px; color:#5E548E;">🌱 上週你給自己的小事</div>
+    {% for r in due_reflections %}
+    <div class="reflect-item" data-id="{{ r['id'] }}"
+         style="border-left:3px solid #F6BD60; padding:8px 0 8px 12px; margin-bottom:12px;">
+      {% if r['feeling'] %}
+        <div style="font-size:13px; color:#8E8AA3; margin-bottom:4px;">當時你最有感的:「{{ r['feeling'] }}」</div>
+      {% endif %}
+      <div style="font-size:15px; color:#2B2D42; line-height:1.7;">✦ {{ r['goal'] }}</div>
+      <div style="font-size:13px; color:#8E8AA3; margin:6px 0;">這週過得如何?有試著做做看嗎?</div>
+      <button type="button" class="reflect-done" data-id="{{ r['id'] }}"
+              style="padding:6px 14px; font-size:13px;">我回顧過了 ✓</button>
+    </div>
+    {% endfor %}
+  </div>
+  <script>
+  (function(){
+    document.querySelectorAll('.reflect-done').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-id');
+        btn.disabled = true; btn.textContent = '處理中…';
+        fetch('/api/v1/reflection/done', {
+          method:'POST', credentials:'same-origin',
+          headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: Number(id)})
+        }).then(function(r){ return r.json(); }).then(function(d){
+          var item = document.querySelector('.reflect-item[data-id="'+id+'"]');
+          if (d.ok && item) { item.style.transition='opacity .3s'; item.style.opacity='0.4'; btn.textContent='已回顧 ✓'; }
+          else { btn.disabled=false; btn.textContent='我回顧過了 ✓'; }
+        }).catch(function(){ btn.disabled=false; btn.textContent='我回顧過了 ✓'; });
+      });
+    });
+  })();
+  </script>
+  {% endif %}
+
   <h3>點數紀錄</h3>
   <table class="history-table" style="width:100%; max-width:640px; border-collapse:collapse;">
     <thead>
