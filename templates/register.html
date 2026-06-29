@@ -3,48 +3,26 @@
 
 {% block content %}
 <h1>註冊會員</h1>
+
 <form method="post" action="/register" class="login-form" id="regForm" style="max-width:440px;">
-  <input type="email" name="email" placeholder="Email"
-         value="{{ email or '' }}" required autofocus autocomplete="email">
-  <input type="password" name="password" placeholder="密碼(至少 8 碼,英數混合)"
-         required autocomplete="new-password">
-  <input type="password" name="password2" placeholder="再次輸入密碼"
-         required autocomplete="new-password">
-  <input type="text" name="display_name" placeholder="暱稱(選填)"
-         autocomplete="nickname">
+  <input type="text" name="email" placeholder="Email" required style="margin-bottom:10px;">
+  <input type="password" name="password" placeholder="密碼(至少 8 碼,英數混合)" required minlength="8" style="margin-bottom:10px;">
+  <input type="password" name="password2" placeholder="再次輸入密碼" required minlength="8" style="margin-bottom:10px;">
+  <input type="text" name="display_name" placeholder="暱稱(選填)" style="margin-bottom:10px;">
 
-  {# ---- 個資使用同意書 ---- #}
-  <div class="consent-block">
-    <div class="consent-title">個人資料蒐集、處理及利用同意書</div>
+  {# ---- 同意條文(單一來源:legal.json,經後端傳入)---- #}
+  {% for doc in legal %}
+  <div class="consent-box" style="margin-bottom:12px;">
+    <div class="consent-title">{{ doc.title }}</div>
     <div class="consent-body">
-      <p>命果 MINGO（以下稱本服務）依《個人資料保護法》規定，向您說明並徵得同意：</p>
-      <p>一、蒐集目的：會員註冊與身分驗證、提供占卜排盤與 AI 解讀服務、點數與交易管理、卜卦紀錄保存、客戶服務與通知。</p>
-      <p>二、蒐集之個資類別：電子郵件、密碼（加密儲存）、暱稱，及您使用服務時產生之卜卦問題內容、卦象結果、登入與操作時間。</p>
-      <p>三、利用期間：自您註冊起至您刪除帳號或本服務停止營運之日止，及法令要求保存之期間。</p>
-      <p>四、利用地區、對象及方式：於本服務營運所需之範圍與系統內處理利用；除經您同意或法令規定外，不會將您的個資提供予第三人。</p>
-      <p>五、您得依個資法第三條就您的個資行使下列權利：查詢、請求閱覽或製給複製本、請求補充或更正、請求停止蒐集處理或利用、請求刪除。</p>
-      <p>六、您可自由選擇是否提供個資；若不提供，將無法完成註冊或使用會員相關服務。</p>
+      {% for p in doc.body %}<p>{{ p }}</p>{% endfor %}
     </div>
     <label class="consent-check">
-      <input type="checkbox" name="agree_privacy" value="1" required>
-      我已閱讀並同意上述個人資料之蒐集、處理及利用。
+      <input type="checkbox" name="agree_{{ doc.key }}" value="1" required>
+      {{ doc.agree }}
     </label>
   </div>
-
-  {# ---- 免責聲明 ---- #}
-  <div class="consent-block">
-    <div class="consent-title">免責聲明</div>
-    <div class="consent-body">
-      <p>一、本服務之排盤與解讀係依易經、京房納甲等傳統術數方法及電腦運算編撰，所有結果僅供參考與自我省思之用，不代表事實或必然之結果。</p>
-      <p>二、本服務內容（含 AI 產生之解讀與 Prompt）不構成任何醫療、法律、投資理財、心理或其他專業建議；涉及重大決策請諮詢合格專業人士。</p>
-      <p>三、本服務不保證內容之準確性、完整性或適用性，請勿迷信，您應本於自由意志自行判斷與決定。</p>
-      <p>四、對於您使用本服務（或無法使用）所生之任何直接、間接或衍生之損失，於法律允許之最大範圍內，本服務不負損害賠償責任。</p>
-    </div>
-    <label class="consent-check">
-      <input type="checkbox" name="agree_disclaimer" value="1" required>
-      我已閱讀並同意上述免責聲明。
-    </label>
-  </div>
+  {% endfor %}
 
   <button type="submit" id="regBtn" disabled>註冊</button>
   {% if error %}<p class="err" style="margin-top:10px;">{{ error }}</p>{% endif %}

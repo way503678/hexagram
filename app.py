@@ -92,8 +92,12 @@ NEW_USER_BONUS = int(os.environ.get("NEW_USER_BONUS", "3"))
 _MIN_PASSWORD_LEN = 8
 # 連續登入失敗達此次數即鎖定帳號(需管理員解鎖)
 LOGIN_MAX_FAILS = int(os.environ.get("LOGIN_MAX_FAILS", "3"))
-# 個資同意書 + 免責聲明的條文版本(改版時更新,會記在會員的 consent_version)
-CONSENT_VERSION = os.environ.get("CONSENT_VERSION", "2026-06-17")
+# 個資同意書 + 免責聲明 — 單一來源檔 legal.json
+# (web 註冊頁 + App 經 /api/v1/legal 都讀這一份;改條文只改 legal.json)
+with open(os.path.join(os.path.dirname(__file__), "legal.json"), encoding="utf-8") as _legal_f:
+    LEGAL = json.load(_legal_f)
+# 條文版本(改版時更新 legal.json 的 version,會記在會員的 consent_version)
+CONSENT_VERSION = os.environ.get("CONSENT_VERSION", LEGAL.get("version", "2026-06-17"))
 # 流年宜忌解讀(進階功能)每次扣的點數
 FORTUNE_AI_COST = int(os.environ.get("FORTUNE_AI_COST", "1"))
 # 解讀後「繼續聊」每則訊息扣的點數(教練式對話;0 = 免費)
@@ -2217,6 +2221,12 @@ def member_delete():
 # 會員:網頁登入 / 註冊 / 登出(session-based,與 App 的 token 並行)
 #   後端驗證共用 db.create_email_user / db.get_email_user,與 App 同一套帳號。
 # ============================================================
+@app.route("/api/v1/legal", methods=["GET"])
+def api_legal():
+    """個資同意書 + 免責聲明的單一來源(legal.json);web 與 App 共用同一份。"""
+    return jsonify(LEGAL)
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register_page():
     """網頁 Email 註冊。成功後寫入 session 並導向會員中心。"""
@@ -2230,7 +2240,8 @@ def register_page():
 
         def _err(msg):
             return render_template(
-                "register.html", mode="register", error=msg, email=email
+                "register.html", mode="register", error=msg, email=email,
+                legal=LEGAL["documents"]
             )
 
         err = _validate_credentials(email, password)
@@ -2252,7 +2263,7 @@ def register_page():
         session["login_at"] = datetime.now(timezone.utc).isoformat()
         return redirect(url_for("member"))
 
-    return render_template("register.html", mode="register")
+    return render_template("register.html", mode="register", legal=LEGAL["documents"])
 
 
 @app.route("/login", methods=["GET", "POST"])

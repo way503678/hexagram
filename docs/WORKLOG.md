@@ -46,6 +46,15 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-06-29 — 個資/免責條文改單一來源(legal.json,web+App 共用)
+- 目標:條文只存一處,改一次兩平台同步(原本 web `register.html` 寫死 + App `legal.ts` 各一份手動維護)。
+- **單一來源 `legal.json`**(repo 根):`{version, documents:[{key,title,body[],agree}]}`(privacy/disclaimer)。
+- **後端 `app.py`**:啟動 `LEGAL = json.load(legal.json)`,`CONSENT_VERSION` 從它來;新增 `GET /api/v1/legal` 回整份;`register_page` 兩處 render 傳 `legal=LEGAL["documents"]`。
+- **`register.html`**:兩個寫死的同意框 → `{% for doc in legal %}` 迴圈渲染(checkbox `name="agree_{{doc.key}}"`,維持 agree_privacy/agree_disclaimer)。
+- **⚠️ Dockerfile 踩雷**:只 COPY `*.py`/templates/static/docs,根目錄的 `legal.json` 沒被複製 → 容器 `FileNotFoundError` 啟動失敗。**加 `COPY legal.json ./`** 修正。教訓:加根目錄非 .py 的執行期檔案,要同步加 Dockerfile COPY。
+- **App 對等**(見 App WORKLOG):`api.ts fetchLegal()` 抓 `/api/v1/legal` + 本地快取;`WelcomeScreen` 改用抓到的條文;**刪除 `src/legal.ts`**(不再有第二份)。
+- 驗證:`/api/v1/legal` 回 version+2 docs、register 頁 2 個 consent-title。**改條文今後只改 `legal.json`**。
+
 ### 2026-06-29 — hamburger 置中 + 移除卦辭裝飾星號(截圖確認)
 - **手機版 hamburger `☰` 偏右沒置中** → `.hamburger` 加 `display:flex/align/justify/padding:0/line-height:1`(手機 `display:block`→`flex`)。截圖確認已置中。桌面版本就隱藏(有 sidebar),不受影響。
 - **本卦↔卦辭之間的金色星號 `✦`**(v2 `.guaci::before content:"✦"`,純裝飾)→ 移除該規則。手機版回到原本低調的金色細線分隔(`@media` 內 `.guaci::before` 30px 線),桌面則無裝飾。
