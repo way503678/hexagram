@@ -1541,6 +1541,10 @@ input[type=number], input[type=text], input[type=password], input[type=email], s
   box-shadow: inset 0 1px 2px rgba(43,45,66,0.03);
   transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
 }
+/* 卜卦問事的年/月/日數字框:v2 的 12px 橫向 padding 會把單位數字裁掉。
+   收窄橫向 padding、月/日略加寬;選 input[type=number].xx 提高 specificity 壓過各層。 */
+input[type=number].y { padding-left: 8px; padding-right: 8px; }
+input[type=number].md { width: 4em; padding-left: 6px; padding-right: 6px; }
 input[type=number]:focus, input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, select:focus, textarea:focus, .yao-input select:focus, .ai-modal-body textarea:focus {
   outline: none;
   border-color: rgba(167,139,250,0.72);
