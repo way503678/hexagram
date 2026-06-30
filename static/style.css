@@ -35,6 +35,9 @@ body {
 }
 /* latin 標語 / MINGO 字樣走 Cormorant(中文維持思源黑體) */
 .brand-en, .landing-wordmark, .landing-subtitle-en { font-family: "Cormorant Garamond", serif; }
+/* 全域連結色:預設走 MINGO 紫(避免吃到瀏覽器預設藍);有 scope 的連結如 sidebar 自帶色不受影響 */
+a { color: var(--primary); }
+a:hover { color: var(--accent); }
 .layout { display: flex; min-height: 100vh; }
 .sidebar {
   width: 180px; background: var(--primary-dark); color: #ddd;
