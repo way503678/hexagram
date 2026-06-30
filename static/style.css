@@ -1545,6 +1545,15 @@ input[type=number], input[type=text], input[type=password], input[type=email], s
    收窄橫向 padding、月/日略加寬;選 input[type=number].xx 提高 specificity 壓過各層。 */
 input[type=number].y { padding-left: 8px; padding-right: 8px; }
 input[type=number].md { width: 4em; padding-left: 6px; padding-right: 6px; }
+/* 年/月/日/時 強制同一行(flex nowrap);窄螢幕縮字級 + 收窄讓四格擠得下 */
+.dt-field { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
+.dt-field .field { display: inline-flex; align-items: center; gap: 3px; margin: 0; white-space: nowrap; }
+@media (max-width: 480px) {
+  .dt-field { gap: 3px; font-size: 13px; }
+  .dt-field input.y { width: 3.8em; padding-left: 5px; padding-right: 5px; }
+  .dt-field input.md { width: 2.7em; padding-left: 4px; padding-right: 4px; }
+  .dt-field select.h { padding-left: 5px; padding-right: 2px; }
+}
 input[type=number]:focus, input[type=text]:focus, input[type=password]:focus, input[type=email]:focus, select:focus, textarea:focus, .yao-input select:focus, .ai-modal-body textarea:focus {
   outline: none;
   border-color: rgba(167,139,250,0.72);
