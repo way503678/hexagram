@@ -46,6 +46,11 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-06-30 — 架構體檢 + 兩項優化(SECRET_KEY fail-fast、style.css 雙 :root 清理)
+- **架構體檢**(診斷,見當時對話):核心引擎與安全基本面紮實(扣點原子 `UPDATE…WHERE balance>=`、SQL 全參數化、AI 問題截斷 500、pbkdf2、登入鎖定)。主要債在可維護性:app.py 2691 行單檔、style.css 雙 :root、模板 inline style 多、無 DB 連線池、扣退點/登入檢查重複、無 rate limit。
+- **#1 SECRET_KEY fail-fast**(app.py:45):原本 `os.environ.get("SECRET_KEY", "change-this-…")` 有弱預設,.env 掉了會默默用弱值 → token 可偽造。改成偵測「未設或已知弱值(含 docker-compose 的 `please-change-me-…`)就 `raise RuntimeError` 拒絕啟動」。production 實際有 64 字元真 key(docker-compose 從 .env 透傳),不受影響;已驗證真 key 放行、弱/空 key 被擋。
+- **style.css 雙 :root 清理**:檔頭原有一份 v1 `:root`(7-26)被後面「v2 覆蓋層」(line 1322)蓋掉 → 改色易只改到死的那層(本人踩過)。把 v1 獨有的功能色 `--moving`/`--danger` 搬進 v2,刪掉整個 v1 區塊,改放指路註解。現在只剩單一 :root(v2)。驗證:線上單一 :root、主色/功能色都在、容器 healthy。
+
 ### 2026-06-29 — 個資/免責條文改單一來源(legal.json,web+App 共用)
 - 目標:條文只存一處,改一次兩平台同步(原本 web `register.html` 寫死 + App `legal.ts` 各一份手動維護)。
 - **單一來源 `legal.json`**(repo 根):`{version, documents:[{key,title,body[],agree}]}`(privacy/disclaimer)。

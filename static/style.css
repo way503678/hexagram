@@ -1,29 +1,9 @@
 /* ============================================================
-   命果 MINGO 設計 tokens(單一真實來源:docs/DESIGN_SYSTEM.md)
-   低飽和紫 + 米白 + 大圓角 + 柔和陰影 + 漸層。
-   ⚠️ 舊「朱紅水墨」風已廢除,不再沿用。命理功能色(五行/世應/
-   吉凶綠紅/動爻)維持判讀正確性,不在換膚範圍。
+   命果 MINGO 設計 tokens — 單一真實來源:docs/DESIGN_SYSTEM.md
+   ⚠️ 所有 CSS 變數(:root)集中定義在下方「MINGO Design System v2」區塊。
+   不要在這裡另開 :root —— 以前上面有一份會被 v2 蓋掉、改色容易只改到死的那層
+   (已移除)。命理功能色(五行/世應/吉凶綠紅/動爻)維持判讀正確性,不在換膚範圍。
    ============================================================ */
-:root {
-  --primary-dark: #2C2942;
-  --primary: #6F5E9B;
-  --accent: #8A79B3;
-  --gold: #E9B34A;
-  --bg-light: #F1E9DC;
-  --surface: #FFFFFF;
-  --text: #2C2942;
-  --text-muted: #6B6385;
-  --border-soft: #E5DDCF;
-  --grad-deep: linear-gradient(135deg, #6F5E9B 0%, #2C2942 100%);
-  --grad-bright: linear-gradient(135deg, #8A79B3 0%, #6F5E9B 100%);
-  --radius-sm: 14px;
-  --radius-md: 18px;
-  --radius-lg: 26px;
-  --shadow-soft: 0 10px 30px rgba(95, 82, 135, 0.14);
-  /* 命理功能色(換膚不動):動爻/忌神紅、凶警紅 */
-  --moving: #c0392b;
-  --danger: #a02020;
-}
 
 * { box-sizing: border-box; }
 body {
@@ -1350,6 +1330,9 @@ details.mingo-collapse .mingo-body { font-size: 14px; color: #4a4862; }
   --shadow-card: 0 14px 34px rgba(95, 82, 135, 0.2);
   --shadow-glow: 0 18px 48px rgba(138, 121, 179, 0.18);
   --shadow-gold: 0 10px 30px rgba(233, 179, 74, 0.22);
+  /* 命理功能色(換膚不動):動爻/忌神紅、凶警紅 */
+  --moving: #c0392b;
+  --danger: #a02020;
 }
 
 html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }

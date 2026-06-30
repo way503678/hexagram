@@ -42,10 +42,19 @@ db.init_db()
 
 app = Flask(__name__)
 
-# Session 設定:cookie 在瀏覽器關閉時自動失效
-app.config["SECRET_KEY"] = os.environ.get(
-    "SECRET_KEY", "change-this-secret-in-production-please"
-)
+# Session / 簽章金鑰:fail-fast — 沒設或用了已知弱預設就拒絕啟動
+# (JWT token 與重設密碼簽章都靠它;絕不可在 production 默默用弱值)
+_WEAK_SECRETS = {
+    "change-this-secret-in-production-please",
+    "please-change-me-in-production",
+}
+_secret_key = (os.environ.get("SECRET_KEY") or "").strip()
+if not _secret_key or _secret_key in _WEAK_SECRETS:
+    raise RuntimeError(
+        "SECRET_KEY 未設定或使用了預設弱值。請在 .env 設一組強隨機字串"
+        "(例如 `python -c \"import secrets;print(secrets.token_hex(32))\"`)。"
+    )
+app.config["SECRET_KEY"] = _secret_key
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
