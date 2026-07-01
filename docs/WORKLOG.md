@@ -46,6 +46,12 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-07-01 — 解讀 prompt v2.1:象內講白(調直白度)
+- 使用者回饋 v2.0 教練腔過軟,沒正面回答「合不合/決定好壞/後續會不會有問題」;要「在卦象顯示的範圍內講直白」。
+- **prompt v2.1**(`AI_INTERPRETER_MANUAL_PROMPT_v1.md`):§四 新增「**象內講白**」強制原則(卦顯示範圍內講直講白、針對在意面向具體正面答、別用「或許/可能有一點」稀釋清楚的象);§三之二【為什麼是這一卦】【可能的發展】改「卦有顯示就直接講、不迴避」。**界線不變**:不下絕對成敗斷言、不代決定(傾向可講、絕對結論不可),象外/不確定才保守。
+- **醫療特例**:健康/醫療/手術/法律/大錢——留意點照講但格外不下好壞判決 + 收尾強調「卦看不了醫療專業、以醫師判斷為準、記得追蹤」。
+- 驗證:loader 擷取確認新內容進 prompt、版本表未外洩;重建後容器內 `_MANUAL_AI_PROMPT` 含「象內講白」。**未改引擎/命理判讀規則(§一~§五)**,只改語氣直白度。
+
 ### 2026-06-30 — 架構體檢 + 兩項優化(SECRET_KEY fail-fast、style.css 雙 :root 清理)
 - **架構體檢**(診斷,見當時對話):核心引擎與安全基本面紮實(扣點原子 `UPDATE…WHERE balance>=`、SQL 全參數化、AI 問題截斷 500、pbkdf2、登入鎖定)。主要債在可維護性:app.py 2691 行單檔、style.css 雙 :root、模板 inline style 多、無 DB 連線池、扣退點/登入檢查重複、無 rate limit。
 - **#1 SECRET_KEY fail-fast**(app.py:45):原本 `os.environ.get("SECRET_KEY", "change-this-…")` 有弱預設,.env 掉了會默默用弱值 → token 可偽造。改成偵測「未設或已知弱值(含 docker-compose 的 `please-change-me-…`)就 `raise RuntimeError` 拒絕啟動」。production 實際有 64 字元真 key(docker-compose 從 .env 透傳),不受影響;已驗證真 key 放行、弱/空 key 被擋。
