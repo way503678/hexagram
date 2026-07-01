@@ -15,18 +15,24 @@
 {% endif %}
 
 <form method="post" action="/manual" id="manualForm"{% if r %} style="display:none;"{% endif %}>
-  <div class="dt-field" style="margin-bottom: 10px;">
+  {# ---- 起卦時間:擲卦以「當下」為準、不需選;管理員下拉模式才可自訂 ---- #}
+  <div id="nowTimeRow" style="margin-bottom:10px; color:#555; font-size:14px;">
+    🕐 起卦時間:<strong id="nowClock">—</strong>
+    <span style="color:#999; font-size:12px;">(擲卦以按下「排盤」的當下為準,不需選擇)</span>
+  </div>
+  {# 年月日時:平時隱藏由 JS 自動帶當下;管理員切下拉模式時才顯示可編輯 #}
+  <div class="dt-field" id="dtPicker" style="margin-bottom:10px; display:none;">
     <span class="field">
-      <input class="y" type="number" name="y" value="{{ y or default_y }}" min="1900" max="2100"> 年
+      <input class="y" type="number" name="y" id="fld_y" value="{{ y or default_y }}" min="1900" max="2100"> 年
     </span>
     <span class="field">
-      <input class="md" type="number" name="m" value="{{ m or default_m }}" min="1" max="12"> 月
+      <input class="md" type="number" name="m" id="fld_m" value="{{ m or default_m }}" min="1" max="12"> 月
     </span>
     <span class="field">
-      <input class="md" type="number" name="d" value="{{ d or default_d }}" min="1" max="31"> 日
+      <input class="md" type="number" name="d" id="fld_d" value="{{ d or default_d }}" min="1" max="31"> 日
     </span>
     <span class="field">
-      <select class="h" name="h">
+      <select class="h" name="h" id="fld_h">
         {% for hv in range(24) %}
           <option value="{{ hv }}" {% if (h is not none) and (h|int == hv) %}selected{% endif %}>{{ '%02d' % hv }}</option>
         {% endfor %}
@@ -742,6 +748,43 @@
       });
     });
   });
+
+  // ---------- 起卦時間:擲卦模式自動用當下時間 ----------
+  (function(){
+    var fy=document.getElementById('fld_y'), fm=document.getElementById('fld_m'),
+        fd=document.getElementById('fld_d'), fh=document.getElementById('fld_h'),
+        clockEl=document.getElementById('nowClock'),
+        pickerEl=document.getElementById('dtPicker'),
+        nowRowEl=document.getElementById('nowTimeRow'),
+        formEl=document.getElementById('manualForm');
+    var manualTime=false;
+    var IS_RESULT={% if r %}true{% else %}false{% endif %};
+    function pad(n){return (n<10?'0':'')+n;}
+    function refreshNow(){
+      if (manualTime || IS_RESULT) return;
+      var now=new Date();
+      if(fy)fy.value=now.getFullYear(); if(fm)fm.value=now.getMonth()+1;
+      if(fd)fd.value=now.getDate(); if(fh)fh.value=now.getHours();
+      if(clockEl)clockEl.textContent=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+' '+pad(now.getHours())+':'+pad(now.getMinutes());
+    }
+    // 管理員切下拉模式→可自訂時間(停自動);切回擲卦→回到自動當下
+    document.querySelectorAll('.mode-tab').forEach(function(t){
+      t.addEventListener('click', function(){
+        manualTime=(this.dataset.mode==='manual');
+        if(pickerEl)pickerEl.style.display=manualTime?'':'none';
+        if(nowRowEl)nowRowEl.style.display=manualTime?'none':'';
+        if(!manualTime)refreshNow();
+      });
+    });
+    if(IS_RESULT){
+      // 結果頁:顯示這次的起卦時間(唯讀),不覆蓋(供 AI 解讀用同一時間)
+      if(clockEl)clockEl.textContent={{ (y or default_y)|int }}+'-'+pad({{ (m or default_m)|int }})+'-'+pad({{ (d or default_d)|int }})+' '+pad({{ (h if h != '' else default_h)|int }})+':00';
+    } else {
+      refreshNow();
+      setInterval(refreshNow,1000);
+      if(formEl)formEl.addEventListener('submit',refreshNow); // 送出前再定格為當下
+    }
+  })();
 
   // ---------- 共用 hidden 同步 ----------
   function setHidden(ypos, val) {
