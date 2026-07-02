@@ -96,7 +96,7 @@
   <div class="mode-panel" id="panelCoin">
     <div class="coin-controls">
       <button type="button" id="btnCast" class="coin-btn">擲第 1 爻(初爻)</button>
-      <button type="button" id="btnReset" class="coin-btn coin-btn-reset" style="display:none;">重新擲卦</button>
+      <button type="submit" id="btnCoinSubmit" class="coin-btn" style="display:none;">排盤 →</button>
     </div>
     <div class="coin-instructions">
       從初爻開始,由下往上依序擲六次。
@@ -140,7 +140,8 @@
   {% endfor %}
 
   <div style="margin-top: 10px;">
-    <button type="submit">排盤</button>
+    {# 底部排盤鈕:僅下拉模式(管理員)用;擲卦模式改用擲滿 6 次後出現的「排盤 →」 #}
+    <button type="submit" id="submitBottom" style="display:none;">排盤</button>
   </div>
 </form>
 
@@ -767,6 +768,9 @@
       Object.keys(panels).forEach(function(k){
         panels[k].style.display = (k === mode) ? '' : 'none';
       });
+      // 下拉模式用底部「排盤」鈕;擲卦模式用擲滿 6 次後的「排盤 →」
+      var sb = document.getElementById('submitBottom');
+      if (sb) sb.style.display = (mode === 'manual') ? '' : 'none';
     });
   });
 
@@ -838,13 +842,13 @@
 
   var currentSlot = 0;
   var btnCast = document.getElementById('btnCast');
-  var btnReset = document.getElementById('btnReset');
+  var btnCoinSubmit = document.getElementById('btnCoinSubmit');
   var yposNames = ['初','二','三','四','五','上'];
 
   function updateCastButtonLabel() {
     if (currentSlot >= 6) {
       btnCast.style.display = 'none';
-      btnReset.style.display = '';
+      if (btnCoinSubmit) btnCoinSubmit.style.display = '';  // 擲滿 6 次 → 顯示「排盤」
       return;
     }
     var ypos = currentSlot;  // slot 0 = 初爻, slot 5 = 上爻
@@ -889,21 +893,6 @@
     }, 80);
   });
 
-  btnReset.addEventListener('click', function(){
-    currentSlot = 0;
-    document.querySelectorAll('.coin-yao-row').forEach(function(row){
-      row.classList.remove('coin-yao-done','coin-yao-moving','coin-yao-rolling');
-      row.querySelector('.coin-symbol').textContent = '—';
-      row.querySelector('.coin-name').textContent = '未擲';
-    });
-    // 重置 hidden 為預設少陽不動
-    for (var i = 0; i < 6; i++) {
-      setHidden(i, '1,0');
-    }
-    btnReset.style.display = 'none';
-    btnCast.style.display = '';
-    updateCastButtonLabel();
-  });
 
   updateCastButtonLabel();
 
