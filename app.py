@@ -57,6 +57,9 @@ if not _secret_key or _secret_key in _WEAK_SECRETS:
 app.config["SECRET_KEY"] = _secret_key
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# 登入最長有效期:超過即自動登出(App token 與網頁 session 皆適用)。預設 24 小時。
+SESSION_MAX_AGE_SECONDS = int(os.environ.get("SESSION_MAX_AGE_HOURS", "24")) * 3600
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(seconds=SESSION_MAX_AGE_SECONDS)
 
 
 @app.after_request
@@ -93,8 +96,6 @@ def _email_is_admin(email):
 #   不依賴瀏覽器 cookie session。token 用既有 SECRET_KEY 以 HMAC-SHA256 簽章,
 #   不需額外套件。token 內只放 user id 與到期時間,驗章 + 未過期即視為有效。
 # ============================================================
-# token 有效天數(逾期須重新登入)
-TOKEN_TTL_DAYS = int(os.environ.get("TOKEN_TTL_DAYS", "30"))
 # 新會員註冊時贈送的點數(方便在 App 上實測解盤流程;設 0 可關閉)
 NEW_USER_BONUS = int(os.environ.get("NEW_USER_BONUS", "3"))
 # 密碼最短長度(政策:至少 8 碼、且英數混合)
@@ -131,7 +132,7 @@ def make_token(user_id):
     """簽發一個會員 token(JWT/HS256),內含 uid 與到期時間。"""
     header = {"alg": "HS256", "typ": "JWT"}
     now = int(time.time())
-    payload = {"uid": int(user_id), "iat": now, "exp": now + TOKEN_TTL_DAYS * 86400}
+    payload = {"uid": int(user_id), "iat": now, "exp": now + SESSION_MAX_AGE_SECONDS}
     signing_input = (
         _b64url(json.dumps(header, separators=(",", ":")).encode())
         + "."
@@ -152,7 +153,12 @@ def verify_token(token):
             return None
         _, payload_b64 = signing_input.split(".")
         payload = json.loads(_b64url_decode(payload_b64))
-        if int(payload.get("exp", 0)) < int(time.time()):
+        now = int(time.time())
+        if int(payload.get("exp", 0)) < now:
+            return None
+        # 登入最長 24 小時:iat 距今超過上限即失效(連舊的長效 token 一併登出)
+        iat = int(payload.get("iat", 0))
+        if iat and now - iat > SESSION_MAX_AGE_SECONDS:
             return None
         return int(payload["uid"])
     except Exception:
@@ -437,6 +443,20 @@ def admin_required(view):
 _UNSET = object()
 
 
+def _session_expired(login_at_iso):
+    """網頁 session 是否已超過最長登入時效(SESSION_MAX_AGE_SECONDS)。
+    無 login_at(舊 session)一律視為過期,強制重新登入。"""
+    if not login_at_iso:
+        return True
+    try:
+        la = datetime.fromisoformat(login_at_iso)
+        if la.tzinfo is None:
+            la = la.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - la).total_seconds() > SESSION_MAX_AGE_SECONDS
+    except Exception:
+        return True
+
+
 def current_user():
     """回傳目前登入會員 dict(含 points_balance、is_admin)或 None。
 
@@ -473,9 +493,12 @@ def _resolve_current_user():
     # 2. 網頁會員:登入後存在 session 的 user_id(cookie)
     sid = session.get("user_id")
     if sid:
-        u = db.get_user(sid)
-        if u:
-            return _augment(u)
+        if _session_expired(session.get("login_at")):
+            session.clear()  # 登入超過 24 小時 → 自動登出
+        else:
+            u = db.get_user(sid)
+            if u:
+                return _augment(u)
     return None
 
 

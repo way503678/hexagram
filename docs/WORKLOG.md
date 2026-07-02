@@ -46,6 +46,12 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-07-02 — 登入最長 24 小時,超過自動登出
+- 新增 `SESSION_MAX_AGE_SECONDS`(env `SESSION_MAX_AGE_HOURS`,預設 24)。
+- **App(token)**:`make_token` exp 改 24h;`verify_token` 加 `iat` 檢查——距今超過 24h 即失效(連舊的 30 天長效 token 一併登出)。移除舊 `TOKEN_TTL_DAYS`(30)。App 收 401 由 AuthContext 自動登出,**不需改 App、不需發 APK**。
+- **Web(session)**:`PERMANENT_SESSION_LIFETIME=24h`;`_resolve_current_user` 查 `session['login_at']`,超過 24h(或缺)清 session 強制重登。
+- 容器內實測:新 token 有效、25h 舊 token 失效、23h 有效;session 25h 過期、1h 有效、缺 login_at 過期。
+
 ### 2026-07-02 — 萬年曆彈窗日期改「年月日」格式
 - 使用者:萬年曆 hover 小彈窗的日期由 `2026-07-05` 改為 `2026年7月5日`(pop-h)。
 - **干支也改全柱**:pop-h 原只印日柱 `庚辰日` → 改 `丙午年甲午月庚辰日`(year_gz/month_gz/day_gz)。App `AlmanacScreen` 干支列本就顯示全柱,不用改。
