@@ -108,7 +108,7 @@
       </div>
       {% if z %}
       <div class="cell-pop">
-        <div class="pop-h">{{ day.solar }}　{{ day.day_gz }}日　<b class="{{ jl }}">{{ z['吉凶'] }}</b></div>
+        <div class="pop-h">{{ day.solar[:4] }}年{{ day.solar[5:7]|int }}月{{ day.solar[8:10]|int }}日　{{ day.day_gz }}日　<b class="{{ jl }}">{{ z['吉凶'] }}</b></div>
         <div class="pop-bh">{{ z['白話'] }}</div>
         <div class="pop-r"><span class="yi">宜</span>{{ z['宜']|join('、') }}</div>
         <div class="pop-r"><span class="ji">忌</span>{{ z['忌']|join('、') }}</div>
