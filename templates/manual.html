@@ -4,6 +4,27 @@
 {% block content %}
 <h1>卜卦問事</h1>
 
+{% if not r %}
+{# ---- 卜卦說明彈窗(每日一次;確認前不可擲卦)---- #}
+<div id="introModal" style="display:none; position:fixed; inset:0; z-index:2000;
+     background:rgba(43,45,66,0.45); align-items:center; justify-content:center; padding:20px;">
+  <div style="background:#fff; border-radius:18px; max-width:360px; width:100%; padding:24px 22px;
+       box-shadow:0 14px 34px rgba(95,82,135,.25); text-align:center;">
+    <div style="font-size:18px; font-weight:800; color:var(--primary-dark); margin-bottom:16px;">卜卦說明</div>
+    <p style="font-size:15px; color:var(--text); line-height:2; margin:0;">本軟體為:<strong>金錢卦</strong>卜卦方式</p>
+    <p style="font-size:15px; color:var(--text); line-height:2; margin:0 0 18px;">需請自行手動擲卦共 <strong>6</strong> 次</p>
+    <label style="display:flex; align-items:center; justify-content:center; gap:8px;
+           font-size:14px; color:var(--text-muted); border:1px solid var(--border-soft);
+           border-radius:10px; padding:10px; margin-bottom:16px; cursor:pointer;">
+      <input type="checkbox" id="introHideToday"> 今日不再顯示
+    </label>
+    <button type="button" id="introConfirm"
+      style="width:100%; background:var(--grad-bright); color:#fff; border:none;
+      padding:12px; border-radius:22px; font-size:15px; font-weight:700; cursor:pointer;">確認</button>
+  </div>
+</div>
+{% endif %}
+
 {% if r %}
   <button type="button" id="toggleFormBtn"
           style="margin-bottom:10px; padding:8px 16px; cursor:pointer;
@@ -73,6 +94,10 @@
 
   {# ---- 擲卦模式 ---- #}
   <div class="mode-panel" id="panelCoin">
+    <div class="coin-controls">
+      <button type="button" id="btnCast" class="coin-btn">擲第 1 爻(初爻)</button>
+      <button type="button" id="btnReset" class="coin-btn coin-btn-reset" style="display:none;">重新擲卦</button>
+    </div>
     <div class="coin-instructions">
       從初爻開始,由下往上依序擲六次。
     </div>
@@ -88,10 +113,6 @@
           <span class="coin-name">未擲</span>
         </div>
       {% endfor %}
-    </div>
-    <div class="coin-controls">
-      <button type="button" id="btnCast" class="coin-btn">擲第 1 爻(初爻)</button>
-      <button type="button" id="btnReset" class="coin-btn coin-btn-reset" style="display:none;">重新擲卦</button>
     </div>
   </div>
 
@@ -831,6 +852,7 @@
   }
 
   btnCast.addEventListener('click', function(){
+    if (window.__castLocked) return;  // 未點「確認」說明前不可擲卦
     if (currentSlot >= 6) return;
     btnCast.disabled = true;
     var slot = currentSlot;
@@ -884,6 +906,26 @@
   });
 
   updateCastButtonLabel();
+
+  // ---------- 卜卦說明彈窗(每日一次;確認前鎖住擲卦)----------
+  (function(){
+    var modal = document.getElementById('introModal');
+    if (!modal) return;
+    var KEY = 'mingo_manual_intro_hide';
+    function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+    var hideToday=false;
+    try { hideToday = (localStorage.getItem(KEY) === todayStr()); } catch(e){}
+    if (hideToday) return;               // 今日已勾「不再顯示」→ 不彈、可直接擲卦
+    window.__castLocked = true;          // 未按「確認」前鎖住擲卦
+    modal.style.display = 'flex';
+    var confirmBtn = document.getElementById('introConfirm');
+    if (confirmBtn) confirmBtn.addEventListener('click', function(){
+      var chk = document.getElementById('introHideToday');
+      if (chk && chk.checked) { try { localStorage.setItem(KEY, todayStr()); } catch(e){} }
+      window.__castLocked = false;
+      modal.style.display = 'none';
+    });
+  })();
 })();
 </script>
 {% endblock %}
