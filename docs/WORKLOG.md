@@ -48,7 +48,8 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ### 2026-07-02 — 萬年曆彈窗日期改「年月日」格式
 - 使用者:萬年曆 hover 小彈窗的日期由 `2026-07-05` 改為 `2026年7月5日`(pop-h)。
-- 兩平台對等:App `AlmanacScreen` 選日詳情標題同步改 `sel.solar` → 年月日格式。
+- **干支也改全柱**:pop-h 原只印日柱 `庚辰日` → 改 `丙午年甲午月庚辰日`(year_gz/month_gz/day_gz)。App `AlmanacScreen` 干支列本就顯示全柱,不用改。
+- 兩平台對等:App `AlmanacScreen` 選日詳情標題國曆同步改年月日格式。
 - 純顯示格式,web 已重建驗證;App 已改+tsc(未發 APK)。
 
 ### 2026-07-02 — 卜卦問事:擲滿 6 次後「重新擲卦」改「排盤」
