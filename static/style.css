@@ -222,13 +222,13 @@ th, td { border: 1px solid #bbb; padding: 6px 10px; text-align: center; directio
 th { background: #EFEDF6; }
 th.narrow, td.narrow { padding: 6px 3px; }
 th.narrow { white-space: normal; line-height: 1.2; }
-td.fushen, th.fushen { width: 4em; padding: 6px 4px; }
-td.fushen div { line-height: 1.25; font-size: 14px; color: #56536b; }
-td.fushen div + div { margin-top: 2px; }
 td.yao { font-family: monospace; font-size: 18px; letter-spacing: 2px; }
 .dong { background: #fff3c4; font-weight: bold; }
 .shi { color: #b00; font-weight: bold; }
 .ying { color: #006; font-weight: bold; }
+/* 表格瘦身(2026-07-03):世應併入爻象格(爻下置中小字)、伏神併入六親格(左下小字) */
+td.yao .sy-badge { text-align: center; font-size: 11px; line-height: 1.2; letter-spacing: 0; font-family: "Noto Sans TC", sans-serif; }
+.liuqin-cell .fushen-sub { font-size: 11px; text-align: left; color: #7a6aa6; line-height: 1.3; font-weight: normal; }
 .yuan { color: #0a7a0a; font-weight: bold; }
 .ji   { color: #b00; font-weight: bold; }
 .chou { color: #a65; font-weight: bold; }
@@ -697,6 +697,7 @@ details.mingo-collapse .mingo-body { font-size: 14px; color: #4a4862; }
     background: transparent;
   }
 
+  .hex-table-wrap { direction: rtl; }  /* 初始捲位停在右端(六神/爻象端),符合由右往左讀的卦表 */
   table.hex-table {
     direction: rtl;
     margin: 0 auto;
@@ -724,11 +725,6 @@ details.mingo-collapse .mingo-body { font-size: 14px; color: #4a4862; }
     padding: 6px 4px;
     line-height: 1.3;
   }
-  table.hex-table th.fushen {
-    width: auto;
-    padding: 6px 8px;
-  }
-
   /* 內容格 - 點線分隔,墨色字 */
   table.hex-table td {
     background: transparent;
@@ -743,16 +739,6 @@ details.mingo-collapse .mingo-body { font-size: 14px; color: #4a4862; }
     padding: 12px 6px;
     font-size: 14px;
   }
-  table.hex-table td.fushen {
-    padding: 12px 8px;
-    width: auto;
-  }
-  table.hex-table td.fushen div {
-    font-size: 13px;
-    color: var(--text-muted);
-    line-height: 1.5;
-  }
-
   /* 最後一列不要底線 */
   table.hex-table tr:last-child td {
     border-bottom: none;

@@ -1,13 +1,6 @@
 {# 排盤結果表格(本卦)— cast 與 manual 共用 #}
 {# 參數:r = 排盤結果 dict #}
 
-{% macro shen_span(s) -%}
-  {%- if s == '元神' -%}<span class="yuan">元神</span>
-  {%- elif s == '忌神' -%}<span class="ji">忌神</span>
-  {%- elif s == '仇神' -%}<span class="chou">仇神</span>
-  {%- endif -%}
-{%- endmacro %}
-
 <div class="meta">
   {% if question %}
     <div>❓ 所問:<b>{{ question }}</b></div>
@@ -35,27 +28,25 @@
 <div class="hex-table-wrap">
   <table class="hex-table">
     <tr>
-      <th>六神</th><th>爻象</th><th>干支</th><th>世應</th><th>六親</th><th>神煞</th>
+      <th>六神</th><th>爻象</th><th>干支</th><th>六親</th>
       <th class="narrow">動爻<br>干支</th>
       <th class="narrow">動爻<br>六親</th>
-      <th class="fushen">伏神</th>
     </tr>
     {% for row in h_data['爻']|reverse %}
       <tr class="{% if row['動爻'] %}dong{% endif %}">
         <td>{{ row['六神'] }}</td>
-        <td class="yao">{{ row['爻象'] }}</td>
-        <td>{{ row['干支'] }}</td>
-        <td>
-          {% if row['世'] %}<span class="shi">世</span>{% endif %}
-          {% if row['應'] %}<span class="ying">應</span>{% endif %}
+        <td class="yao">
+          {{ row['爻象'] }}
+          {% if row['世'] %}<div class="sy-badge"><span class="shi">世</span></div>{% endif %}
+          {% if row['應'] %}<div class="sy-badge"><span class="ying">應</span></div>{% endif %}
         </td>
-        <td>{{ row['六親'] }}</td>
-        <td>{{ shen_span(row['神煞']) }}</td>
+        <td>{{ row['干支'] }}</td>
+        <td class="liuqin-cell">
+          {{ row['六親'] }}
+          {% for f in row['伏神'] %}<div class="fushen-sub">伏 {{ f['六親'] }}{{ f['地支'] }}</div>{% endfor %}
+        </td>
         <td class="narrow">{% if row['動爻'] and row.get('動爻出去干支') %}{{ row['動爻出去干支'] }}{% endif %}</td>
         <td class="narrow">{% if row['動爻'] and row.get('動爻出去六親') %}{{ row['動爻出去六親'] }}{% endif %}</td>
-        <td class="fushen">
-          {% for f in row['伏神'] %}<div>{{ f['六親'] }}{{ f['地支'] }}</div>{% endfor %}
-        </td>
       </tr>
     {% endfor %}
   </table>
