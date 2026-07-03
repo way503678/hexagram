@@ -729,20 +729,8 @@
 
 <script>
 (function(){
-  // ---------- 排盤前驗證:所問之事必填 ----------
+  // (排盤不強制填問題;問題只在做 AI 解讀時才需要)
   var manualForm = document.getElementById('manualForm');
-  if (manualForm) {
-    manualForm.addEventListener('submit', function(e){
-      var qEl = document.getElementById('manual-question');
-      // 問題欄為管理員專用,存在時才驗證
-      if (qEl && !(qEl.value || '').trim()) {
-        e.preventDefault();
-        alert('請先填寫「所問之事」再排盤。');
-        qEl.scrollIntoView({behavior:'smooth', block:'center'});
-        qEl.focus();
-      }
-    });
-  }
 
   // ---------- 排盤設定收合(有結果時預設收起,保持畫面乾淨)----------
   var toggleFormBtn = document.getElementById('toggleFormBtn');
