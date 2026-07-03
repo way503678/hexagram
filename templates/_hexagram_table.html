@@ -43,7 +43,7 @@
         <td>{{ row['干支'] }}</td>
         <td class="liuqin-cell">
           {{ row['六親'] }}
-          {% for f in row['伏神'] %}<div class="fushen-sub">伏 {{ f['六親'] }}{{ f['地支'] }}</div>{% endfor %}
+          {% for f in row['伏神'] %}<div class="fushen-sub">{{ f["六親"] }}{{ f["地支"] }}</div>{% endfor %}
         </td>
         <td class="narrow">{% if row['動爻'] and row.get('動爻出去干支') %}{{ row['動爻出去干支'] }}{% endif %}</td>
         <td class="narrow">{% if row['動爻'] and row.get('動爻出去六親') %}{{ row['動爻出去六親'] }}{% endif %}</td>
