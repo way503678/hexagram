@@ -25,15 +25,6 @@
 </div>
 {% endif %}
 
-{% if r %}
-  <button type="button" id="toggleFormBtn"
-          style="margin-bottom:10px; padding:8px 16px; cursor:pointer;
-                 border:1px solid var(--primary); border-radius:6px;
-                 background:#fff; color:var(--primary);
-                 font-size:15px; font-weight:600;">
-    ▼ 展開排盤設定
-  </button>
-{% endif %}
 
 <form method="post" action="/manual" id="manualForm"{% if r %} style="display:none;"{% endif %}>
   {# ---- 起卦時間:擲卦以「當下」為準、不需選;管理員下拉模式才可自訂 ---- #}
@@ -740,16 +731,6 @@
         qEl.scrollIntoView({behavior:'smooth', block:'center'});
         qEl.focus();
       }
-    });
-  }
-
-  // ---------- 排盤設定收合(有結果時預設收起,保持畫面乾淨)----------
-  var toggleFormBtn = document.getElementById('toggleFormBtn');
-  if (toggleFormBtn && manualForm) {
-    toggleFormBtn.addEventListener('click', function(){
-      var isHidden = manualForm.style.display === 'none';
-      manualForm.style.display = isHidden ? '' : 'none';
-      toggleFormBtn.textContent = isHidden ? '▲ 收合排盤設定' : '▼ 展開排盤設定';
     });
   }
 

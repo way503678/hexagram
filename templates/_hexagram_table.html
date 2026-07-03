@@ -9,6 +9,9 @@
 {%- endmacro %}
 
 <div class="meta">
+  {% if question %}
+    <div>❓ 所問:<b>{{ question }}</b></div>
+  {% endif %}
   {% if r['公曆'] %}
     <div>公曆:{{ r['公曆'] }}　　農曆:{{ r['農曆'] }}</div>
     <div class="sizhu">
