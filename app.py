@@ -57,6 +57,8 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # 登入最長有效期:超過即自動登出(App token 與網頁 session 皆適用)。預設 24 小時。
 SESSION_MAX_AGE_SECONDS = int(os.environ.get("SESSION_MAX_AGE_HOURS", "24")) * 3600
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(seconds=SESSION_MAX_AGE_SECONDS)
+# 靜態檔快取 1 年:模板引用皆帶 ?v={{ asset_version }}(檔案 mtime),改版自動換 URL 不怕舊快取
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = timedelta(days=365)
 
 
 @app.after_request

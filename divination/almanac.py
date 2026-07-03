@@ -10,6 +10,7 @@
 """
 import calendar as _calendar
 from datetime import datetime, timedelta
+from functools import lru_cache
 
 import sxtwl
 
@@ -157,6 +158,7 @@ def _jieqi_time(sd):
         return name, None
 
 
+@lru_cache(maxsize=400)  # 純日期函數(擇日/紫白/節氣不隨時間變),快取省 ~27ms/日;呼叫端只讀勿改回傳 dict
 def day_info(year, month, day):
     """單日萬年曆資料。"""
     sd = sxtwl.fromSolar(year, month, day)
@@ -474,6 +476,7 @@ def day_zeri(year, month, day):
     }
 
 
+@lru_cache(maxsize=24)  # 整月 ~836ms → 首次後 ~0ms(內容確定不變);呼叫端只讀勿改回傳
 def month_info(year, month):
     """整月萬年曆:每日資料 + 當月節氣摘要(供月曆畫面)。"""
     last = _calendar.monthrange(year, month)[1]

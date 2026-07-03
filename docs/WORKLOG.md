@@ -46,6 +46,12 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-07-03 — 效能評測 + 二項修復(黃曆快取、靜態檔快取)
+- **評測**(localhost 直測):引擎極快(排盤 0.4ms/prompt 1ms);**熱點=黃曆 `month_info` 836ms**(31 天×26.6ms 逐日重算),/almanac 與 API month 每次 ~845ms;**併發 8 人開黃曆 p50 飆 6.5 秒**(CPU bound+GIL)。流年 81ms、analyze_daily 15ms(低頻可接受)。傳輸層:style.css 57KB 竟是 `no-cache`(明明有 ?v= busting)、origin 無 gzip。資源健康(RAM 80MB)。
+- **修 1:黃曆 lru_cache**(almanac.py):`day_info(400)`/`month_info(24)` — 純日期函數(擇日/紫白/節氣不變)安全快取;呼叫端(render/jsonify)皆只讀。**/almanac 846ms→~4ms;併發8 6531ms→12-24ms**。注意:快取 per-worker(gunicorn 2 процes),重建後每 worker 每月份首次仍 ~840ms(一次性)。**勿在呼叫端 mutate 回傳 dict**(會污染快取)。
+- **修 2:靜態檔快取 1 年**(app.py `SEND_FILE_MAX_AGE_DEFAULT=365d`):模板全帶 `?v={{asset_version}}`(mtime),改版自動換 URL;style.css 從每頁重抓 57KB → 快取。對 tunnel(使用者瓶頸)體感最有感。
+- 未做(記錄):gzip(要新套件 flask-compress,效益中,先觀察)、analyze_daily/fortune 快取(涉會員資料變更,低頻不值得)。內容正確性抽查 7/5=庚辰日 ✓。
+
 ### 2026-07-03 — 文件體檢對齊實況 + 清死碼(兩平台)
 - 用兩個探查代理掃 web/App 文件 vs 實況,逐項核實後修:
 - **後端**:README.md 整份重寫(舊名命卦排盤→命果 MINGO、補萬年曆/會員/API/almanac、路由改分群、移除已刪的 `/admin/login`、修死連結 PROCESS_SAFETY.md);HEXAGRAM_FILES.md 刪 `admin/login.html`(已刪、raw 會 404)+ 檔數改「快照會過時、以 git ls-files 為準」+ .env 機密改 ADMIN_EMAILS;DEPLOY.md 補「postgres 是外部 finance-apps 相依」警告;app.py docstring 路由總覽更新(刪不存在的 admin/login|logout)。
