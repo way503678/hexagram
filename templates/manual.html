@@ -63,25 +63,23 @@
   {# ---- 問事類別固定 all(原 radio 已移除)---- #}
   <input type="hidden" name="aspect" value="all">
 
-  {# ---- 所問之事(需登入會員,先填再擲卦)---- #}
-  {% if current_user %}
-    <div class="manual-question-box" style="margin: 10px 0; padding: 10px;
-         border: 1px solid #ddd; border-radius: 6px; background: #F3F1F8;">
-      <label for="manual-question" style="display:block; margin-bottom:6px; font-weight:600;">
-        今天要問什麼呢?
-      </label>
-      <textarea id="manual-question" name="question"
-                placeholder="例如:我下週的面試會順利嗎?"
-                maxlength="500"
-                style="width:100%; min-height:70px; padding:8px;
-                       font-size:15px; border:1px solid #ddd;
-                       border-radius:4px; resize:vertical;
-                       box-sizing:border-box;">{{ question or '' }}</textarea>
-      <div style="font-size:12px; color:#999; margin-top:4px;">
-        上限 500 字。擲卦後此問題會保留,供 AI 解讀使用。
-      </div>
+  {# ---- 所問之事(不需登入即可填;AI 解讀按鈕仍限會員)---- #}
+  <div class="manual-question-box" style="margin: 10px 0; padding: 10px;
+       border: 1px solid #ddd; border-radius: 6px; background: #F3F1F8;">
+    <label for="manual-question" style="display:block; margin-bottom:6px; font-weight:600;">
+      今天要問什麼呢?
+    </label>
+    <textarea id="manual-question" name="question"
+              placeholder="例如:我下週的面試會順利嗎?"
+              maxlength="500"
+              style="width:100%; min-height:70px; padding:8px;
+                     font-size:15px; border:1px solid #ddd;
+                     border-radius:4px; resize:vertical;
+                     box-sizing:border-box;">{{ question or '' }}</textarea>
+    <div style="font-size:12px; color:#999; margin-top:4px;">
+      上限 500 字。擲卦後此問題會保留,供 AI 解讀使用{% if not current_user %}(AI 解讀需先登入會員){% endif %}。
     </div>
-  {% endif %}
+  </div>
 
   {# ---- 擲卦模式 ---- #}
   <div class="mode-panel" id="panelCoin">
