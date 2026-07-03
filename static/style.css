@@ -1789,22 +1789,7 @@ table.hex-table tr.dong td {
   gap: 32px;
   min-height: calc(100vh - 40px);
 }
-.landing::before {
-  content: "";
-  width: min(280px, 58vw);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 62% 30%, rgba(246,189,96,0.62), transparent 23%),
-    conic-gradient(from 210deg, rgba(94,84,142,0.0), rgba(94,84,142,0.85), rgba(246,189,96,0.25), rgba(94,84,142,0.0));
-  filter: blur(.2px);
-  opacity: .38;
-  position: absolute;
-  top: 26px;
-  left: 50%;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
+/* (原 .landing::before 渲染月亮光暈已移除 2026-07-03 — 改用 logo 圖,不再需要) */
 .landing-symbol {
   color: var(--gold);
   text-shadow: 0 12px 30px rgba(246,189,96,0.24);
