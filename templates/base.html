@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&display=swap" rel="stylesheet">
   <meta name="csrf-token" content="{{ csrf_token }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}?v={{ asset_version }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ asset_version }}">
   <script>window.CSRF=(document.querySelector('meta[name="csrf-token"]')||{}).content||'';</script>
   {% block extra_head %}{% endblock %}
