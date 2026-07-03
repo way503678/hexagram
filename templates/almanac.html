@@ -21,6 +21,19 @@
               text-align:left; white-space:normal; }
   .cell:hover .cell-pop { display:block; }
   .cell:nth-child(7n) .cell-pop, .cell:nth-child(7n-1) .cell-pop { left:auto; right:0; }
+  /* 手機:彈卡改固定置中,不會超出視窗(桌面維持跟隨格子) */
+  @media (max-width: 768px) {
+    .cell-pop,
+    .cell:nth-child(7n) .cell-pop, .cell:nth-child(7n-1) .cell-pop {
+      position: fixed;
+      top: 50%; left: 50%; right: auto;
+      transform: translate(-50%, -50%);
+      width: min(320px, 88vw); max-width: 88vw;
+      max-height: 70vh; overflow-y: auto;
+      z-index: 1200;
+      box-shadow: 0 10px 40px rgba(43,45,66,.35);
+    }
+  }
   .cell-pop .pop-h { font-weight:700; margin-bottom:4px; }
   .cell-pop .pop-bh { color:#222; background:#F3F1F8; border-radius:6px; padding:6px 8px; margin-bottom:6px; line-height:1.6; }
   .cell-pop .pop-r { color:#444; }
