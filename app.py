@@ -127,11 +127,19 @@ def _b64url_decode(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
 
+def _pw_version(user_id):
+    """密碼版本指紋(密碼雜湊的短 hash)。綁進登入憑證:
+    密碼一改(重設/變更),指紋變 → 所有舊 token/session 自動失效(全裝置登出)。"""
+    h = db.get_password_hash(user_id) or ""
+    return hashlib.sha256(h.encode("utf-8")).hexdigest()[:8]
+
+
 def make_token(user_id):
-    """簽發一個會員 token(JWT/HS256),內含 uid 與到期時間。"""
+    """簽發一個會員 token(JWT/HS256),內含 uid、到期時間與密碼版本(pwv)。"""
     header = {"alg": "HS256", "typ": "JWT"}
     now = int(time.time())
-    payload = {"uid": int(user_id), "iat": now, "exp": now + SESSION_MAX_AGE_SECONDS}
+    payload = {"uid": int(user_id), "iat": now, "exp": now + SESSION_MAX_AGE_SECONDS,
+               "pwv": _pw_version(user_id)}
     signing_input = (
         _b64url(json.dumps(header, separators=(",", ":")).encode())
         + "."
@@ -159,7 +167,11 @@ def verify_token(token):
         iat = int(payload.get("iat", 0))
         if iat and now - iat > SESSION_MAX_AGE_SECONDS:
             return None
-        return int(payload["uid"])
+        uid = int(payload["uid"])
+        # 密碼版本:改/重設密碼後,舊 token 一律失效(無 pwv 的舊制 token 也視為失效)
+        if payload.get("pwv") != _pw_version(uid):
+            return None
+        return uid
     except Exception:
         return None
 
@@ -494,6 +506,8 @@ def _resolve_current_user():
     if sid:
         if _session_expired(session.get("login_at")):
             session.clear()  # 登入超過 24 小時 → 自動登出
+        elif session.get("pwv") != _pw_version(sid):
+            session.clear()  # 密碼已改/重設 → 所有舊 session 失效(自動登出)
         else:
             u = db.get_user(sid)
             if u:
@@ -1548,6 +1562,10 @@ def _change_password(user, current_pw, new_pw, new_pw2):
         return perr
     if not db.update_password(user["id"], generate_password_hash(new_pw)):
         return "系統忙線,請稍後再試"
+    # 密碼版本已變:其他裝置的 token/session 全部自動失效;
+    # 若本次是網頁 session 操作,刷新自己這台的 pwv(自己不被登出,其他裝置踢掉)
+    if session.get("user_id") == user["id"]:
+        session["pwv"] = _pw_version(user["id"])
     _send_password_changed_notice(user.get("email"))  # 安全通知
     return None
 
@@ -2298,6 +2316,7 @@ def register_page():
         session.permanent = True
         session["user_id"] = user["id"]
         session["login_at"] = datetime.now(timezone.utc).isoformat()
+        session["pwv"] = _pw_version(user["id"])  # 密碼版本:改密碼後舊 session 自動失效
         return redirect(url_for("member"))
 
     return render_template("register.html", mode="register", legal=LEGAL["documents"])
@@ -2330,6 +2349,7 @@ def login_page():
         session.permanent = True
         session["user_id"] = user["id"]
         session["login_at"] = datetime.now(timezone.utc).isoformat()
+        session["pwv"] = _pw_version(user["id"])  # 密碼版本:改密碼後舊 session 自動失效
         return redirect(next_url)
 
     return render_template("login.html", mode="login", next_url=next_url)

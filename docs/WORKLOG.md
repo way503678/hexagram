@@ -46,6 +46,13 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-07-03 — 改/重設密碼後全裝置自動登出(密碼版本指紋)
+- 缺口:改/重設密碼後,舊 App token 與網頁 session 仍有效至 24h 上限。
+- 修法(零狀態,無 session 表):`_pw_version(uid)`=密碼雜湊 sha256 前 8 碼。**token** 簽發帶 `pwv` claim,verify 時比對 DB 現值(無 pwv 的舊 token 一律失效);**web session** 登入寫入 `pwv`,`_resolve_current_user` 比對不符即 `session.clear()`。密碼一變 → 指紋變 → 所有裝置舊憑證自動失效。
+- UX:登入中自行改密碼(`_change_password`)成功後刷新**本機** session pwv——自己不被登出、其他裝置全踢(GitHub 式)。App 端改密碼/重設 → 舊 token 401 → AuthContext 自動登出重登。
+- 端到端驗證(真帳號、雜湊原樣還原):改密碼後舊 token=None、新簽有效、再變再失效。**部署副作用:現有全部登入者會被登出一次**(舊憑證無 pwv),一次性。
+- 順帶:忘記密碼信連結曾出現 localhost(內部測試觸發 url_root 所致)→ `.env` 設 `PUBLIC_BASE_URL=https://hexagram.johnsonwebsites.cc`(compose 本有透傳),重設連結一律用公開網址。
+
 ### 2026-07-03 — Email 寄送正式上線(Resend + 自家網域)
 - `.env` 填入 `RESEND_API_KEY`(僅寄信權限的受限 key)+ `MAIL_FROM=命果 MINGO <noreply@johnsonwebsites.cc>`;網域已在 Resend 驗證(DKIM/SPF 綠,Tokyo region,DNS 在 Cloudflare)。程式不用改(_send_mail 6/23 就緒)。
 - 實測:系統 `_send_mail` 自家網域寄送成功;**忘記密碼全流程**(`/api/v1/auth/forgot` → 真寄重設信)通過。忘記密碼信、密碼變更通知、🌱回訪提醒 皆可正式寄送給任何會員。
