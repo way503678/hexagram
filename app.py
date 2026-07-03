@@ -211,8 +211,9 @@ def verify_reset_token(token):
         return None
 
 
-def _send_via_resend(to_email, subject, body):
-    """走 Resend HTTP API 寄信(stdlib,無額外套件)。成功回 True。"""
+def _send_via_resend(to_email, subject, body, html=None):
+    """走 Resend HTTP API 寄信(stdlib,無額外套件)。成功回 True。
+    html 有給則寄 HTML 信(text 作為純文字 fallback)。"""
     import json
     import urllib.request
     import urllib.error
@@ -221,12 +222,15 @@ def _send_via_resend(to_email, subject, body):
     if not sender:
         app.logger.warning("Resend:未設定 MAIL_FROM(寄件人),改走 SMTP")
         return None
-    payload = json.dumps({
+    data = {
         "from": sender,
         "to": [to_email],
         "subject": subject,
         "text": body,
-    }).encode("utf-8")
+    }
+    if html:
+        data["html"] = html
+    payload = json.dumps(data).encode("utf-8")
     req = urllib.request.Request(
         "https://api.resend.com/emails", data=payload, method="POST",
         headers={
@@ -250,11 +254,12 @@ def _send_via_resend(to_email, subject, body):
         return False
 
 
-def _send_mail(to_email, subject, body):
-    """寄信(供應商無關)。優先用 Resend API,其次 SMTP;皆未設定則只寫 log 回 False。"""
+def _send_mail(to_email, subject, body, html=None):
+    """寄信(供應商無關)。優先用 Resend API,其次 SMTP;皆未設定則只寫 log 回 False。
+    html 有給則寄 HTML 信,body 為純文字 fallback。"""
     # 1) 有設 RESEND_API_KEY → 走 Resend HTTP API
     if os.environ.get("RESEND_API_KEY"):
-        ok = _send_via_resend(to_email, subject, body)
+        ok = _send_via_resend(to_email, subject, body, html=html)
         if ok is not None:       # None = 設定不全(缺寄件人),往下退回 SMTP
             return ok
     # 2) 退回標準 SMTP(含 Resend SMTP:smtp.resend.com)
@@ -269,6 +274,8 @@ def _send_mail(to_email, subject, body):
     msg["From"] = os.environ.get("MAIL_FROM") or os.environ.get("SMTP_USER", "")
     msg["To"] = to_email
     msg.set_content(body)
+    if html:
+        msg.add_alternative(html, subtype="html")
     try:
         with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", "587")), timeout=15) as s:
             s.starttls()
@@ -286,10 +293,31 @@ def _send_reset_email(to_email, link):
     # 開發用:未設寄信(Resend/SMTP 皆無)時把連結寫進 log,才有辦法測試重設流程
     if not os.environ.get("RESEND_API_KEY") and not os.environ.get("SMTP_HOST"):
         app.logger.warning("寄信未設定;重設連結(僅 log):%s", link)
+    # HTML 版:品牌卡片 + 大按鈕(inline style,郵件客戶端相容);純文字版保留原連結當 fallback
+    html = f"""\
+<div style="background:#F1E9DC;padding:32px 16px;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
+  <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:18px;padding:32px 28px;text-align:center;">
+    <div style="font-size:22px;font-weight:800;color:#2C2942;letter-spacing:3px;">命果 <span style="color:#8C84A6;font-size:14px;letter-spacing:5px;">MINGO</span></div>
+    <p style="font-size:15px;color:#5D5675;line-height:1.9;margin:22px 0 26px;">
+      您申請了重設密碼。<br>請點下方按鈕設定新密碼(<b>1 小時內有效</b>)。
+    </p>
+    <a href="{link}"
+       style="display:inline-block;background:#6F5E9B;color:#ffffff;text-decoration:none;
+              padding:14px 44px;border-radius:24px;font-size:16px;font-weight:700;letter-spacing:2px;">
+      重設密碼
+    </a>
+    <p style="font-size:12px;color:#8C84A6;line-height:1.8;margin:26px 0 0;">
+      若非您本人申請,請忽略本信,您的密碼不會被改動。<br>
+      按鈕無法點擊時,請複製此連結到瀏覽器:<br>
+      <span style="word-break:break-all;color:#6B6385;">{link}</span>
+    </p>
+  </div>
+</div>"""
     return _send_mail(
         to_email, "命果 MINGO — 重設密碼",
         "您好,\n\n請點以下連結重設密碼(1 小時內有效):\n"
         f"{link}\n\n若非您本人申請,請忽略本信(您的密碼不會被改動)。",
+        html=html,
     )
 
 
