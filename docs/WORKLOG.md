@@ -46,6 +46,11 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-07-03 — Email 寄送正式上線(Resend + 自家網域)
+- `.env` 填入 `RESEND_API_KEY`(僅寄信權限的受限 key)+ `MAIL_FROM=命果 MINGO <noreply@johnsonwebsites.cc>`;網域已在 Resend 驗證(DKIM/SPF 綠,Tokyo region,DNS 在 Cloudflare)。程式不用改(_send_mail 6/23 就緒)。
+- 實測:系統 `_send_mail` 自家網域寄送成功;**忘記密碼全流程**(`/api/v1/auth/forgot` → 真寄重設信)通過。忘記密碼信、密碼變更通知、🌱回訪提醒 皆可正式寄送給任何會員。
+- 註:重設連結 base 用 `PUBLIC_BASE_URL` env(未設)或 request.url_root(跟著請求網址,經公開網址操作即正確)。回訪提醒 Email 排程仍需設 `CRON_TOKEN` + 每日 curl dispatch(見 6/28 Phase 3)。待辦「Email 進階」可劃掉大半。
+
 ### 2026-07-03 — 準確度批次 v2.5:月令改四時旺相休囚死 + 日合 + 有異取異
 - **網路查證**(增刪派多源一致):月令旺衰應論**四時旺相休囚死**(臨我旺/我生相/生我休/剋我囚/我剋死),**十二長生只用於日辰與動變爻,無月墓月絕之說**。我們引擎月令誤用十二長生 → 「金在巳月」誤判旺(正解:死,巳火剋金)、「土在四季月」誤判墓/衰(正解:當令旺)。
 - **修 1(引擎)**:elements.py 加 `seasonal_state/seasonal_tier`;`_yao_wangshuai` 月令改四時、日令保留長生;payload `旺衰.月令` 改 `{地支,四時,旺衰}`(舊鍵「長生」移除,模板/App 無讀者)。翻轉矩陣:30 組差異、4 組方向翻轉(金丑/金巳/土寅/土戌)。**validate_classics 獨立重算同步(自帶四時表),5376 卦回歸 0 錯誤**。真假空/暗動沿用綜合旺衰自動跟進;入墓(臨墓/日墓)不涉月令不動;流年系統當值分析(長生)為另一設計,不動。
@@ -246,7 +251,7 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 - [ ] **App 卜卦問事補「下拉手動輸入」模式**(暫緩;使用者目前說先只要 web)。若要做:RN 用 Picker/按鈕選每爻(少陽/少陰/老陽/老陰),同步送出的 y0~y5。
 - [ ] **社群登入** Google / Apple / Line(卡在開發者憑證)。
-- [ ] **Email 進階**:驗證信 + 忘記密碼正式寄出(需設 SMTP;目前 `SMTP_HOST` 未設,信只進 log)。
+- [x] **Email 寄送**:2026-07-03 Resend + 自家網域上線,忘記密碼/密碼變更/回訪信皆真寄。剩:驗證信(註冊 email 驗證)未做、回訪排程需 CRON_TOKEN。
   - 建議寄系統信走 **Resend / SES** 等 transactional 服務,**不要自架 mail server**(住宅 IP 會被當垃圾信)。後端 `_send_mail` 已是供應商無關,`.env` 填 SMTP 即可。
 - [ ] **綠界金流**:目前儲值是測試按鈕(test_topup),待接綠界。
 - [ ] **App 推播通知**(expo-notifications + Expo Push,需存 push token)。
