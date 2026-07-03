@@ -16,7 +16,7 @@ body {
 /* latin 標語 / MINGO 字樣走 Cormorant(中文維持思源黑體) */
 .brand-en, .landing-wordmark, .landing-subtitle-en { font-family: "Cormorant Garamond", serif; }
 /* 品牌 logo 圖(2026-07-03 新版):landing 主視覺 + 側欄小 mark */
-.landing-logo { width: min(300px, 68vw); height: auto; display: block; margin: 0 auto 18px; }
+.landing-logo { width: min(210px, 48vw); height: auto; display: block; margin: 0 auto 18px; }
 /* 側欄品牌:mark 獨立在左,右側「命果/MINGO」上下左對齊 */
 .sidebar .brand a { display: flex; align-items: center; gap: 12px; }
 .brand-mark { height: 44px; width: auto; flex-shrink: 0; }
