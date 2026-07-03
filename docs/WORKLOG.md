@@ -46,6 +46,9 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-07-03 — 新增資安文件 docs/SECURITY.md
+- 把歷來安全機制整理成單一文件:認證雙軌(JWT/session)、24h 時效、pwv 全裝置登出、登入鎖定、忘記密碼(HMAC/1h/一次性/防列舉)、SECRET_KEY fail-fast、機密管理、扣點原子、SQL 參數化、AI 輸入截斷、CORS 決策、**已知限制表**(無 rate limit/CSRF token/註冊驗證信、Resend key 待 rotate)與事件應對速查。**改安全相關程式前先讀;新增機制後回寫**。README 相關文件已加連結。
+
 ### 2026-07-03 — 改/重設密碼後全裝置自動登出(密碼版本指紋)
 - 缺口:改/重設密碼後,舊 App token 與網頁 session 仍有效至 24h 上限。
 - 修法(零狀態,無 session 表):`_pw_version(uid)`=密碼雜湊 sha256 前 8 碼。**token** 簽發帶 `pwv` claim,verify 時比對 DB 現值(無 pwv 的舊 token 一律失效);**web session** 登入寫入 `pwv`,`_resolve_current_user` 比對不符即 `session.clear()`。密碼一變 → 指紋變 → 所有裝置舊憑證自動失效。
