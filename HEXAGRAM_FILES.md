@@ -23,7 +23,11 @@ https://raw.githubusercontent.com/way503678/hexagram/main/fortune_engine.py
 
 ---
 
-## 全檔清單(39 個檔)
+## 全檔清單
+
+> ⚠️ **此清單為快照、會過時**(2026-07-03 校對過一輪)。實際檔案以 repo 為準:`git ls-files`。
+> raw URL 規則固定:`https://raw.githubusercontent.com/way503678/hexagram/main/<路徑>`,
+> 清單沒列到的檔案照這個規則組 URL 即可。
 
 ### Python 核心(根目錄,7 檔)
 
@@ -76,7 +80,6 @@ https://raw.githubusercontent.com/way503678/hexagram/main/fortune_engine.py
 | cast.html(時辰起卦) | https://raw.githubusercontent.com/way503678/hexagram/main/templates/cast.html |
 | manual.html(手動排卦) | https://raw.githubusercontent.com/way503678/hexagram/main/templates/manual.html |
 | _hexagram_table.html(卦表) | https://raw.githubusercontent.com/way503678/hexagram/main/templates/_hexagram_table.html |
-| admin/login.html | https://raw.githubusercontent.com/way503678/hexagram/main/templates/admin/login.html |
 | admin/history_list.html | https://raw.githubusercontent.com/way503678/hexagram/main/templates/admin/history_list.html |
 | admin/history_detail.html | https://raw.githubusercontent.com/way503678/hexagram/main/templates/admin/history_detail.html |
 | admin/fortune.html(流年) | https://raw.githubusercontent.com/way503678/hexagram/main/templates/admin/fortune.html |
@@ -114,7 +117,7 @@ https://raw.githubusercontent.com/way503678/hexagram/main/fortune_engine.py
 
 | 檔案 | 位置 | 內容 |
 |---|---|---|
-| `.env` | `/opt/hexagram/.env` | 真實機密(ADMIN_PASSWORD, SECRET_KEY) |
+| `.env` | `/opt/hexagram/.env` | 真實機密(SECRET_KEY, ADMIN_EMAILS, ANTHROPIC_API_KEY, RESEND_API_KEY) |
 | `deploy.sh` | `/opt/hexagram/deploy.sh` | 自動部署腳本 |
 | cron 設定 | `crontab -l` | 每分鐘觸發 deploy.sh |
 

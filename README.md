@@ -1,7 +1,11 @@
-# 命卦排盤（梅花易數）
+# 命果 MINGO(後端 / 網頁)
 
-依京房八宮納甲法 + 野鶴老人《增刪卜易》派的命卦排盤系統。
-提供：時辰起卦、手動排卦（搖卦結果）、流年分析、四面向判讀（感情/健康/工作/財運）。
+依京房八宮納甲法 + 野鶴老人《增刪卜易》派的命理排盤系統(原名「命卦排盤」)。
+提供:萬年曆(擇日/紫白)、時辰起卦、金錢卦手動排卦、流年分析、四面向判讀、
+會員/點數、AI 解讀(串 Claude API)。行動版(功能對等)在另一 repo:`hexagram-app`。
+
+> 開發背景、工作日誌與待辦:**docs/WORKLOG.md**(開新對話先讀這份)。
+> 設計系統(web+App 共用):**docs/DESIGN_SYSTEM.md**。
 
 ---
 
@@ -14,7 +18,8 @@ hexagram_data.py    # 64 卦完整資料（卦名、卦辭、卦宮、世應、�
 hexagram_engine.py  # 排盤引擎（起卦邏輯 + 手動排卦四面向呼叫）
 fortune_engine.py   # 流年排盤引擎（瘦身版，只負責時間軸協調）
 fortune_data.py     # 節氣、合沖、三合等資料
-db.py               # PostgreSQL 命盤記錄
+db.py               # PostgreSQL(users/point_ledger/divination_questions/growth_reflections)
+legal.json          # 個資同意書+免責聲明(單一來源,web 註冊頁與 App 共用)
 
 divination/         # 【新】判讀核心包
 ├── core/           # 共用核心層（流年、手卦共用）
@@ -32,46 +37,48 @@ divination/         # 【新】判讀核心包
     └── wealth.py     # 財運面（妻財、兄弟劫財、野鶴五例外）
 
 templates/          # Jinja2 模板
-├── base.html         # 母版（側邊欄選單）
+├── base.html         # 母版(側邊欄選單)
 ├── landing.html      # 首頁
+├── almanac.html      # 萬年曆(擇日/紫白)
 ├── cast.html         # 時辰起卦
-├── manual.html       # 手動排卦（含問事類別、四面向結果）
-├── _hexagram_table.html  # 卦象表格（cast 與 manual 共用）
-└── admin/            # 管理員區
-    ├── login.html
-    ├── history_list.html
-    ├── history_detail.html
-    └── fortune.html  # 流年分析（含四面向 + 12 流月）
+├── manual.html       # 卜卦問事(金錢卦擲卦 + AI 解讀)
+├── _hexagram_table.html  # 卦象表格(cast/manual/question_detail 共用)
+├── register/login/forgot/reset.html   # 會員註冊登入
+├── member*.html      # 會員中心(member/history/profile/password/delete…)
+└── admin/            # 管理員區(無獨立登入,一般登入+ADMIN_EMAILS 判定)
+    ├── history_list.html / history_detail.html
+    ├── members.html / questions.html / question_detail.html
+    └── fortune.html  # 流年分析(含四面向 + 12 流月)
 
-static/style.css    # 樣式
+static/style.css    # 全站樣式(MINGO tokens 在「v2 覆蓋層」的 :root)
 ```
 
 ---
 
-## 安裝
+## 執行
 
 ```bash
-pip install flask sxtwl zhdate psycopg2-binary werkzeug
+docker compose up -d --build hexagram   # 標準方式(改完程式/模板/prompt 重建上線)
+# http://localhost:8080 ;另有 hexagram-db-backup 每日備份 sidecar
 ```
 
-或用 Docker Compose：
-```bash
-docker compose up -d --build
-```
+⚠️ **前置相依**:PostgreSQL 來自外部 compose(`finance-apps` 的 postgres,經 external 網路
+`finance-apps_default`),乾淨機器要先啟動那組服務。重開機順序見 `docs/RESUME.md`。
+主要環境變數(`.env`,參考 `.env.example`):`SECRET_KEY`(必填,弱值拒啟動)、`ADMIN_EMAILS`、
+`ANTHROPIC_API_KEY`、`RESEND_API_KEY`、`SESSION_MAX_AGE_HOURS`(預設 24)。
+
+本機開發(不走 Docker):`pip install -r requirements.txt` 後 `python app.py`。
 
 ---
 
-## 路由總覽
+## 路由分群(完整清單:`grep "@app.route" app.py`)
 
-| 路由 | 說明 |
-|------|------|
-| `/` | 首頁（landing） |
-| `/cast` | 時辰起卦（梅花易數） |
-| `/manual` | 手動排卦（搖卦結果，可選問事類別、性別） |
-| `/admin/login` | 管理員登入 |
-| `/admin/history` | 命盤歷史清單 |
-| `/admin/history/<name>` | 某人的命盤列表 |
-| `/admin/history/<name>/fortune` | 流年分析（含 12 流月） |
+| 群 | 路由 |
+|----|------|
+| 網頁 | `/`(landing)、`/almanac`、`/cast`、`/fortune`、`/manual`(+`/ai_prompt`、`/ai_reading` SSE) |
+| 會員 | `/register` `/login` `/logout` `/forgot` `/reset`、`/member`(+history/profile/password/delete) |
+| API(App/Web 共用) | `/api/v1/*`:auth、member、chart/cast、almanac、daily、fortune、prompt/reading/chat、reflection、legal、health |
+| 管理 | `/admin/history*`、`/admin/members`、`/admin/questions*`(一般 `/login` + `ADMIN_EMAILS` 判定,無獨立管理登入) |
 
 ---
 
@@ -114,7 +121,6 @@ docker compose up -d --build
 - 訊號累積用 local list
 - 同樣的 input 永遠回傳同樣的 output
 
-詳細設計與驗證見 [PROCESS_SAFETY.md](PROCESS_SAFETY.md)。
 
 ---
 

@@ -1,5 +1,11 @@
 # Ubuntu 小主機部署指南
 
+> ⚠️ **前置相依(必讀)**:本服務的 PostgreSQL **不在**這份 compose 裡,是連到外部
+> `finance-apps` 那組 compose 的 postgres(經 external 網路 `finance-apps_default`,
+> 見 docker-compose.yml 底部)。乾淨機器直接 `docker compose up -d` 會因外部網路
+> 不存在而失敗——**要先把 finance-apps 的 postgres 跑起來**。
+> 重開機的完整啟動順序見 `docs/RESUME.md`(先 finance-apps → 再 hexagram)。
+
 ## 一、把整個資料夾搬到 Ubuntu 主機
 
 把這整個 `命卦排盤/` 資料夾（含所有檔案）複製到你的 Ubuntu 主機，例如：

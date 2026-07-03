@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 # ==========================================================
-# 命卦排盤 - Dockerfile（單階段，並處理 zhdate 0.1 舊套件相容性）
+# 命果 MINGO - Dockerfile（單階段）
 # ==========================================================
 FROM python:3.12-slim
 ENV LANG=C.UTF-8 \
@@ -10,11 +10,8 @@ ENV LANG=C.UTF-8 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
-# zhdate 0.1 是 2019 舊套件（用 use_2to3），新版 setuptools 拒裝
-# 先降版 setuptools 再裝 requirements
 COPY requirements.txt .
-RUN pip install "setuptools<58" "wheel" && \
-    pip install -r requirements.txt
+RUN pip install -r requirements.txt
 # 建立非 root 使用者
 RUN useradd -m -u 1000 appuser
 # 複製所有 Python 程式檔

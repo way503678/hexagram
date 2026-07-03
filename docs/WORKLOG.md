@@ -46,6 +46,13 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-07-03 — 文件體檢對齊實況 + 清死碼(兩平台)
+- 用兩個探查代理掃 web/App 文件 vs 實況,逐項核實後修:
+- **後端**:README.md 整份重寫(舊名命卦排盤→命果 MINGO、補萬年曆/會員/API/almanac、路由改分群、移除已刪的 `/admin/login`、修死連結 PROCESS_SAFETY.md);HEXAGRAM_FILES.md 刪 `admin/login.html`(已刪、raw 會 404)+ 檔數改「快照會過時、以 git ls-files 為準」+ .env 機密改 ADMIN_EMAILS;DEPLOY.md 補「postgres 是外部 finance-apps 相依」警告;app.py docstring 路由總覽更新(刪不存在的 admin/login|logout)。
+- **死相依**:`zhdate==0.1` 全專案零 import(農曆早改 sxtwl)→ 從 requirements 移除 + 清掉 Dockerfile 為它做的 `setuptools<58` 相容 hack。重建驗證 healthy。
+- **安全**:`.env.example` 的 SECRET_KEY 佔位值加進 `_WEAK_SECRETS`(忘了換也擋)。
+- **App**:README 重寫(SDK 56→54/RN 0.81、3-tab、AI 已上線)、AGENTS/WORKLOG 版本校正、WORKLOG「二、結構」改 3-tab、app.json adaptiveIcon 舊底色 #FFF8EF→#F1E9DC;theme.ts 清 8 個未用色票 + 3 個未用漸層(tsc 抓到 GradientCard 預設 variant="deep" 仍需 deep → 改預設為 "bright")。tsc 通過。
+
 ### 2026-07-03 — 解讀 prompt v2.4:新增【盤面解析】段(放【一句話】後)
 - 使用者參考別家 app,想要一段「盤面卦理解說」放在【一句話】後面。
 - §三之二 在【一句話】後加**【盤面解析】**:2–4 句用「術語+緊接白話翻譯」解說盤面結構(世應/六親/動化/空亡/生剋)並扣回問事,像「世爻持未土臨白虎(=環境穩定但束縛強)」。

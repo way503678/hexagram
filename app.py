@@ -2,17 +2,13 @@
 """
 命果 MINGO Flask 網頁介面
 
-路由總覽:
-  /                  首頁(landing page)
-  /cast              時辰起卦(梅花易數)
-  /manual            手動排卦(金錢卦/搖卦結果)
-  /manual/ai_prompt  手動排卦 AI 解讀 prompt 組裝(管理員專用,POST)
-  /admin/login       管理員登入
-  /admin/logout      登出
-  /admin/history     管理:姓名清單
-  /admin/history/<name>                            管理:某人的命盤清單
-  /admin/history/<name>/delete/<id>  (POST)        管理:刪除單筆命盤
-  /admin/history/<name>/fortune                    管理:某命盤的流年分析
+路由分群(完整清單 grep "@app.route"):
+  網頁    /(landing)、/almanac、/cast、/fortune、/manual(+/ai_prompt /ai_reading)
+  會員    /register /login /logout /forgot /reset、/member(+history/profile/password/delete)
+  API     /api/v1/*(auth、member、chart/cast、almanac、daily/fortune、prompt/reading/chat、
+          reflection、legal、health)— App 與 Web 共用
+  管理    /admin/history*、/admin/members、/admin/questions*
+          (無獨立管理員登入:一般 /login + ADMIN_EMAILS 名單判定)
 """
 import os
 import json
@@ -47,6 +43,7 @@ app = Flask(__name__)
 _WEAK_SECRETS = {
     "change-this-secret-in-production-please",
     "please-change-me-in-production",
+    "please-generate-with-openssl-rand-hex-32",  # .env.example 佔位值,忘了換也要擋
 }
 _secret_key = (os.environ.get("SECRET_KEY") or "").strip()
 if not _secret_key or _secret_key in _WEAK_SECRETS:
