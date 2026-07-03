@@ -15,6 +15,9 @@ body {
 }
 /* latin 標語 / MINGO 字樣走 Cormorant(中文維持思源黑體) */
 .brand-en, .landing-wordmark, .landing-subtitle-en { font-family: "Cormorant Garamond", serif; }
+/* 品牌 logo 圖(2026-07-03 新版):landing 主視覺 + 側欄小 mark */
+.landing-logo { width: min(300px, 68vw); height: auto; display: block; margin: 0 auto 18px; }
+.brand-mark { height: 34px; width: auto; vertical-align: middle; margin-right: 6px; }
 /* 全域連結色:預設走 MINGO 紫(避免吃到瀏覽器預設藍);有 scope 的連結如 sidebar 自帶色不受影響 */
 a { color: var(--primary); }
 a:hover { color: var(--accent); }
