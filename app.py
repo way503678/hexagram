@@ -327,7 +327,10 @@ def _send_reset_email(to_email, link):
     html = f"""\
 <div style="background:#F1E9DC;padding:32px 16px;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
   <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:18px;padding:32px 28px;text-align:center;">
-    <div style="font-size:22px;font-weight:800;color:#2C2942;letter-spacing:3px;">命果 <span style="color:#8C84A6;font-size:14px;letter-spacing:5px;">MINGO</span></div>
+    <div style="text-align:center;">
+      <div style="font-size:24px;font-weight:800;color:#2C2942;letter-spacing:6px;">命果</div>
+      <div style="font-size:13px;color:#8C84A6;letter-spacing:6px;margin-top:2px;">MINGO</div>
+    </div>
     <p style="font-size:15px;color:#5D5675;line-height:1.9;margin:22px 0 26px;">
       您申請了重設密碼。<br>請點下方按鈕設定新密碼(<b>1 小時內有效</b>)。
     </p>
@@ -358,7 +361,10 @@ def _send_verify_email(to_email, link):
     html = f"""\
 <div style="background:#F1E9DC;padding:32px 16px;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
   <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:18px;padding:32px 28px;text-align:center;">
-    <div style="font-size:22px;font-weight:800;color:#2C2942;letter-spacing:3px;">命果 <span style="color:#8C84A6;font-size:14px;letter-spacing:5px;">MINGO</span></div>
+    <div style="text-align:center;">
+      <div style="font-size:24px;font-weight:800;color:#2C2942;letter-spacing:6px;">命果</div>
+      <div style="font-size:13px;color:#8C84A6;letter-spacing:6px;margin-top:2px;">MINGO</div>
+    </div>
     <p style="font-size:15px;color:#5D5675;line-height:1.9;margin:22px 0 26px;">
       歡迎加入命果 MINGO!<br>請點下方按鈕完成 Email 驗證(<b>24 小時內有效</b>),<br>
       驗證完成即獲贈 <b>{NEW_USER_BONUS} 顆果實</b>。
@@ -2527,7 +2533,10 @@ def _verify_result_page(ok, message):
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Email 驗證 — 命果 MINGO</title></head>
 <body style="margin:0;background:#F1E9DC;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
 <div style="max-width:440px;margin:60px auto;background:#fff;border-radius:18px;padding:36px 28px;text-align:center;">
-  <div style="font-size:22px;font-weight:800;color:#2C2942;letter-spacing:3px;">命果 <span style="color:#8C84A6;font-size:14px;letter-spacing:5px;">MINGO</span></div>
+  <div style="text-align:center;">
+      <div style="font-size:24px;font-weight:800;color:#2C2942;letter-spacing:6px;">命果</div>
+      <div style="font-size:13px;color:#8C84A6;letter-spacing:6px;margin-top:2px;">MINGO</div>
+    </div>
   <p style="font-size:17px;color:#2C2942;line-height:1.9;margin:24px 0;">{icon} {message}</p>
   <a href="/login" style="display:inline-block;background:#6F5E9B;color:#fff;text-decoration:none;
      padding:12px 40px;border-radius:24px;font-size:15px;font-weight:700;letter-spacing:2px;">前往登入</a>
