@@ -90,11 +90,48 @@ def twelve_phase(yao_element, outer_branch):
 
 def strength_tier(yao_element, outer_branch):
     """
-    回傳爻的五行在指定地支的強弱三級。
+    回傳爻的五行在指定地支的強弱三級(依十二長生)。
     回傳 "旺" / "中" / "弱" / ""
+    ⚠️ 依增刪卜易派:十二長生只用於「日辰、動變爻」;**月令旺衰請改用 seasonal_tier**
+    (四時旺相休囚死)。經典矛盾例:金在巳月,長生訣=長生(旺)、四時=死(巳火剋金),
+    以四時為準。
     """
     phase = twelve_phase(yao_element, outer_branch)
     return _STRENGTH_TIER.get(phase, "")
+
+
+# ============================================================
+# 四時旺相休囚死(月令旺衰專用)
+# 以月令地支五行為「我」:臨我者旺、我生者相、生我者休、剋我者囚、我剋者死。
+# 無「月墓、月絕」之說 — 長生/墓/絕只存在於日辰與動變爻(十二長生)。
+# ============================================================
+_SEASONAL_TIER = {"旺": "旺", "相": "旺", "休": "中", "囚": "弱", "死": "弱"}
+
+
+def seasonal_state(yao_element, month_branch):
+    """
+    回傳爻五行在月令的四時狀態:"旺"/"相"/"休"/"囚"/"死"/""。
+    例:金在巳月(巳=火,火剋金=我剋者)→ 死;木在亥月(亥=水,水生木=我生者)→ 相。
+    """
+    month_ele = BRANCH_ELEMENT.get(month_branch)
+    if not yao_element or not month_ele:
+        return ""
+    if yao_element == month_ele:
+        return "旺"          # 臨我者旺(當令)
+    if SHENG.get(month_ele) == yao_element:
+        return "相"          # 我(月令)生者相
+    if SHENG.get(yao_element) == month_ele:
+        return "休"          # 生我(月令)者休
+    if KE.get(yao_element) == month_ele:
+        return "囚"          # 剋我(月令)者囚
+    if KE.get(month_ele) == yao_element:
+        return "死"          # 我(月令)剋者死
+    return ""
+
+
+def seasonal_tier(yao_element, month_branch):
+    """月令旺衰三級(四時旺相休囚死 → 旺/中/弱)。旺相=旺、休=中、囚死=弱。"""
+    return _SEASONAL_TIER.get(seasonal_state(yao_element, month_branch), "")
 
 
 # ============================================================

@@ -22,9 +22,21 @@ def tphase(ele, br):
 TIER = {"長生":"旺","臨官":"旺","帝旺":"旺","沐浴":"中","冠帶":"中","衰":"中","養":"中",
         "病":"弱","死":"弱","墓":"弱","絕":"弱","胎":"弱"}
 def tier(ele, br): return TIER.get(tphase(ele, br), "")
+# 月令改四時旺相休囚死(2026-07-03;十二長生只用於日辰):旺相=旺、休=中、囚死=弱
+SHENG_V = {"木":"火","火":"土","土":"金","金":"水","水":"木"}
+KE_V   = {"木":"土","土":"水","水":"火","火":"金","金":"木"}
+def season_tier(ele, mb):
+    me = BE.get(mb)
+    if not ele or not me: return ""
+    if ele == me: return "旺"                 # 臨我者旺
+    if SHENG_V.get(me) == ele: return "旺"    # 我生者相
+    if SHENG_V.get(ele) == me: return "中"    # 生我者休
+    if KE_V.get(ele) == me: return "弱"       # 剋我者囚
+    if KE_V.get(me) == ele: return "弱"       # 我剋者死
+    return ""
 def wangshuai(ele, mb, db):
     w = {"旺":1,"中":0,"弱":-1}
-    s = w.get(tier(ele,mb),0)*2 + w.get(tier(ele,db),0)
+    s = w.get(season_tier(ele,mb),0)*2 + w.get(tier(ele,db),0)
     return "旺" if s>=2 else "偏旺" if s==1 else "持平" if s==0 else "偏弱" if s==-1 else "弱"
 def chong(br): return ZHI[(ZHI.index(br)+6)%12] if br in ZHI else ""
 MU = {"金":"丑","木":"未","水":"辰","火":"戌","土":"戌"}

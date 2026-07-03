@@ -800,20 +800,23 @@ def _compute_chart(data):
 def _yao_wangshuai(element, month_branch, day_branch):
     """依月令、日令算單一五行的旺衰(引擎確定性計算,讓 AI 免自推五行、不會算錯)。
 
-    回傳:月令/日令各自的十二長生與三級旺衰,加「綜合旺衰」(月令權重加倍、日令次之)。
+    回傳:月令(四時旺相休囚死)/日令(十二長生)各自狀態與三級旺衰,
+    加「綜合旺衰」(月令權重加倍、日令次之)。
     綜合等級:旺 / 偏旺 / 持平 / 偏弱 / 弱。空亡、動爻化剋等另由既有訊號處理,不在此。
+    依增刪卜易派:**月令論四時旺相休囚死、日辰論十二長生**(無月墓月絕之說);
+    經典矛盾例「金在巳月」= 死(巳火剋金),不取長生訣的「長生」。
     """
-    from divination.core.elements import twelve_phase, strength_tier
+    from divination.core.elements import twelve_phase, strength_tier, seasonal_state, seasonal_tier
     if not element or not month_branch or not day_branch:
         return None
-    m_phase, m_tier = twelve_phase(element, month_branch), strength_tier(element, month_branch)
+    m_state, m_tier = seasonal_state(element, month_branch), seasonal_tier(element, month_branch)
     d_phase, d_tier = twelve_phase(element, day_branch), strength_tier(element, day_branch)
     _w = {"旺": 1, "中": 0, "弱": -1}
     score = _w.get(m_tier, 0) * 2 + _w.get(d_tier, 0)  # 月令為主(×2)、日令次之
     overall = ("旺" if score >= 2 else "偏旺" if score == 1 else
                "持平" if score == 0 else "偏弱" if score == -1 else "弱")
     return {
-        "月令": {"地支": month_branch, "長生": m_phase, "旺衰": m_tier},
+        "月令": {"地支": month_branch, "四時": m_state, "旺衰": m_tier},
         "日令": {"地支": day_branch, "長生": d_phase, "旺衰": d_tier},
         "綜合旺衰": overall,
     }
@@ -1005,6 +1008,9 @@ def _enrich_chart_payload(chart, dt_obj, aspect):
         # E1 暗動/日破:靜爻被日辰沖 → 旺=暗動(雖靜實動)、衰=日破(沖散無用)
         if (not _is_dong) and _ribo_branch and _zhi == _ribo_branch:
             _e2["日沖"] = "暗動" if _tier in ("旺", "偏旺", "持平") else "日破"
+        # E2 日合:爻支與日支六合 → 靜爻=合起(增力、被拴待沖)、動爻=合絆(暫不動,待沖開之日應)
+        if _zhi and _day_branch and _LIUHE.get(_zhi) == _day_branch:
+            _e2["日合"] = "合絆" if _is_dong else "合起"
         # H1 入墓:臨墓(自臨墓庫支)、日墓(日辰為其墓庫)
         _mu = _MU_BRANCH.get(_e.get("五行"))
         if _mu:
