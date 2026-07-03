@@ -11,6 +11,7 @@
 </div>
 <form method="post" action="/member/delete" class="login-form"
       onsubmit="return confirm('確定要永久刪除帳號嗎?此動作無法復原。');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="password" name="password" placeholder="輸入密碼以確認"
          required autocomplete="current-password">
   <button type="submit" style="background:#a02020;">永久刪除我的帳號</button>

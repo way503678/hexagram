@@ -27,6 +27,7 @@
 
 
 <form method="post" action="/manual" id="manualForm"{% if r %} style="display:none;"{% endif %}>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   {# ---- 起卦時間:擲卦以「當下」為準、不需選;管理員下拉模式才可自訂 ---- #}
   <div id="nowTimeRow" style="margin-bottom:10px; color:#555; font-size:14px;">
     🕐 起卦時間:<strong id="nowClock">—</strong>
@@ -391,7 +392,7 @@
       { reading: lastReading, history: chatHistory, message: msg });
     fetch('/api/v1/chat', {
       method: 'POST', credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF||''}, body: JSON.stringify(body)
     })
     .then(function(res){ return res.json().then(function(d){ return {ok:res.ok, status:res.status, d:d}; }); })
     .then(function(r){
@@ -432,7 +433,7 @@
     var q = lastPayload ? lastPayload.question : '';
     fetch('/api/v1/reflection', {
       method: 'POST', credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF||''},
       body: JSON.stringify({ question: q, feeling: feeling })
     })
     .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
@@ -526,7 +527,7 @@
 
     fetch('/manual/ai_reading', {
       method: 'POST', credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF||''},
       body: JSON.stringify(payload)
     })
     .then(function(res){
@@ -648,7 +649,7 @@
     fetch('/manual/ai_prompt', {
       method: 'POST',
       credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF||''},
       body: JSON.stringify(payload)
     })
     .then(function(res) {

@@ -103,8 +103,8 @@ JWT payload:`{uid, iat, exp, pwv}`。簽章金鑰 = `SECRET_KEY`(見 §四)。
 |------|------|------|
 | Rate limiting(登入/forgot/AI) | ❌ 未做 | 現靠登入鎖定+扣點節流;公開端點(forgot 寄信)無頻率限制,濫用可耗寄信額度 → 建議之後加 |
 | Resend key rotation | ⏳ 待做 | key 曾入對話紀錄(2026-07-03) |
-| 註冊 Email 驗證信 | ❌ 未做 | 現註冊即生效 |
-| CSRF token(表單) | ❌ 未做 | 靠 SameSite=Lax 緩解;表單皆同源 POST |
+| 註冊 Email 驗證信 | ✅ 2026-07-03 | HMAC token(24h)、HTML 按鈕信;**新會員贈點延至驗證完成才入帳**(防拋棄式信箱刷點,`set_email_verified` 首次才發);舊帳號 backfill 已驗證;`/verify` + `/api/v1/auth/resend_verify`(重寄);web 會員中心有未驗證提示條 |
+| CSRF token(表單) | ✅ 2026-07-03 | 自製(無套件):session 發 token、`_csrf_protect` before_request 驗證(表單 hidden / X-CSRF-Token header);豁免 Bearer 認證與無 session cookie 請求(無可冒用身分)。SameSite=Lax 為第二層 |
 | 回訪提醒排程 `CRON_TOKEN` | ⏳ 未啟用 | dispatch 端點已含授權檢查(管理員或 X-Cron-Token) |
 | App 端 token 存放 | ✅ | expo-secure-store(Keystore/Keychain) |
 

@@ -344,6 +344,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS locked BOOLEAN NOT NULL DEFAULT FALSE
 ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
 -- 性別 + 生日欄位(命盤排卦用)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
+-- Email 驗證(2026-07-03):舊帳號 backfill 為已驗證(信任既有使用者);
+-- 新註冊 INSERT 顯式 FALSE(非 NULL),故此 UPDATE 冪等、不會誤改新戶
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
+UPDATE users SET email_verified = TRUE WHERE email_verified IS NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_y INTEGER;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_m INTEGER;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_d INTEGER;
@@ -647,9 +652,9 @@ def create_email_user(email, password_hash, display_name=None, consent_version=N
                 cur.execute(
                     """
                     INSERT INTO users (auth_provider, auth_id, display_name, email,
-                                       password_hash, consent_at, consent_version)
+                                       password_hash, consent_at, consent_version, email_verified)
                     VALUES ('email', %s, %s, %s, %s,
-                            CASE WHEN %s::text IS NOT NULL THEN NOW() ELSE NULL END, %s)
+                            CASE WHEN %s::text IS NOT NULL THEN NOW() ELSE NULL END, %s, FALSE)
                     ON CONFLICT (auth_provider, auth_id) DO NOTHING
                     RETURNING id, auth_provider, auth_id, display_name, email, points_balance, created_at
                     """,
@@ -869,7 +874,8 @@ def get_user(user_id):
                     """
                     SELECT id, auth_provider, auth_id, display_name, email,
                            points_balance, created_at,
-                           birth_y, birth_m, birth_d, birth_h, gender
+                           birth_y, birth_m, birth_d, birth_h, gender,
+                           email_verified
                     FROM users WHERE id = %s
                     """,
                     (int(user_id),),
@@ -883,6 +889,7 @@ def get_user(user_id):
             "points_balance": r[5], "created_at": r[6],
             "birth_y": r[7], "birth_m": r[8], "birth_d": r[9], "birth_h": r[10],
             "gender": r[11],
+            "email_verified": bool(r[12]),
         }
     except Exception as e:
         log.warning("DB get_user failed (%s: %s)", type(e).__name__, e)
@@ -912,6 +919,27 @@ def update_user_profile(user_id, display_name=None, gender=None, birth=None):
         return True
     except Exception as e:
         log.warning("DB update_user_profile failed (%s: %s)", type(e).__name__, e)
+        return False
+
+
+def set_email_verified(user_id):
+    """標記 Email 已驗證。回傳 True=本次首次驗證(呼叫端據此發贈點,防重複);
+    False=先前已驗證或失敗。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """UPDATE users SET email_verified = TRUE, verified_at = NOW()
+                       WHERE id = %s AND email_verified IS DISTINCT FROM TRUE
+                       RETURNING id""",
+                    (int(user_id),),
+                )
+                first = cur.fetchone() is not None
+        return first
+    except Exception as e:
+        log.warning("DB set_email_verified failed (%s: %s)", type(e).__name__, e)
         return False
 
 

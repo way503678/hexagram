@@ -46,6 +46,10 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 
 ## 四、工作日誌(新到舊)
 
+### 2026-07-03 — CSRF 防護 + 註冊 Email 驗證信(贈點延後)
+- **CSRF(自製無套件)**:session 惰性發 `csrf_token`(context processor 注入模板);`_csrf_protect` before_request 驗證 POST/PUT/PATCH/DELETE(表單 hidden 或 `X-CSRF-Token` header,compare_digest);**豁免**:Bearer 認證(App 不吃 cookie)、完全無 session cookie 的請求(無可冒用身分,curl/App 未登入呼叫不受影響)。11 個表單插 hidden、base.html 加 meta+`window.CSRF`、manual/member/admin-fortune 的 fetch 帶 header。三情境實測:無 cookie 200、有 session 無 token 403、帶 token 通過。
+- **註冊驗證信**:users 加 `email_verified/verified_at`(**舊帳號 backfill TRUE**、新註冊顯式 FALSE,migration 冪等);註冊寄 HTML 按鈕驗證信(HMAC token 24h,`VERIFY_TTL_SECONDS`);**新會員贈點改為驗證完成才入帳**(`/verify` 首次 `set_email_verified` 才 add_points,防拋棄式信箱刷點);`/api/v1/auth/resend_verify` 重寄(需登入);web 會員中心加未驗證提示條+重寄鈕;`_public_user` 帶 email_verified(App 可顯示,App UI 待下次發版)。全流程實測:註冊 0 點→驗證 +3→重複驗證不重發;測試帳號已清。
+
 ### 2026-07-03 — 新增資安文件 docs/SECURITY.md
 - 把歷來安全機制整理成單一文件:認證雙軌(JWT/session)、24h 時效、pwv 全裝置登出、登入鎖定、忘記密碼(HMAC/1h/一次性/防列舉)、SECRET_KEY fail-fast、機密管理、扣點原子、SQL 參數化、AI 輸入截斷、CORS 決策、**已知限制表**(無 rate limit/CSRF token/註冊驗證信、Resend key 待 rotate)與事件應對速查。**改安全相關程式前先讀;新增機制後回寫**。README 相關文件已加連結。
 

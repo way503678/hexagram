@@ -14,6 +14,7 @@
   <p><a href="/login" style="color:var(--primary); font-weight:bold;">前往登入</a></p>
 {% else %}
 <form method="post" action="/reset" class="login-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="token" value="{{ token }}">
   <input type="password" name="new_password" placeholder="新密碼(至少 8 碼,英數混合)"
          required autofocus autocomplete="new-password">

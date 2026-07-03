@@ -4,6 +4,7 @@
 {% block content %}
 <h1>會員登入</h1>
 <form method="post" action="/login" class="login-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="next" value="{{ next_url or '/member' }}">
   <input type="email" name="email" placeholder="Email"
          value="{{ email or '' }}" required autofocus autocomplete="email">

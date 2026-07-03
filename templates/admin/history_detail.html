@@ -37,6 +37,7 @@
                 action="/admin/history/{{ detail_name|urlencode }}/delete/{{ ch.id }}"
                 style="display: inline; margin: 0;"
                 onsubmit="return confirm({{ ch.confirm_msg }});">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="del-btn" title="刪除這筆命盤" aria-label="刪除這筆命盤">🗑</button>
           </form>
         </td>

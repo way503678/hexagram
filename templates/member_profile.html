@@ -6,6 +6,7 @@
 <h1>修改會員資料</h1>
 
 <form method="post" action="/member/profile" style="max-width:440px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <div style="margin-bottom:14px;">
     <label style="display:block; margin-bottom:4px; font-weight:600;">暱稱</label>
     <input type="text" name="display_name" value="{{ user.display_name or '' }}"

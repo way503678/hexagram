@@ -45,6 +45,7 @@
             {% if u.locked %}
               <span style="color:#a02020; font-weight:bold;">🔒 已鎖定</span>
               <form method="post" action="/admin/members/{{ u.id }}/unlock" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit"
                         style="margin-top:4px; padding:4px 10px; cursor:pointer;
                                border:1px solid #2d7a2d; border-radius:4px;
@@ -61,6 +62,7 @@
           <td>
             <form method="post" action="/admin/members/{{ u.id }}/add_points"
                   style="display:flex; gap:6px; align-items:center;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="number" name="amount" value="10" step="1"
                      style="width:70px; padding:5px; border:1px solid #aaa; border-radius:4px;">
               <button type="submit"

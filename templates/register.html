@@ -5,6 +5,7 @@
 <h1>註冊會員</h1>
 
 <form method="post" action="/register" class="login-form" id="regForm" style="max-width:440px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="text" name="email" placeholder="Email" required style="margin-bottom:10px;">
   <input type="password" name="password" placeholder="密碼(至少 8 碼,英數混合)" required minlength="8" style="margin-bottom:10px;">
   <input type="password" name="password2" placeholder="再次輸入密碼" required minlength="8" style="margin-bottom:10px;">

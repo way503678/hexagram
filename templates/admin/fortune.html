@@ -338,7 +338,7 @@
     msg.style.color = '#666'; msg.textContent = '⏳ 解讀中…';
     fetch('/api/v1/fortune/reading', {
       method:'POST', credentials:'same-origin',
-      headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload())
+      headers:{'Content-Type':'application/json','X-CSRF-Token':window.CSRF||''}, body: JSON.stringify(payload())
     }).then(function(res){
       var ct = res.headers.get('Content-Type') || '';
       if (ct.indexOf('text/event-stream') === -1) {
@@ -379,7 +379,7 @@
     pBtn.disabled = true; aiBtn.disabled = true; msg.style.color='#666'; msg.textContent='⏳ 產生中…';
     fetch('/api/v1/fortune/prompt', {
       method:'POST', credentials:'same-origin',
-      headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload())
+      headers:{'Content-Type':'application/json','X-CSRF-Token':window.CSRF||''}, body: JSON.stringify(payload())
     }).then(function(res){ return res.json().then(function(d){ return {ok:res.ok, status:res.status, d:d}; }); })
       .then(function(r){
         if (!r.ok) {

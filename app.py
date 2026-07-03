@@ -211,6 +211,36 @@ def verify_reset_token(token):
         return None
 
 
+# --- Email 驗證 token(無資料表;SECRET_KEY 簽章,24 小時到期) ---
+VERIFY_TTL_SECONDS = int(os.environ.get("VERIFY_TTL_SECONDS", "86400"))
+
+
+def _verify_secret():
+    return (app.config["SECRET_KEY"] + "|everify").encode("utf-8")
+
+
+def make_verify_token(uid):
+    payload = {"uid": int(uid), "exp": int(time.time()) + VERIFY_TTL_SECONDS}
+    si = _b64url(json.dumps(payload, separators=(",", ":")).encode())
+    sig = hmac.new(_verify_secret(), si.encode("ascii"), hashlib.sha256).digest()
+    return si + "." + _b64url(sig)
+
+
+def verify_verify_token(token):
+    """成功回傳 uid,失敗(過期/簽章錯/格式錯)回 None。"""
+    try:
+        si, sig_b64 = token.rsplit(".", 1)
+        payload = json.loads(_b64url_decode(si))
+        if int(payload.get("exp", 0)) < int(time.time()):
+            return None
+        expected = hmac.new(_verify_secret(), si.encode("ascii"), hashlib.sha256).digest()
+        if not hmac.compare_digest(_b64url(expected), sig_b64):
+            return None
+        return int(payload["uid"])
+    except Exception:
+        return None
+
+
 def _send_via_resend(to_email, subject, body, html=None):
     """走 Resend HTTP API 寄信(stdlib,無額外套件)。成功回 True。
     html 有給則寄 HTML 信(text 作為純文字 fallback)。"""
@@ -321,6 +351,38 @@ def _send_reset_email(to_email, link):
     )
 
 
+def _send_verify_email(to_email, link):
+    """註冊 Email 驗證信(HTML 按鈕版)。驗證完成才發新會員贈點。"""
+    if not os.environ.get("RESEND_API_KEY") and not os.environ.get("SMTP_HOST"):
+        app.logger.warning("寄信未設定;驗證連結(僅 log):%s", link)
+    html = f"""\
+<div style="background:#F1E9DC;padding:32px 16px;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
+  <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:18px;padding:32px 28px;text-align:center;">
+    <div style="font-size:22px;font-weight:800;color:#2C2942;letter-spacing:3px;">命果 <span style="color:#8C84A6;font-size:14px;letter-spacing:5px;">MINGO</span></div>
+    <p style="font-size:15px;color:#5D5675;line-height:1.9;margin:22px 0 26px;">
+      歡迎加入命果 MINGO!<br>請點下方按鈕完成 Email 驗證(<b>24 小時內有效</b>),<br>
+      驗證完成即獲贈 <b>{NEW_USER_BONUS} 顆果實</b>。
+    </p>
+    <a href="{link}"
+       style="display:inline-block;background:#6F5E9B;color:#ffffff;text-decoration:none;
+              padding:14px 44px;border-radius:24px;font-size:16px;font-weight:700;letter-spacing:2px;">
+      驗證 Email
+    </a>
+    <p style="font-size:12px;color:#8C84A6;line-height:1.8;margin:26px 0 0;">
+      若非您本人註冊,請忽略本信。<br>
+      按鈕無法點擊時,請複製此連結到瀏覽器:<br>
+      <span style="word-break:break-all;color:#6B6385;">{link}</span>
+    </p>
+  </div>
+</div>"""
+    return _send_mail(
+        to_email, "命果 MINGO — 請驗證您的 Email",
+        f"歡迎加入命果 MINGO!\n\n請點以下連結完成 Email 驗證(24 小時內有效),"
+        f"驗證完成即獲贈 {NEW_USER_BONUS} 顆果實:\n{link}\n\n若非您本人註冊,請忽略本信。",
+        html=html,
+    )
+
+
 def _send_password_changed_notice(to_email):
     """密碼變更/重設後的安全通知,讓本人能及早發現被盜。"""
     if not to_email:
@@ -410,6 +472,7 @@ def _public_user(user):
         "display_name": user.get("display_name"),
         "email": user.get("email"),
         "points_balance": user.get("points_balance", 0),
+        "email_verified": bool(user.get("email_verified")),
         "is_admin": _email_is_admin(user.get("email")),
         "gender": user.get("gender"),
         "birth_y": user.get("birth_y"), "birth_m": user.get("birth_m"),
@@ -547,6 +610,42 @@ def _resolve_current_user():
 def _inject_current_user():
     """讓所有模板都能用 current_user(顯示登入狀態 / 會員選單)。"""
     return {"current_user": current_user()}
+
+
+# ============================================================
+# CSRF 防護(自製、無套件;詳見 docs/SECURITY.md)
+#   - GET 渲染頁面時 session 惰性發 csrf_token(context processor 注入模板)
+#   - POST/PUT/PATCH/DELETE 驗證:表單 csrf_token 欄位 或 X-CSRF-Token header
+#   - 豁免:Bearer 認證(App/API,不吃 cookie 無 CSRF 風險)、
+#          完全無 session cookie 的請求(瀏覽器不會自動帶任何身分)
+# ============================================================
+def _get_csrf_token():
+    t = session.get("csrf_token")
+    if not t:
+        t = os.urandom(16).hex()
+        session["csrf_token"] = t
+    return t
+
+
+@app.context_processor
+def _inject_csrf_token():
+    return {"csrf_token": _get_csrf_token()}
+
+
+@app.before_request
+def _csrf_protect():
+    if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return
+    if request.headers.get("Authorization", "").startswith("Bearer "):
+        return  # App / API token 認證:不依賴 cookie,無 CSRF 風險
+    if not session:
+        return  # 無 session cookie(curl / App 未登入呼叫):無可被冒用的身分
+    sent = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token") or ""
+    good = session.get("csrf_token") or ""
+    if good and sent and hmac.compare_digest(sent, good):
+        return
+    app.logger.warning("CSRF 驗證失敗:%s %s", request.method, request.path)
+    abort(403)
 
 
 @app.context_processor
@@ -1409,11 +1508,13 @@ def _create_member(email, password, display_name):
     )
     if status != "ok" or not user:
         return (status, None)
-    # 新會員贈點(方便實測);失敗不影響註冊
-    if NEW_USER_BONUS > 0:
-        ok, _ = db.add_points(user["id"], NEW_USER_BONUS, "welcome_bonus")
-        if ok:
-            user = db.get_user(user["id"]) or user
+    # 寄 Email 驗證信;贈點延至驗證完成才入帳(防拋棄式信箱刷贈點,見 /verify)
+    try:
+        base = os.environ.get("PUBLIC_BASE_URL") or request.url_root.rstrip("/")
+        _send_verify_email(email, f"{base}/verify?token={make_verify_token(user['id'])}")
+    except Exception as e:  # 寄信失敗不影響註冊(可之後重寄)
+        app.logger.warning("驗證信寄送失敗 (%s: %s)", type(e).__name__, e)
+    user = db.get_user(user["id"]) or user  # refresh:帶完整欄位(email_verified 等)
     return ("ok", user)
 
 
@@ -2417,6 +2518,46 @@ def reset_page():
             _send_password_changed_notice(u.get("email"))  # 安全通知:讓本人能發現被盜
         return render_template("reset.html", mode="login", done=True)
     return render_template("reset.html", mode="login", token=token)
+
+
+def _verify_result_page(ok, message):
+    """Email 驗證結果頁(簡潔卡片,不另開模板)。"""
+    icon = "✅" if ok else "⚠️"
+    return f"""<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Email 驗證 — 命果 MINGO</title></head>
+<body style="margin:0;background:#F1E9DC;font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;">
+<div style="max-width:440px;margin:60px auto;background:#fff;border-radius:18px;padding:36px 28px;text-align:center;">
+  <div style="font-size:22px;font-weight:800;color:#2C2942;letter-spacing:3px;">命果 <span style="color:#8C84A6;font-size:14px;letter-spacing:5px;">MINGO</span></div>
+  <p style="font-size:17px;color:#2C2942;line-height:1.9;margin:24px 0;">{icon} {message}</p>
+  <a href="/login" style="display:inline-block;background:#6F5E9B;color:#fff;text-decoration:none;
+     padding:12px 40px;border-radius:24px;font-size:15px;font-weight:700;letter-spacing:2px;">前往登入</a>
+</div></body></html>""", (200 if ok else 400)
+
+
+@app.route("/verify", methods=["GET"])
+def verify_email():
+    """Email 驗證:標記已驗證;首次驗證發新會員贈點。"""
+    uid = verify_verify_token((request.args.get("token") or "").strip())
+    if not uid:
+        return _verify_result_page(False, "驗證連結無效或已過期(24 小時)。<br>請登入後到會員中心重寄驗證信。")
+    first = db.set_email_verified(uid)
+    if first and NEW_USER_BONUS > 0:
+        db.add_points(uid, NEW_USER_BONUS, "welcome_bonus")
+        return _verify_result_page(True, f"Email 驗證完成!已贈送 {NEW_USER_BONUS} 顆果實 🎉")
+    return _verify_result_page(True, "Email 已完成驗證。")
+
+
+@app.route("/api/v1/auth/resend_verify", methods=["POST"])
+def api_resend_verify():
+    """重寄 Email 驗證信(需登入;已驗證者不寄)。App 與 Web 共用。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "請先登入會員"}), 401
+    if user.get("email_verified"):
+        return jsonify({"ok": True, "already": True})
+    base = os.environ.get("PUBLIC_BASE_URL") or request.url_root.rstrip("/")
+    _send_verify_email(user["email"], f"{base}/verify?token={make_verify_token(user['id'])}")
+    return jsonify({"ok": True})
 
 
 @app.route("/api/v1/auth/forgot", methods=["POST"])
