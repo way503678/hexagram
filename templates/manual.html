@@ -475,7 +475,7 @@
     var qEl = document.getElementById('manual-question');
     var question = qEl ? (qEl.value || '').trim() : '';
     if (!question) {
-      alert('請先在上方「所問之事」填寫要問的問題,再進行 AI 解盤。');
+      alert('請先在上方填寫今天要問的問題,再進行 AI 解盤。');
       if (qEl) { qEl.scrollIntoView({behavior:'smooth', block:'center'}); qEl.focus(); }
       return;
     }
@@ -612,12 +612,12 @@
     var qEl = document.getElementById('manual-question');
     var question = qEl ? (qEl.value || '').trim() : '';
     if (!question) {
-      alert('請先在上方「所問之事」填寫要問的問題,再產生 AI 解讀。');
+      alert('請先在上方填寫今天要問的問題,再產生 AI 解讀。');
       if (qEl) { qEl.scrollIntoView({behavior:'smooth', block:'center'}); qEl.focus(); }
       return;
     }
     if (question.length > 500) {
-      alert('所問之事超過 500 字,請縮短。');
+      alert('問題超過 500 字,請縮短。');
       return;
     }
 
@@ -729,8 +729,19 @@
 
 <script>
 (function(){
-  // (排盤不強制填問題;問題只在做 AI 解讀時才需要)
+  // ---------- 排盤前驗證:要問的問題必填 ----------
   var manualForm = document.getElementById('manualForm');
+  if (manualForm) {
+    manualForm.addEventListener('submit', function(e){
+      var qEl = document.getElementById('manual-question');
+      if (qEl && !(qEl.value || '').trim()) {
+        e.preventDefault();
+        alert('請先填寫今天要問的問題,再排盤。');
+        qEl.scrollIntoView({behavior:'smooth', block:'center'});
+        qEl.focus();
+      }
+    });
+  }
 
   // ---------- 排盤設定收合(有結果時預設收起,保持畫面乾淨)----------
   var toggleFormBtn = document.getElementById('toggleFormBtn');
