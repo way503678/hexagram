@@ -1,10 +1,11 @@
 # Ubuntu 小主機部署指南
 
-> ⚠️ **前置相依(必讀)**:本服務的 PostgreSQL **不在**這份 compose 裡,是連到外部
-> `finance-apps` 那組 compose 的 postgres(經 external 網路 `finance-apps_default`,
+> ⚠️ **前置相依(必讀)**:本服務的 PostgreSQL **不在**這份 compose 裡,是連到獨立的
+> `/opt/database` 那組 compose 的 postgres(經 external 網路 `appnet`,host 名 `postgres`,
 > 見 docker-compose.yml 底部)。乾淨機器直接 `docker compose up -d` 會因外部網路
-> 不存在而失敗——**要先把 finance-apps 的 postgres 跑起來**。
-> 重開機的完整啟動順序見 `docs/RESUME.md`(先 finance-apps → 再 hexagram)。
+> 不存在而失敗——**要先起 `/opt/database` 的 postgres(它建立 appnet)**。
+> 重開機的完整啟動順序見 `docs/RESUME.md`(先 database → 再 hexagram)。
+> (2026-07-12 起 postgres 已從舊的 finance-apps 抽成獨立 `/opt/database`。)
 
 ## 一、把整個資料夾搬到 Ubuntu 主機
 

@@ -68,4 +68,4 @@ services:
 networks:
   postgres-net:
     external: true
-    name: finance-apps_default
+    name: appnet

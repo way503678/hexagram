@@ -53,6 +53,14 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 ### 2026-07-03 — 新增資安文件 docs/SECURITY.md
 - 把歷來安全機制整理成單一文件:認證雙軌(JWT/session)、24h 時效、pwv 全裝置登出、登入鎖定、忘記密碼(HMAC/1h/一次性/防列舉)、SECRET_KEY fail-fast、機密管理、扣點原子、SQL 參數化、AI 輸入截斷、CORS 決策、**已知限制表**(無 rate limit/CSRF token/註冊驗證信、Resend key 待 rotate)與事件應對速查。**改安全相關程式前先讀;新增機制後回寫**。README 相關文件已加連結。
 
+### 2026-07-12 — PostgreSQL 抽成獨立容器(finance-apps 退役)
+- **背景**:舊共用 postgres 在 `/data/finance-apps`(還含 n8n/firefly/homarr)。改成獨立。
+- **新架構**:`/opt/database`(獨立 postgres,建立網路 `appnet`,掛既有卷 `finance-apps_pg-data` external=資料原地不動)+ `/opt/apps`(firefly/n8n/n8n-runners/homarr 搬過來,連 appnet)。
+- **hexagram 改動**:docker-compose 的外部網路 `finance-apps_default` → `appnet`(host 名 postgres 不變,連線字串不動)。切換時需 `down` 再 `up`(改 external 網路名 compose 不會自動重建,只改 name 會 start 舊容器抓到已刪網路而失敗)。
+- **遷移法**:先 `pg_dumpall` 全備份(`/opt/database/backup/pre-migration-20260712.sql`,649K 含 5 庫)→ 停 hexagram/backup → down finance-apps → 起獨立 postgres(重用卷)→ 驗 5 庫+會員數在 → 起 hexagram 驗健康+對外 200 → 起 apps。**零資料遺失、hexagram 僅約 2-3 分鐘離線**。
+- 文件同步:README/DEPLOY/RESUME 的「finance-apps 前置相依」全改為 `/opt/database` + `appnet`。
+- 教訓:改 compose external 網路名一定要 down 再 up,不能只 up(舊容器抓舊網路 ID 會失敗)。
+
 ### 2026-07-03 — 改/重設密碼後全裝置自動登出(密碼版本指紋)
 - 缺口:改/重設密碼後,舊 App token 與網頁 session 仍有效至 24h 上限。
 - 修法(零狀態,無 session 表):`_pw_version(uid)`=密碼雜湊 sha256 前 8 碼。**token** 簽發帶 `pwv` claim,verify 時比對 DB 現值(無 pwv 的舊 token 一律失效);**web session** 登入寫入 `pwv`,`_resolve_current_user` 比對不符即 `session.clear()`。密碼一變 → 指紋變 → 所有裝置舊憑證自動失效。

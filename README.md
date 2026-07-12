@@ -62,8 +62,8 @@ docker compose up -d --build hexagram   # 標準方式(改完程式/模板/promp
 # http://localhost:8080 ;另有 hexagram-db-backup 每日備份 sidecar
 ```
 
-⚠️ **前置相依**:PostgreSQL 來自外部 compose(`finance-apps` 的 postgres,經 external 網路
-`finance-apps_default`),乾淨機器要先啟動那組服務。重開機順序見 `docs/RESUME.md`。
+⚠️ **前置相依**:PostgreSQL 來自獨立 compose `/opt/database`(host 名 `postgres`,external 網路
+`appnet`),乾淨機器要先啟動它。重開機順序見 `docs/RESUME.md`。(2026-07-12 從舊 finance-apps 抽出。)
 主要環境變數(`.env`,參考 `.env.example`):`SECRET_KEY`(必填,弱值拒啟動)、`ADMIN_EMAILS`、
 `ANTHROPIC_API_KEY`、`RESEND_API_KEY`、`SESSION_MAX_AGE_HOURS`(預設 24)。
 
