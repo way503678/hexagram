@@ -8,8 +8,10 @@
 
 | 專案 | 目錄 | 容器 |
 |---|---|---|
-| **database** | `/opt/database` | **postgres**(17-alpine,獨立)— 建立共用網路 `appnet`、掛卷 `finance-apps_pg-data` |
+| **database** | `/opt/database` | **postgres**(18-alpine,獨立)— 建立共用網路 `appnet`、掛卷 `finance-apps_pg-data` |
 | **apps** | `/opt/apps` | n8n、n8n-runners、firefly-iii、homarr(連 postgres,在 appnet) |
+> 2026-07-12 起 postgres 已升 18 且**全部工具集中在這一顆**(database 分隔:hexagram/n8n/stock/fx/mops/flights);flight-tracker 不再有自己的 db。舊 17 卷已移除,SQL 備份在 /opt/database/backup/。
+
 | **hexagram** | `/opt/hexagram` | hexagram(命果後端)、hexagram-db-backup |
 
 > 2026-07-12 起 postgres 已從 finance-apps 抽成獨立 `/opt/database`(舊 `/data/finance-apps` 已退役)。

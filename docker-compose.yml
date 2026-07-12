@@ -45,7 +45,7 @@ services:
 
   # ---- 自動備份 hexagram 資料庫(每日 pg_dump + gzip + 輪替保留)----
   db-backup:
-    image: prodrigestivill/postgres-backup-local:17
+    image: prodrigestivill/postgres-backup-local:18
     container_name: hexagram-db-backup
     restart: unless-stopped
     environment:
