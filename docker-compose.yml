@@ -18,6 +18,8 @@ services:
       DB_ENABLED: "1"
       # 管理員名單（email，多個用逗號分隔；值放在 .env，不進 git）
       ADMIN_EMAILS: "${ADMIN_EMAILS:-}"
+      # 內部服務共享密鑰（SELFTOOLS 首頁今日指引用；值放 .env）
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-}"
       # Flask session 簽章用的金鑰（部署時請改成自己的）
       SECRET_KEY: "${SECRET_KEY:-please-change-me-in-production}"
       # Claude API 金鑰（值放在 .env，不進 git；此處僅引用變數）
