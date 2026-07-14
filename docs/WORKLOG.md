@@ -277,3 +277,8 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
   - 建議寄系統信走 **Resend / SES** 等 transactional 服務,**不要自架 mail server**(住宅 IP 會被當垃圾信)。後端 `_send_mail` 已是供應商無關,`.env` 填 SMTP 即可。
 - [ ] **綠界金流**:目前儲值是測試按鈕(test_topup),待接綠界。
 - [ ] **App 推播通知**(expo-notifications + Expo Push,需存 push token)。
+
+## 2026-07-14 內部端點:今日指引供 SELFTOOLS 首頁
+- 新增 GET /api/v1/daily_internal(X-Internal-Key 驗證,env INTERNAL_API_KEY;公網 403)。
+  依 y/m/d/h 生日參數算 analyze_daily,與會員版同引擎。供 selftools 首頁「生活摘要」內網呼叫。
+- 驗證:無鑰 403 ✓、有鑰 200 ✓;SELFTOOLS 首頁運勢卡輸出與 App 截圖一致。
