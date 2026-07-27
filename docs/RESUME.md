@@ -2,20 +2,19 @@
 
 > 最後更新:2026-06-28 晚。重開機後照這份把服務跑起來、接續未完成的事。
 
-## 一、Docker 服務(重點:有兩個 compose 專案,要照順序起)
+## 一、Docker 服務
 
-這台主機上跑著兩組 docker compose:
+這台主機上的主要 Docker Compose 專案:
 
 | 專案 | 目錄 | 容器 |
 |---|---|---|
 | **database** | `/opt/database` | **postgres**(18-alpine,唯一一顆)— 建立共用網路 `appnet`、卷 `database_pg18` |
-| **apps** | `/opt/apps` | n8n、n8n-runners(連 postgres,在 appnet) |
 | **selftools** | `/opt/selftools` | 工具箱:toolbox-proxy(對外 8090)、flight-web、stock、fx(皆連 postgres) |
 | **hexagram** | `/opt/hexagram` | hexagram(命果後端)、hexagram-db-backup |
 
 > **2026-07-12 postgres 升 18 + 全部集中一顆**:所有工具共用 `/opt/database` 的 postgres(18-alpine),
-> 用 database 分隔:**hexagram / n8n / stock / fx / mops / flights**。host 名 `postgres`、外部網路 `appnet`。
-> flight-tracker、firefly、homarr 各自的 db/服務已移除;舊 17 卷已刪,SQL 備份留 `/opt/database/backup/`。
+> 用 database 分隔:**hexagram / stock / fx / mops / flights / futures / tw_stock / selftools_home**。host 名 `postgres`、外部網路 `appnet`。
+> n8n、n8n-runners、firefly、homarr 已移除;SQL 備份留 `/opt/database/backup/`。
 
 **重要關聯**:hexagram 連的是 `/opt/database` 的 postgres(外部網路 `appnet`,host 名 `postgres`)。**先起 database(postgres + appnet),再起 hexagram**。
 
@@ -24,9 +23,8 @@
 # 1) 先起獨立 postgres(建立 appnet 網路)
 cd /opt/database && docker compose up -d
 
-# 2) 再起 hexagram 後端 + 其他 app
+# 2) 再起 hexagram 後端
 cd /opt/hexagram && docker compose up -d
-cd /opt/apps && docker compose up -d
 
 # 3) 驗證
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/        # 預期 200
