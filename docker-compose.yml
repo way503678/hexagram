@@ -39,11 +39,11 @@ services:
       - default          # hexagram 自己的 default network
       - postgres-net     # 連到 postgres 所在的外部 network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/')"]
-      interval: 30s
-      timeout: 5s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/v1/health', timeout=3)"]
+      interval: 59s
+      timeout: 15s
       retries: 3
-      start_period: 10s
+      start_period: 30s
 
   # ---- 自動備份 hexagram 資料庫(每日 pg_dump + gzip + 輪替保留)----
   db-backup:
