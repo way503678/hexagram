@@ -10,11 +10,11 @@
 |---|---|---|
 | **database** | `/opt/database` | **postgres**(18-alpine,唯一一顆)— 建立共用網路 `appnet`、卷 `database_pg18` |
 | **selftools** | `/opt/selftools` | 工具箱:toolbox-proxy(對外 8090)、flight-web、stock、fx(皆連 postgres) |
-| **hexagram** | `/opt/hexagram` | hexagram(命果後端)、hexagram-db-backup |
+| **hexagram** | `/opt/hexagram` | hexagram(命果後端) |
 
 > **2026-07-12 postgres 升 18 + 全部集中一顆**:所有工具共用 `/opt/database` 的 postgres(18-alpine),
 > 用 database 分隔:**hexagram / stock / fx / mops / flights / futures / tw_stock / selftools_home**。host 名 `postgres`、外部網路 `appnet`。
-> n8n、n8n-runners、firefly、homarr 已移除;SQL 備份留 `/opt/database/backup/`。
+> n8n、n8n-runners、firefly、homarr 與舊 SQL 備份已移除。
 
 **重要關聯**:hexagram 連的是 `/opt/database` 的 postgres(外部網路 `appnet`,host 名 `postgres`)。**先起 database(postgres + appnet),再起 hexagram**。
 

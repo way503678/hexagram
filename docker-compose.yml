@@ -45,28 +45,6 @@ services:
       retries: 3
       start_period: 30s
 
-  # ---- 自動備份 hexagram 資料庫(每日 pg_dump + gzip + 輪替保留)----
-  db-backup:
-    image: prodrigestivill/postgres-backup-local:18
-    container_name: hexagram-db-backup
-    restart: unless-stopped
-    environment:
-      TZ: Asia/Taipei
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      POSTGRES_DB: hexagram
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: "${PG_PASSWORD:-postgres}"
-      SCHEDULE: "0 3 * * *"          # 每天凌晨 3 點(Asia/Taipei)
-      BACKUP_KEEP_DAYS: "7"
-      BACKUP_KEEP_WEEKS: "4"
-      BACKUP_KEEP_MONTHS: "6"
-      POSTGRES_EXTRA_OPTS: "--clean --if-exists"
-    volumes:
-      - ./backups:/backups          # 備份存到主機 ./backups(已 gitignore)
-    networks:
-      - postgres-net                # 連到 postgres 所在的外部 network
-
 networks:
   postgres-net:
     external: true

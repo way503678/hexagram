@@ -59,7 +59,7 @@ static/style.css    # 全站樣式(MINGO tokens 在「v2 覆蓋層」的 :root)
 
 ```bash
 docker compose up -d --build hexagram   # 標準方式(改完程式/模板/prompt 重建上線)
-# http://localhost:8080 ;另有 hexagram-db-backup 每日備份 sidecar
+# http://localhost:8080
 ```
 
 ⚠️ **前置相依**:PostgreSQL 來自獨立 compose `/opt/database`(host 名 `postgres`,external 網路
@@ -168,4 +168,3 @@ docker compose up -d --build hexagram   # 標準方式(改完程式/模板/promp
 - **嚴格三合**：月支必須是帝旺地（子/午/酉/卯），且卦中六爻同時涵蓋同組另外兩個地支
 - **嚴格六沖六合卦**（野鶴派）：8 純卦 + 天雷無妄 + 雷天大壯 = 10 六沖；6 個六合卦
 - **傳統引動規則 7 種**：動值/動沖/動合/靜值/靜沖/靜合/無事
-

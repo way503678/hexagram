@@ -1,9 +1,6 @@
 # 機密檔案,絕對不能進 GitHub
 .env
 
-# 資料庫備份(含會員資料/密碼雜湊,絕對不能進 git)
-backups/
-
 # Python
 __pycache__/
 *.pyc

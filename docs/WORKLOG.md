@@ -27,7 +27,7 @@
 
 ```bash
 cd /opt/hexagram
-docker compose ps                       # 容器狀態(hexagram + hexagram-db-backup)
+docker compose ps                       # 容器狀態(hexagram)
 docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建上線
 # 本機網址 http://localhost:8080  ;容器名 hexagram;埠 8080
 ```
