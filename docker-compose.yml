@@ -35,6 +35,11 @@ services:
       SMTP_PASS: "${SMTP_PASS:-}"
       MAIL_FROM: "${MAIL_FROM:-}"
       PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-}"
+      # StoreKit AppTransaction 驗證與促銷識別值 HMAC
+      APPLE_BUNDLE_ID: "${APPLE_BUNDLE_ID:-com.hexagram.app}"
+      APPLE_APP_ID: "${APPLE_APP_ID:-}"
+      PROMO_HMAC_SECRET: "${PROMO_HMAC_SECRET:-}"
+      PROMO_RETENTION_DAYS: "${PROMO_RETENTION_DAYS:-730}"
     networks:
       - default          # hexagram 自己的 default network
       - postgres-net     # 連到 postgres 所在的外部 network

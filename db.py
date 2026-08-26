@@ -161,8 +161,9 @@ CREATE TABLE IF NOT EXISTS divination_logs (
     input_day     INTEGER NOT NULL,
     input_hour    INTEGER NOT NULL,
     query_count   INTEGER NOT NULL DEFAULT 1,
+    user_id       INTEGER REFERENCES users(id),
     CONSTRAINT divination_logs_unique
-        UNIQUE (client_name, input_year, input_month, input_day, input_hour)
+        UNIQUE (user_id, client_name, input_year, input_month, input_day, input_hour)
 );
 CREATE INDEX IF NOT EXISTS idx_divination_logs_created_at
     ON divination_logs (created_at DESC);
@@ -174,6 +175,8 @@ CREATE INDEX IF NOT EXISTS idx_divination_logs_client_name
 MIGRATE = """
 DO $$
 BEGIN
+    ALTER TABLE divination_logs ADD COLUMN IF NOT EXISTS user_id INTEGER;
+
     -- 1. client_name 改為 NOT NULL（若曾經有 NULL 紀錄會失敗，先把它刪掉）
     DELETE FROM divination_logs WHERE client_name IS NULL;
     BEGIN
@@ -181,23 +184,16 @@ BEGIN
     EXCEPTION WHEN others THEN NULL;
     END;
 
-    -- 2. 若 UNIQUE 約束不存在，補上
+    -- 2. 唯一鍵必須包含 user_id，避免同名同生日的不同會員互相覆寫或接管紀錄。
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'divination_logs_unique'
+          AND pg_get_constraintdef(oid) LIKE 'UNIQUE (user_id,%'
     ) THEN
-        -- 若已有重複資料，先各保留最新一筆
-        DELETE FROM divination_logs a USING divination_logs b
-        WHERE a.id < b.id
-          AND a.client_name = b.client_name
-          AND a.input_year  = b.input_year
-          AND a.input_month = b.input_month
-          AND a.input_day   = b.input_day
-          AND a.input_hour  = b.input_hour;
-
+        ALTER TABLE divination_logs DROP CONSTRAINT IF EXISTS divination_logs_unique;
         ALTER TABLE divination_logs
             ADD CONSTRAINT divination_logs_unique
-            UNIQUE (client_name, input_year, input_month, input_day, input_hour);
+            UNIQUE (user_id, client_name, input_year, input_month, input_day, input_hour);
     END IF;
 
     -- 3. 若 query_count 欄位不存在，補上（預設值 1，所有舊紀錄都是 1）
@@ -324,6 +320,59 @@ CREATE INDEX IF NOT EXISTS idx_refl_remind
 """
 
 
+# 促銷資格防濫用帳本。刻意不設 user_id / email / 生日等欄位，避免刪帳後
+# 仍能從此表重建會員身分。identifier_hash 只能是伺服器端 HMAC 後的值。
+PROMOTIONS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS promo_redemptions (
+    identifier_hash TEXT NOT NULL,
+    campaign        TEXT NOT NULL,
+    redeemed_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at      TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (identifier_hash, campaign)
+);
+CREATE INDEX IF NOT EXISTS idx_promo_redemptions_expires
+    ON promo_redemptions (expires_at);
+DELETE FROM promo_redemptions WHERE expires_at <= NOW();
+
+-- 舊版命盤表沒有會員關聯；新資料開始記錄 user_id，刪帳時才能精準清除。
+ALTER TABLE divination_logs ADD COLUMN IF NOT EXISTS user_id INTEGER;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'divination_logs_user_id_fkey'
+    ) THEN
+        ALTER TABLE divination_logs
+            ADD CONSTRAINT divination_logs_user_id_fkey
+            FOREIGN KEY (user_id) REFERENCES users(id);
+    END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_divination_logs_user
+    ON divination_logs (user_id, created_at DESC);
+
+-- 舊資料只在「姓名與完整出生時間唯一吻合一位會員」時才回填歸屬；
+-- 不做模糊比對，避免同名者被錯誤關聯及刪除。
+WITH unique_matches AS (
+    SELECT d.id AS log_id, MIN(u.id) AS matched_user_id
+    FROM divination_logs d
+    JOIN users u
+      ON u.display_name IS NOT NULL
+     AND lower(trim(u.display_name)) = lower(trim(d.client_name))
+     AND u.birth_y = d.input_year
+     AND u.birth_m = d.input_month
+     AND u.birth_d = d.input_day
+     AND u.birth_h = d.input_hour
+    WHERE d.user_id IS NULL
+    GROUP BY d.id
+    HAVING COUNT(*) = 1
+)
+UPDATE divination_logs d
+SET user_id = m.matched_user_id
+FROM unique_matches m
+WHERE d.id = m.log_id;
+"""
+
+
 # 對舊資料庫升級:users 表若缺 password_hash 欄位則補上(Email 帳號登入用)
 MIGRATE_USERS = """
 DO $$
@@ -371,12 +420,13 @@ def init_db():
                 # (DeadlockDetected)。先取一把交易層 advisory lock 讓彼此排隊,
                 # 交易結束自動釋放;DDL 都是 IF NOT EXISTS,排隊重跑也安全。
                 cur.execute("SELECT pg_advisory_xact_lock(%s)", (911002,))
+                cur.execute(POINTS_SCHEMA)
                 cur.execute(SCHEMA)
                 cur.execute(MIGRATE)
-                cur.execute(POINTS_SCHEMA)
                 cur.execute(MIGRATE_USERS)
                 cur.execute(QUESTIONS_SCHEMA)
                 cur.execute(REFLECTIONS_SCHEMA)
+                cur.execute(PROMOTIONS_SCHEMA)
         log.info("DB ready: %s@%s/%s",
                  PG_CONF["user"], PG_CONF["host"], PG_CONF["dbname"])
         _ensure_search_indexes()
@@ -414,7 +464,7 @@ def _ensure_search_indexes():
                     "搜尋仍可運作,只是大量資料時較慢", type(e).__name__, e)
 
 
-def log_divination(client_name, y, m, d, h, gender=None):
+def log_divination(client_name, y, m, d, h, gender=None, user_id=None):
     """
     寫入或更新一筆排盤紀錄（UPSERT）。失敗只記 warning，不丟例外。
 
@@ -441,18 +491,20 @@ def log_divination(client_name, y, m, d, h, gender=None):
                 cur.execute(
                     """
                     INSERT INTO divination_logs
-                      (client_name, gender, input_year, input_month, input_day, input_hour)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (client_name, input_year, input_month, input_day, input_hour)
+                      (client_name, gender, input_year, input_month, input_day, input_hour, user_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (user_id, client_name, input_year, input_month, input_day, input_hour)
                     DO UPDATE SET
                       created_at  = NOW(),
                       query_count = divination_logs.query_count + 1,
-                      gender      = COALESCE(EXCLUDED.gender, divination_logs.gender)
+                      gender      = COALESCE(EXCLUDED.gender, divination_logs.gender),
+                      user_id     = COALESCE(EXCLUDED.user_id, divination_logs.user_id)
                     """,
                     (
                         str(client_name).strip(),
                         g,
                         int(y), int(m), int(d), int(h),
+                        int(user_id) if user_id is not None else None,
                     ),
                 )
         return True
@@ -1054,14 +1106,81 @@ def delete_user(user_id):
             with c.cursor() as cur:
                 uid = int(user_id)
                 # 先刪有外鍵指向 users 的子表,最後刪 users 本身
+                cur.execute("DELETE FROM growth_reflections WHERE user_id = %s", (uid,))
                 cur.execute("DELETE FROM divination_questions WHERE user_id = %s", (uid,))
                 cur.execute("DELETE FROM point_ledger WHERE user_id = %s", (uid,))
                 cur.execute("DELETE FROM payment_orders WHERE user_id = %s", (uid,))
+                cur.execute("DELETE FROM divination_logs WHERE user_id = %s", (uid,))
+                # 舊版命盤沒有 user_id；若姓名與完整出生時間吻合本會員，也一併刪除。
+                # 只做完整精確比對，不以 Email、模糊姓名或其他推測值關聯。
+                cur.execute(
+                    """DELETE FROM divination_logs d
+                       USING users u
+                       WHERE u.id = %s
+                         AND d.user_id IS NULL
+                         AND u.display_name IS NOT NULL
+                         AND lower(trim(d.client_name)) = lower(trim(u.display_name))
+                         AND d.input_year = u.birth_y
+                         AND d.input_month = u.birth_m
+                         AND d.input_day = u.birth_d
+                         AND d.input_hour = u.birth_h""",
+                    (uid,),
+                )
                 cur.execute("DELETE FROM users WHERE id = %s", (uid,))
         return True
     except Exception as e:
         log.warning("DB delete_user failed (%s: %s)", type(e).__name__, e)
         return False
+
+
+def claim_promotion(user_id, identifier_hash, campaign, points, retention_days):
+    """原子領取一次性促銷並加點。
+
+    promo_redemptions 不保存 user_id；會員關聯只存在本次交易記憶體中。
+    回傳 (claimed, balance, message)。
+    """
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False, None, "db_unavailable"
+    try:
+        uid = int(user_id)
+        amount = int(points)
+        days = max(1, int(retention_days))
+        with _conn() as c:
+            with c.cursor() as cur:
+                # 到期紀錄已不再用於資格判定，順手最小化保存量。
+                cur.execute("DELETE FROM promo_redemptions WHERE expires_at <= NOW()")
+                cur.execute(
+                    """INSERT INTO promo_redemptions
+                         (identifier_hash, campaign, expires_at)
+                       VALUES (%s, %s, NOW() + (%s * INTERVAL '1 day'))
+                       ON CONFLICT (identifier_hash, campaign) DO NOTHING
+                       RETURNING 1""",
+                    (str(identifier_hash), str(campaign), days),
+                )
+                claimed = cur.fetchone() is not None
+                if not claimed:
+                    cur.execute("SELECT points_balance FROM users WHERE id = %s", (uid,))
+                    row = cur.fetchone()
+                    return False, (row[0] if row else None), "already_redeemed"
+                cur.execute(
+                    """UPDATE users SET points_balance = points_balance + %s
+                       WHERE id = %s RETURNING points_balance""",
+                    (amount, uid),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise RuntimeError(f"user {uid} not found")
+                balance = row[0]
+                cur.execute(
+                    """INSERT INTO point_ledger
+                         (user_id, delta, balance_after, reason, ref)
+                       VALUES (%s, %s, %s, 'welcome_bonus', %s)""",
+                    (uid, amount, balance, str(campaign)),
+                )
+                return True, balance, "claimed"
+    except Exception as e:
+        log.warning("DB claim_promotion failed (%s: %s)", type(e).__name__, e)
+        return False, None, "db_error"
 
 
 def list_user_questions(user_id, limit=100):

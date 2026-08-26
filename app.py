@@ -97,6 +97,9 @@ def _email_is_admin(email):
 # ============================================================
 # 新會員註冊時贈送的點數(方便在 App 上實測解盤流程;設 0 可關閉)
 NEW_USER_BONUS = int(os.environ.get("NEW_USER_BONUS", "3"))
+# 新戶禮資格只由 Apple AppTransaction 判定，不再由可重建的 Email 判定。
+WELCOME_CAMPAIGN = os.environ.get("WELCOME_CAMPAIGN", "welcome_bonus_2026")
+PROMO_RETENTION_DAYS = int(os.environ.get("PROMO_RETENTION_DAYS", "730"))
 # 密碼最短長度(政策:至少 8 碼、且英數混合)
 _MIN_PASSWORD_LEN = 8
 # 連續登入失敗達此次數即鎖定帳號(需管理員解鎖)
@@ -117,6 +120,15 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 def _token_secret():
     """token 簽章金鑰(跟著 SECRET_KEY 走;金鑰若改變,既有 token 全部失效)。"""
     return app.config["SECRET_KEY"].encode("utf-8")
+
+
+def _promo_identifier_hash(app_transaction_id):
+    secret = os.environ.get("PROMO_HMAC_SECRET") or app.config["SECRET_KEY"]
+    return hmac.new(
+        secret.encode("utf-8"),
+        ("app-transaction|" + str(app_transaction_id)).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def _b64url(raw: bytes) -> str:
@@ -786,8 +798,11 @@ def cast():
 
     # 寫入 DB:要有姓名且使用者主動送出表單才寫
     is_view_only = request.args.get("view") == "1"
-    if result is not None and has_explicit_input and client_name and not is_view_only:
-        db.log_divination(client_name, y_i, m_i, d_i, h_i, gender=gender or None)
+    history_user = current_user()
+    if (result is not None and has_explicit_input and client_name and not is_view_only
+            and history_user):
+        db.log_divination(client_name, y_i, m_i, d_i, h_i,
+                          gender=gender or None, user_id=history_user["id"])
 
     return render_template(
         "cast.html",
@@ -1807,13 +1822,15 @@ def api_cast():
     except Exception as e:
         return jsonify({"error": f"起卦失敗:{type(e).__name__}: {e}"}), 500
 
-    # 姓名/性別:有填姓名就存進歷史紀錄(與網頁 /cast 一致;失敗不影響回應)
+    # 只有登入會員才保存，並綁 user_id，才能在刪帳時精準清除。
     name = (data.get("name") or "").strip()
     gender = (data.get("gender") or "").strip().upper()
-    if name:
+    history_user = current_user()
+    if name and history_user:
         try:
             db.log_divination(name, y_i, m_i, d_i, h_i,
-                              gender=db.norm_gender(gender))
+                              gender=db.norm_gender(gender),
+                              user_id=history_user["id"])
         except Exception as e:
             app.logger.warning("log_divination failed (%s: %s)",
                                type(e).__name__, e)
@@ -2570,15 +2587,50 @@ def _verify_result_page(ok, message):
 
 @app.route("/verify", methods=["GET"])
 def verify_email():
-    """Email 驗證:標記已驗證;首次驗證發新會員贈點。"""
+    """Email 驗證。新戶禮另由已驗證的 Apple AppTransaction 判定。"""
     uid = verify_verify_token((request.args.get("token") or "").strip())
     if not uid:
         return _verify_result_page(False, "驗證連結無效或已過期(24 小時)。<br>請登入後到會員中心重寄驗證信。")
-    first = db.set_email_verified(uid)
-    if first and NEW_USER_BONUS > 0:
-        db.add_points(uid, NEW_USER_BONUS, "welcome_bonus")
-        return _verify_result_page(True, f"Email 驗證完成!已贈送 {NEW_USER_BONUS} 顆果實 🎉")
+    db.set_email_verified(uid)
     return _verify_result_page(True, "Email 已完成驗證。")
+
+
+@app.route("/api/v1/promotions/welcome", methods=["POST"])
+def api_claim_welcome_promotion():
+    """以 Apple 簽署的 AppTransaction JWS 原子領取新戶禮。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "未登入或登入已逾期"}), 401
+    if not user.get("email_verified"):
+        return jsonify({"error": "請先完成 Email 驗證"}), 403
+    data = request.get_json(silent=True) or {}
+    signed = data.get("signed_app_transaction")
+    try:
+        from appstore import AppTransactionError, verify_app_transaction
+    except ImportError:
+        app.logger.exception("App Store verifier is unavailable")
+        return jsonify({"error": "新戶資格驗證服務尚未就緒"}), 503
+    try:
+        app_transaction_id = verify_app_transaction(signed)
+    except (AppTransactionError, TypeError, ValueError) as exc:
+        app.logger.warning("AppTransaction rejected: %s", exc)
+        return jsonify({"error": "無法驗證 App Store 新戶資格"}), 400
+
+    claimed, balance, reason = db.claim_promotion(
+        user["id"],
+        _promo_identifier_hash(app_transaction_id),
+        WELCOME_CAMPAIGN,
+        NEW_USER_BONUS,
+        PROMO_RETENTION_DAYS,
+    )
+    if reason in ("db_error", "db_unavailable"):
+        return jsonify({"error": "系統忙線,請稍後再試"}), 503
+    return jsonify({
+        "ok": True,
+        "granted": bool(claimed),
+        "balance": balance,
+        "campaign": WELCOME_CAMPAIGN,
+    })
 
 
 @app.route("/api/v1/auth/resend_verify", methods=["POST"])

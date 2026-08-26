@@ -18,6 +18,8 @@ RUN useradd -m -u 1000 appuser
 COPY --chown=appuser:appuser *.py ./
 # 個資/免責條文單一來源(web + App 共用)
 COPY --chown=appuser:appuser legal.json ./
+# Apple AppTransaction JWS 驗證所需的官方根憑證
+COPY --chown=appuser:appuser certs/ ./certs/
 # 複製判讀核心包（divination/core + divination/aspects）
 COPY --chown=appuser:appuser divination/ ./divination/
 # 複製 Jinja 模板與靜態檔(CSS 等)
