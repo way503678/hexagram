@@ -45,7 +45,7 @@ def _verifier(environment: str) -> SignedDataVerifier:
         roots,
         True,
         env,
-        os.environ.get("APPLE_BUNDLE_ID", "com.hexagram.app"),
+        os.environ.get("APPLE_BUNDLE_ID", "com.mingguo.app"),
         app_id,
     )
 

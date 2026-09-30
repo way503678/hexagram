@@ -908,10 +908,8 @@ def manual():
 # 公開(僅管理員):手動排卦 AI 解讀 prompt 組裝
 # ============================================================
 # AI 解盤使用的模型(可由環境變數覆寫)
-# 2026-06-20:Opus 4.8 → 改回 Sonnet 4.6。對打評估:取用神兩 model 皆 6/6 平手;
-# 之前 Opus 領先的「元神、世應生剋」已搬進引擎(回歸測試證明),不再靠 model。
-# 準確度兩者已等同 → 取 Sonnet 省約 4 成成本(只差一點文筆精煉度)。
-_AI_READING_MODEL = os.environ.get("AI_READING_MODEL", "claude-sonnet-4-6")
+# 2026-09-30:升級至最新 Sonnet 5.5；保留 AI_READING_MODEL 供部署時覆寫。
+_AI_READING_MODEL = os.environ.get("AI_READING_MODEL", "claude-sonnet-5-5")
 
 
 def _compute_chart(data):
@@ -1954,7 +1952,7 @@ def api_prompt():
 
 
 def _call_claude_reading(system_text, user_text):
-    """呼叫 Claude(預設 Sonnet 4.6)即時產生解讀。
+    """呼叫 Claude(預設 Sonnet 5.5)即時產生解讀。
 
     system_text(規則)當作可快取 system;user_text(問事+JSON)當 user 訊息。
     成功回傳解讀文字;失敗丟例外(由呼叫端決定退點)。
@@ -1980,7 +1978,7 @@ def _call_claude_reading(system_text, user_text):
 
 
 def _stream_claude_reading(system_text, user_text):
-    """串流版:逐段 yield Claude(預設 Sonnet 4.6)的解讀文字。
+    """串流版:逐段 yield Claude(預設 Sonnet 5.5)的解讀文字。
 
     與 _call_claude_reading 相同的 system(可快取規則)/user(問事+JSON),
     但用 messages.stream 邊生成邊吐 token,讓前端即時顯示、不必枯等整篇。

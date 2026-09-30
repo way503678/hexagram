@@ -1,7 +1,7 @@
 # 社群登入規劃 — Google / Apple(命果 MINGO App)
 
 > 狀態:**規劃中,未動程式**。決策:**Android 為主 → 先做 Google;Apple 等上 iOS 再做**。
-> 後端 repo `/opt/hexagram`、App repo `/opt/hexagram-app`。App package/bundle = `com.hexagram.app`。
+> 後端 repo `/opt/hexagram`、App repo `/opt/hexagram-app`。App package/bundle = `com.mingguo.app`。
 
 ## 0. 結論:後端架構已備好,只缺「驗社群 token → 簽我們的 JWT」
 
@@ -23,7 +23,7 @@
 3. **建 OAuth client ID**(APIs & Services → Credentials → Create credentials → OAuth client ID),要建 **兩個**:
    - **Web application** client → 拿到的 **Web client ID** 給「後端驗 `aud`」用,也是 App 端 `webClientId`。
    - **Android** client → 填:
-     - Package name:`com.hexagram.app`
+     - Package name:`com.mingguo.app`
      - **SHA-1 憑證指紋**(見下)
 4. **SHA-1 怎麼拿**(我們用 EAS 託管簽章金鑰):
    ```bash
@@ -60,7 +60,7 @@
 - 套件 `expo-apple-authentication`,**只在真 iOS 機 + dev build** 能測。
 - 憑證:**Apple Developer Program($99/年)**、開 Sign in with Apple capability、Service ID;需 Mac/iOS 環境。
 - **強制規則**:iOS App 上架且提供任何第三方登入(如 Google),Apple **要求**必須同時提供 Sign in with Apple。純 Android 不受此限 → 所以現在先不做。
-- 後端對稱:`POST /api/v1/auth/apple` 收 `identityToken`(本身是 JWT),對 `https://appleid.apple.com/auth/keys` 驗章、檢查 `aud == com.hexagram.app`、`iss == https://appleid.apple.com`,取 `sub`(+首次登入才有的 email)→ `get_or_create_user('apple', sub, …)` → `make_token`。
+- 後端對稱:`POST /api/v1/auth/apple` 收 `identityToken`(本身是 JWT),對 `https://appleid.apple.com/auth/keys` 驗章、檢查 `aud == com.mingguo.app`、`iss == https://appleid.apple.com`,取 `sub`(+首次登入才有的 email)→ `get_or_create_user('apple', sub, …)` → `make_token`。
 - 注意:Apple 只在**第一次**授權回傳 email/姓名,之後不再給 → 首次就要存起來。
 
 ---
