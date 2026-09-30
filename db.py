@@ -299,6 +299,27 @@ CREATE INDEX IF NOT EXISTS idx_divq_user
 """
 
 
+# AI 解讀全文只保留 30 天。與卜卦紀錄分表，期限到時可實際刪除解讀內容，
+# 同時保留不含 AI 回覆的基本卜卦歷史。
+AI_READINGS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS ai_readings (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    question_id BIGINT NOT NULL UNIQUE
+                REFERENCES divination_questions(id) ON DELETE CASCADE,
+    reading     TEXT NOT NULL,
+    model       TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at  TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_readings_user
+    ON ai_readings (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_readings_expires
+    ON ai_readings (expires_at);
+DELETE FROM ai_readings WHERE expires_at <= NOW();
+"""
+
+
 # 🌱 成長反思(解讀後的「最有感一句」→ 本週小目標 → 下週回訪)
 REFLECTIONS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS growth_reflections (
@@ -425,6 +446,7 @@ def init_db():
                 cur.execute(MIGRATE)
                 cur.execute(MIGRATE_USERS)
                 cur.execute(QUESTIONS_SCHEMA)
+                cur.execute(AI_READINGS_SCHEMA)
                 cur.execute(REFLECTIONS_SCHEMA)
                 cur.execute(PROMOTIONS_SCHEMA)
         log.info("DB ready: %s@%s/%s",
@@ -797,45 +819,108 @@ def log_divination_question(user_id, user_email, login_at, question,
 
     dedup_window_seconds:若同一會員在這段秒數內已寫過「完全相同」的一筆
     (同問題 + 同卦象),視為重整 / 連點造成的重複,直接跳過不寫。
-    回傳 True=有寫入, False=跳過或失敗。
+    回傳紀錄 id；失敗回 None。短時間重複時回傳既有紀錄 id，讓 AI 解讀
+    可以正確掛到同一筆卜卦紀錄。
     """
     if not DB_ENABLED or not HAS_PSYCOPG:
-        return False
+        return None
     try:
         with _conn() as c:
             with c.cursor() as cur:
                 if dedup_window_seconds:
                     cur.execute(
                         """
-                        SELECT 1 FROM divination_questions
+                        SELECT id FROM divination_questions
                         WHERE user_id      IS NOT DISTINCT FROM %s
                           AND question     IS NOT DISTINCT FROM %s
                           AND ben_gua      IS NOT DISTINCT FROM %s
                           AND bian_gua     IS NOT DISTINCT FROM %s
                           AND moving_lines IS NOT DISTINCT FROM %s
                           AND created_at > NOW() - make_interval(secs => %s)
-                        LIMIT 1
+                        ORDER BY created_at DESC LIMIT 1
                         """,
                         (user_id, question, ben_gua, bian_gua, moving_lines,
                          int(dedup_window_seconds)),
                     )
-                    if cur.fetchone():
-                        return False  # 短時間內的重複,跳過
+                    existing = cur.fetchone()
+                    if existing:
+                        return existing[0]  # 短時間內的重複,沿用既有紀錄
                 cur.execute(
                     """
                     INSERT INTO divination_questions
                       (user_id, user_email, login_at, question,
                        ben_gua, bian_gua, moving_lines, yao_vals, cast_dt)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
                     """,
                     (user_id, user_email, login_at, question,
                      ben_gua, bian_gua, moving_lines, yao_vals, cast_dt),
                 )
-        return True
+                return cur.fetchone()[0]
     except Exception as e:
         log.warning("DB log_divination_question failed (%s: %s)",
                     type(e).__name__, e)
-        return False
+        return None
+
+
+def save_ai_reading(user_id, question_id, reading, model=None,
+                    retention_days=30):
+    """保存 AI 解讀全文，預設 30 天後到期並實際刪除。
+
+    question_id 必須屬於同一 user_id，避免把解讀掛到別人的卜卦紀錄。
+    同一筆問題重跑解讀時覆蓋舊結果，保存期限從本次成功時間重新計算。
+    回傳 expires_at；失敗或歸屬不符回 None。
+    """
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return None
+    text = (reading or "").strip()
+    if not text:
+        return None
+    try:
+        days = max(1, int(retention_days))
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute("DELETE FROM ai_readings WHERE expires_at <= NOW()")
+                cur.execute(
+                    """
+                    INSERT INTO ai_readings
+                      (user_id, question_id, reading, model, expires_at)
+                    SELECT %s, q.id, %s, %s,
+                           NOW() + make_interval(days => %s)
+                    FROM divination_questions q
+                    WHERE q.id = %s AND q.user_id = %s
+                    ON CONFLICT (question_id) DO UPDATE SET
+                      user_id    = EXCLUDED.user_id,
+                      reading    = EXCLUDED.reading,
+                      model      = EXCLUDED.model,
+                      created_at = NOW(),
+                      expires_at = EXCLUDED.expires_at
+                    RETURNING expires_at
+                    """,
+                    (int(user_id), text, model, days,
+                     int(question_id), int(user_id)),
+                )
+                row = cur.fetchone()
+        return row[0] if row else None
+    except Exception as e:
+        log.warning("DB save_ai_reading failed (%s: %s)",
+                    type(e).__name__, e)
+        return None
+
+
+def cleanup_expired_ai_readings():
+    """實際刪除已到期的 AI 解讀全文；回傳刪除筆數，失敗回 -1。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return -1
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute("DELETE FROM ai_readings WHERE expires_at <= NOW()")
+                return cur.rowcount
+    except Exception as e:
+        log.warning("DB cleanup_expired_ai_readings failed (%s: %s)",
+                    type(e).__name__, e)
+        return -1
 
 
 def list_divination_questions(limit=200, search=None, start=None, end=None):
@@ -885,18 +970,22 @@ def list_divination_questions(limit=200, search=None, start=None, end=None):
 
 
 def get_divination_question(qid):
-    """依 id 取單筆卜卦問事紀錄(含原始六爻/起卦時間,供重建完整卦象)。回傳 dict 或 None。"""
+    """依 id 取單筆卜卦問事紀錄，含仍在 30 天期限內的 AI 解讀。"""
     if not DB_ENABLED or not HAS_PSYCOPG:
         return None
     try:
         with _conn() as c:
             with c.cursor() as cur:
+                cur.execute("DELETE FROM ai_readings WHERE expires_at <= NOW()")
                 cur.execute(
                     """
-                    SELECT id, user_id, user_email, login_at, created_at,
-                           question, ben_gua, bian_gua, moving_lines,
-                           yao_vals, cast_dt
-                    FROM divination_questions WHERE id = %s
+                    SELECT q.id, q.user_id, q.user_email, q.login_at, q.created_at,
+                           q.question, q.ben_gua, q.bian_gua, q.moving_lines,
+                           q.yao_vals, q.cast_dt,
+                           a.reading, a.model, a.created_at, a.expires_at
+                    FROM divination_questions q
+                    LEFT JOIN ai_readings a ON a.question_id = q.id
+                    WHERE q.id = %s
                     """,
                     (int(qid),),
                 )
@@ -908,6 +997,8 @@ def get_divination_question(qid):
             "created_at": r[4], "question": r[5], "ben_gua": r[6],
             "bian_gua": r[7], "moving_lines": r[8],
             "yao_vals": r[9], "cast_dt": r[10],
+            "ai_reading": r[11], "ai_model": r[12],
+            "ai_reading_created_at": r[13], "ai_reading_expires_at": r[14],
         }
     except Exception as e:
         log.warning("DB get_divination_question failed (%s: %s)",
@@ -1107,6 +1198,7 @@ def delete_user(user_id):
                 uid = int(user_id)
                 # 先刪有外鍵指向 users 的子表,最後刪 users 本身
                 cur.execute("DELETE FROM growth_reflections WHERE user_id = %s", (uid,))
+                cur.execute("DELETE FROM ai_readings WHERE user_id = %s", (uid,))
                 cur.execute("DELETE FROM divination_questions WHERE user_id = %s", (uid,))
                 cur.execute("DELETE FROM point_ledger WHERE user_id = %s", (uid,))
                 cur.execute("DELETE FROM payment_orders WHERE user_id = %s", (uid,))
@@ -1184,18 +1276,23 @@ def claim_promotion(user_id, identifier_hash, campaign, points, retention_days):
 
 
 def list_user_questions(user_id, limit=100):
-    """列出某會員自己的卜卦問事紀錄(新到舊),供「我的紀錄」。回傳 list of dict。"""
+    """列出會員卜卦紀錄，以及仍在 30 天期限內的 AI 解讀。"""
     if not DB_ENABLED or not HAS_PSYCOPG:
         return []
     try:
         with _conn() as c:
             with c.cursor() as cur:
+                # 每次讀取都實際清除到期全文，不只用查詢條件隱藏。
+                cur.execute("DELETE FROM ai_readings WHERE expires_at <= NOW()")
                 cur.execute(
                     """
-                    SELECT id, created_at, question, ben_gua, bian_gua, moving_lines
-                    FROM divination_questions
-                    WHERE user_id = %s
-                    ORDER BY created_at DESC LIMIT %s
+                    SELECT q.id, q.created_at, q.question, q.ben_gua,
+                           q.bian_gua, q.moving_lines,
+                           a.reading, a.model, a.created_at, a.expires_at
+                    FROM divination_questions q
+                    LEFT JOIN ai_readings a ON a.question_id = q.id
+                    WHERE q.user_id = %s
+                    ORDER BY q.created_at DESC LIMIT %s
                     """,
                     (int(user_id), int(limit)),
                 )
@@ -1203,6 +1300,8 @@ def list_user_questions(user_id, limit=100):
         return [{
             "id": r[0], "created_at": r[1], "question": r[2],
             "ben_gua": r[3], "bian_gua": r[4], "moving_lines": r[5],
+            "ai_reading": r[6], "ai_model": r[7],
+            "ai_reading_created_at": r[8], "ai_reading_expires_at": r[9],
         } for r in rows]
     except Exception as e:
         log.warning("DB list_user_questions failed (%s: %s)", type(e).__name__, e)

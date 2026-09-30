@@ -2,7 +2,7 @@
 
 依京房八宮納甲法 + 野鶴老人《增刪卜易》派的命理排盤系統(原名「命卦排盤」)。
 提供:萬年曆(擇日/紫白)、時辰起卦、金錢卦手動排卦、流年分析、四面向判讀、
-會員/點數、AI 解讀(串 Claude API)。行動版(功能對等)在另一 repo:`hexagram-app`。
+會員/點數、AI 解讀(串 Claude API，結果保存 30 天)。行動版(功能對等)在另一 repo:`hexagram-app`。
 
 > 開發背景、工作日誌與待辦:**docs/WORKLOG.md**(開新對話先讀這份)。
 > 設計系統(web+App 共用):**docs/DESIGN_SYSTEM.md**。

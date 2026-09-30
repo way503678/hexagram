@@ -24,6 +24,23 @@
           </td>
           <td style="color:#a02020;">{{ r.moving_lines or '—' }}</td>
         </tr>
+        {% if r.ai_reading %}
+          <tr>
+            <td colspan="4" style="padding:8px 12px 14px; background:#faf8ff;">
+              <details>
+                <summary style="cursor:pointer; color:var(--primary); font-weight:600;">
+                  查看 AI 解讀
+                  {% if r.ai_reading_expires_at %}
+                    <span style="font-weight:normal; color:#888; font-size:12px;">
+                      （保存至 {{ r.ai_reading_expires_at.strftime('%Y-%m-%d %H:%M') }}）
+                    </span>
+                  {% endif %}
+                </summary>
+                <div style="white-space:pre-wrap; line-height:1.75; margin-top:10px;">{{ r.ai_reading }}</div>
+              </details>
+            </td>
+          </tr>
+        {% endif %}
       {% endfor %}
     </tbody>
   </table>

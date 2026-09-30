@@ -12,6 +12,19 @@
   <div>所問之事：<b>{{ rec.question or '—' }}</b></div>
 </div>
 
+{% if rec.ai_reading %}
+  <div style="margin:14px 0; padding:14px; border:1px solid #ddd; border-radius:8px; background:#faf8ff;">
+    <h2 style="margin-top:0;">AI 解讀</h2>
+    <div class="note" style="margin-bottom:8px;">
+      模型：{{ rec.ai_model or '—' }}
+      {% if rec.ai_reading_expires_at %}
+        ｜保存至 {{ rec.ai_reading_expires_at.strftime('%Y-%m-%d %H:%M') }}
+      {% endif %}
+    </div>
+    <div style="white-space:pre-wrap; line-height:1.75;">{{ rec.ai_reading }}</div>
+  </div>
+{% endif %}
+
 {% if prompt_text %}
   <div style="margin:14px 0;">
     <button type="button" id="genPromptBtn"

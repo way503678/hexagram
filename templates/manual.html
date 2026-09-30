@@ -209,13 +209,12 @@
       <button type="button" class="ai-btn export-btn" id="manual-ai-btn">
         🤖 產生 AI 解讀 Prompt（扣 1 點）
       </button>
-      {# 🔮 AI 解盤暫時隱藏(避免誤按);要還原把 display:none 拿掉即可 #}
       <button type="button" class="ai-btn export-btn" id="manual-reading-btn"
-              style="background:var(--primary); margin-left:8px; display:none;">
-        🔮 AI 解盤（扣 1 點）
+              style="background:var(--primary); margin-left:8px;">
+        🔮 命果 AI 解讀（扣 1 點）
       </button>
       <div class="note" style="margin-top:6px;">
-        「產生 Prompt」複製貼到自己的 AI。
+        AI 解讀完成後會保存 30 天；「產生 Prompt」可複製到自己的 AI。
         {% if member %}
           ｜剩餘 <strong id="member-balance">{{ member.points_balance }}</strong> 點
           ｜<a href="/member">會員中心</a>

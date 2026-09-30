@@ -463,7 +463,7 @@ def _log_question_event(user, data, chart_payload=None):
         chart = (chart_payload or {}).get("卦象") or {}
         yv = data.get("yao_vals")
         yao_str = "|".join(str(x) for x in yv) if isinstance(yv, (list, tuple)) else None
-        db.log_divination_question(
+        return db.log_divination_question(
             user_id=user["id"],
             user_email=user.get("email"),
             login_at=_login_at_from_request(),
@@ -477,6 +477,7 @@ def _log_question_event(user, data, chart_payload=None):
     except Exception as e:  # 記錄失敗絕不影響主流程
         app.logger.warning("log question event failed (%s: %s)",
                            type(e).__name__, e)
+        return None
 
 
 def _public_user(user):
@@ -1487,6 +1488,8 @@ def _fortune_prompt_and_charge(user, data):
 @app.route("/api/v1/health", methods=["GET"])
 def api_health():
     """健康檢查 / app 連線測試。"""
+    # Docker 每分鐘呼叫 health；順便讓 30 天到期的 AI 解讀準時實際刪除。
+    db.cleanup_expired_ai_readings()
     return jsonify({"status": "ok", "service": "hexagram", "version": 1})
 
 
@@ -1768,6 +1771,17 @@ def api_member_questions():
             if hasattr(r["created_at"], "isoformat") else r["created_at"],
         "question": r["question"], "ben_gua": r["ben_gua"],
         "bian_gua": r["bian_gua"], "moving_lines": r["moving_lines"],
+        "ai_reading": r["ai_reading"], "ai_model": r["ai_model"],
+        "ai_reading_created_at": (
+            r["ai_reading_created_at"].isoformat()
+            if hasattr(r["ai_reading_created_at"], "isoformat")
+            else r["ai_reading_created_at"]
+        ),
+        "ai_reading_expires_at": (
+            r["ai_reading_expires_at"].isoformat()
+            if hasattr(r["ai_reading_expires_at"], "isoformat")
+            else r["ai_reading_expires_at"]
+        ),
     } for r in rows]
     return jsonify({"questions": items})
 
@@ -2002,7 +2016,7 @@ def _stream_claude_reading(system_text, user_text):
 
 
 def _stream_reading_response(uid, system_text, user_text, bal,
-                            refund_points, refund_ref):
+                            refund_points, refund_ref, question_id=None):
     """共用的 SSE 串流解讀回應:逐段吐 Claude 文字,失敗自動退點。
 
     事件:delta(逐段文字)/ done(附最新餘額)/ error(已退點)。
@@ -2013,13 +2027,28 @@ def _stream_reading_response(uid, system_text, user_text, bal,
 
     def generate():
         got_any = False
+        chunks = []
         try:
             for chunk in _stream_claude_reading(system_text, user_text):
                 got_any = True
+                chunks.append(chunk)
                 yield _sse("delta", {"t": chunk})
             if not got_any:
                 raise RuntimeError("AI 回傳空內容")
-            yield _sse("done", {"balance": bal})
+            done_payload = {"balance": bal}
+            if question_id is not None:
+                expires_at = db.save_ai_reading(
+                    uid, question_id, "".join(chunks), model=_AI_READING_MODEL,
+                    retention_days=30,
+                )
+                if not expires_at:
+                    db.add_points(uid, refund_points, "refund", ref="reading_save_failed")
+                    yield _sse("error", {
+                        "error": "解讀已產生但儲存失敗，已退還點數，請先複製內容",
+                    })
+                    return
+                done_payload["saved_until"] = expires_at.isoformat()
+            yield _sse("done", done_payload)
         except Exception as e:  # 串流途中任何失敗都退點
             db.add_points(uid, refund_points, "refund", ref=refund_ref)
             app.logger.warning("AI reading stream failed (%s: %s)",
@@ -2075,9 +2104,14 @@ def manual_ai_reading():
             }), 402
         return jsonify({"error": "系統忙線,請稍後再試"}), 503
 
-    _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI(解盤)→ 記錄
+    question_id = _log_question_event(
+        user, data, chart_payload=chart_payload,
+    )  # 使用 AI(解盤)→ 記錄
+    if not question_id:
+        db.add_points(user["id"], 1, "refund", ref="reading_log_failed")
+        return jsonify({"error": "無法建立解讀紀錄，已退還點數，請稍後再試"}), 503
     return _stream_reading_response(user["id"], system_text, user_text, bal,
-                                    1, "ai_reading_failed")
+                                    1, "ai_reading_failed", question_id=question_id)
 
 
 # ============================================================
@@ -2126,7 +2160,10 @@ def _reading_and_charge(user, data):
             return ({"error": "點數不足,請先儲值",
                      "balance": user.get("points_balance", 0)}, 402)
         return ({"error": "系統忙線,請稍後再試"}, 503)
-    _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI → 記錄
+    question_id = _log_question_event(user, data, chart_payload=chart_payload)
+    if not question_id:
+        db.add_points(user["id"], 1, "refund", ref="reading_log_failed")
+        return ({"error": "無法建立解讀紀錄，已退還點數，請稍後再試"}, 503)
     try:
         reading = _call_claude_reading(system_text, user_text)
         if not (reading or "").strip():
@@ -2135,7 +2172,15 @@ def _reading_and_charge(user, data):
         db.add_points(user["id"], 1, "refund", ref="reading_failed")
         app.logger.warning("AI reading failed (%s: %s)", type(e).__name__, e)
         return ({"error": "解讀產生失敗,已退還點數,請稍後再試"}, 502)
-    return ({"reading": reading, "balance": bal}, 200)
+    expires_at = db.save_ai_reading(
+        user["id"], question_id, reading, model=_AI_READING_MODEL,
+        retention_days=30,
+    )
+    if not expires_at:
+        db.add_points(user["id"], 1, "refund", ref="reading_save_failed")
+        return ({"error": "解讀儲存失敗，已退還點數，請稍後再試"}, 503)
+    return ({"reading": reading, "balance": bal,
+             "saved_until": expires_at.isoformat()}, 200)
 
 
 @app.route("/api/v1/reading", methods=["POST"])

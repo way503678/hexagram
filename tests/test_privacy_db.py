@@ -37,7 +37,7 @@ class PrivacyDatabaseTests(unittest.TestCase):
         with db._conn() as conn:
             with conn.cursor() as cur:
                 for table in (
-                    "growth_reflections", "divination_questions", "point_ledger",
+                    "growth_reflections", "ai_readings", "divination_questions", "point_ledger",
                     "payment_orders", "divination_logs",
                 ):
                     cur.execute(f"DELETE FROM {table} WHERE user_id = %s", (self.uid,))
@@ -51,8 +51,16 @@ class PrivacyDatabaseTests(unittest.TestCase):
                     (self.uid,),
                 )
                 cur.execute(
-                    "INSERT INTO divination_questions (user_id, user_email, question) VALUES (%s, %s, 'q')",
+                    """INSERT INTO divination_questions (user_id, user_email, question)
+                       VALUES (%s, %s, 'q') RETURNING id""",
                     (self.uid, self.email),
+                )
+                qid = cur.fetchone()[0]
+                cur.execute(
+                    """INSERT INTO ai_readings
+                         (user_id, question_id, reading, model, expires_at)
+                       VALUES (%s, %s, 'reading', 'test-model', NOW() + INTERVAL '30 days')""",
+                    (self.uid, qid),
                 )
                 cur.execute(
                     "INSERT INTO point_ledger (user_id, delta, balance_after, reason) VALUES (%s, 1, 1, 'test')",
@@ -78,7 +86,7 @@ class PrivacyDatabaseTests(unittest.TestCase):
         with db._conn() as conn:
             with conn.cursor() as cur:
                 for table in (
-                    "users", "growth_reflections", "divination_questions",
+                    "users", "growth_reflections", "ai_readings", "divination_questions",
                     "point_ledger", "payment_orders", "divination_logs",
                 ):
                     cur.execute(f"SELECT count(*) FROM {table} WHERE " +
@@ -92,6 +100,36 @@ class PrivacyDatabaseTests(unittest.TestCase):
                          AND input_day = 2 AND input_hour = 3"""
                 )
                 self.assertEqual(cur.fetchone()[0], 0, "legacy divination_logs")
+
+    def test_ai_reading_is_saved_and_expired_text_is_deleted(self):
+        qid = db.log_divination_question(
+            self.uid, self.email, None, "Will this be saved?",
+            "乾", "坤", "初爻", "1,0|0,0|1,0|0,0|1,0|0,0",
+            "2026-09-30 10:00", dedup_window_seconds=0,
+        )
+        self.assertIsInstance(qid, int)
+        expires_at = db.save_ai_reading(
+            self.uid, qid, "完整 AI 解讀", model="test-model", retention_days=30,
+        )
+        self.assertIsNotNone(expires_at)
+        rows = db.list_user_questions(self.uid)
+        saved = next(r for r in rows if r["id"] == qid)
+        self.assertEqual(saved["ai_reading"], "完整 AI 解讀")
+        self.assertEqual(saved["ai_model"], "test-model")
+
+        with db._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE ai_readings SET expires_at = NOW() - INTERVAL '1 second' WHERE question_id = %s",
+                    (qid,),
+                )
+        rows = db.list_user_questions(self.uid)
+        expired = next(r for r in rows if r["id"] == qid)
+        self.assertIsNone(expired["ai_reading"])
+        with db._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT count(*) FROM ai_readings WHERE question_id = %s", (qid,))
+                self.assertEqual(cur.fetchone()[0], 0)
 
     def test_promotion_is_idempotent_and_has_no_user_link(self):
         digest = uuid.uuid4().hex
