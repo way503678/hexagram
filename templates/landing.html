@@ -13,6 +13,9 @@
       <div class="dot">✦</div>
       <div class="line"></div>
     </div>
+    {% if not current_user %}
+      <a class="landing-recovery" href="/forgot">忘記密碼或帳號被鎖？自行重設與解鎖</a>
+    {% endif %}
   </div>
 
   <div class="landing-footer">

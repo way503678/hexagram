@@ -51,6 +51,7 @@ JWT payload:`{uid, iat, exp, pwv}`。簽章金鑰 = `SECRET_KEY`(見 §四)。
 - **防帳號列舉**:`/api/v1/auth/forgot` 與網頁版一律回成功訊息,不透露帳號是否存在。
 - 連結 base:`PUBLIC_BASE_URL` env 優先(已設 `https://hexagram.johnsonwebsites.cc`),避免內部觸發產生 localhost 連結。
 - 重設成功:一併解鎖帳號 + 寄「密碼變更通知」;pwv 機制使全裝置登出。
+- 自助入口:App 落地首頁與登入頁、Web 首頁與登入頁皆提供「忘記密碼／帳號解鎖」；鎖定訊息直接引導本人走此流程,不需聯絡管理員。
 
 ### 4. Session cookie 屬性
 - `SESSION_COOKIE_HTTPONLY=True`(JS 讀不到)、`SESSION_COOKIE_SAMESITE=Lax`(CSRF 緩解)。

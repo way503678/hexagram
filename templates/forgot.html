@@ -1,16 +1,17 @@
 {% extends "base.html" %}
-{% block title %}忘記密碼 — 命果 MINGO{% endblock %}
+{% block title %}重設密碼／帳號解鎖 — 命果 MINGO{% endblock %}
 
 {% block content %}
-<h1>忘記密碼</h1>
+<h1>重設密碼／帳號解鎖</h1>
 {% if sent %}
   <div class="flash flash-ok" style="max-width:400px; margin:10px 0;">
-    若 <b>{{ email }}</b> 是已註冊的帳號,重設密碼連結已寄出,請至信箱收信(1 小時內有效)。
+    若 <b>{{ email }}</b> 是已註冊的帳號,重設密碼連結已寄出,請至信箱收信(1 小時內有效)。完成新密碼設定後,帳號會自動解鎖。
   </div>
   <p><a href="/login" style="color:var(--primary); font-weight:bold;">回登入</a></p>
 {% else %}
 <form method="post" action="/forgot" class="login-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <p class="account-recovery-hint">輸入註冊 Email,我們會寄送安全連結。完成新密碼設定後,因登入失敗而鎖住的帳號會自動解鎖。</p>
   <input type="email" name="email" placeholder="輸入註冊的 Email"
          required autofocus autocomplete="email">
   <button type="submit">寄送重設連結</button>

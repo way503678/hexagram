@@ -102,7 +102,7 @@ WELCOME_CAMPAIGN = os.environ.get("WELCOME_CAMPAIGN", "welcome_bonus_2026")
 PROMO_RETENTION_DAYS = int(os.environ.get("PROMO_RETENTION_DAYS", "730"))
 # 密碼最短長度(政策:至少 8 碼、且英數混合)
 _MIN_PASSWORD_LEN = 8
-# 連續登入失敗達此次數即鎖定帳號(需管理員解鎖)
+# 連續登入失敗達此次數即鎖定帳號(可重設密碼自行解鎖,或由管理員解鎖)
 LOGIN_MAX_FAILS = int(os.environ.get("LOGIN_MAX_FAILS", "3"))
 # 個資同意書 + 免責聲明 — 單一來源檔 legal.json
 # (web 註冊頁 + App 經 /api/v1/legal 都讀這一份;改條文只改 legal.json)
@@ -1631,7 +1631,7 @@ def api_auth_login():
 
     user, status = _login_member(email, password)
     if status == "locked":
-        return jsonify({"error": "帳號已鎖定(連續登入失敗過多),請聯絡管理員解鎖"}), 403
+        return jsonify({"error": "帳號已鎖定(連續登入失敗過多),請使用「忘記密碼／帳號解鎖」設定新密碼"}), 403
     if not user:
         # 不分「帳號不存在」與「密碼錯」,避免洩漏哪些 email 已註冊
         return jsonify({"error": "Email 或密碼不正確"}), 401
@@ -2558,7 +2558,7 @@ def login_page():
         if status == "locked":
             return render_template(
                 "login.html", mode="login",
-                error="帳號已鎖定(連續登入失敗過多),請聯絡管理員解鎖",
+                error="帳號已鎖定(連續登入失敗過多),請使用下方「忘記密碼／帳號解鎖」設定新密碼",
                 email=email, next_url=next_url,
             )
         if not user:

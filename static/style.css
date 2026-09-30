@@ -1786,6 +1786,13 @@ table.hex-table tr.dong td {
   padding: 24px;
 }
 .login-form button { margin-top: 16px; }
+.account-recovery-hint {
+  margin: 0 0 8px;
+  color: var(--text-muted, #6F6980);
+  font-size: 14px;
+  line-height: 1.7;
+  text-align: left;
+}
 .consent-block { overflow: hidden; }
 .consent-title {
   background: rgba(94,84,142,0.08);
@@ -1816,6 +1823,15 @@ table.hex-table tr.dong td {
   position: absolute;
   bottom: 28px;
   left: 0; right: 0;
+}
+.landing-recovery {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 /* (原 .landing::before 渲染月亮光暈已移除 2026-07-03 — 改用 logo 圖,不再需要) */
 .landing-symbol {
