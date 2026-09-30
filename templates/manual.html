@@ -262,17 +262,16 @@
 
 {# ---- AI 解盤結果 Modal(扣點即時解讀)---- #}
 <div id="manual-reading-modal" class="ai-modal" style="display:none;">
-  <div class="ai-modal-content">
+  <div class="ai-modal-content reading-modal-content">
     <div class="ai-modal-header">
       <span>🔮 AI 解盤結果</span>
       <button type="button" class="ai-modal-close" id="manual-reading-close-x">✕</button>
     </div>
-    <div class="ai-modal-body">
+    <div class="ai-modal-body reading-modal-body">
       <div id="manual-reading-output"
            style="white-space:pre-wrap; word-break:break-word; line-height:1.7;
                   font-size:15px; padding:12px; border:1px solid var(--border-soft);
-                  border-radius:12px; min-height:200px; max-height:52vh;
-                  overflow:auto; background:#fff;"></div>
+                  border-radius:12px; min-height:200px; background:#fff;"></div>
 
       {# ---- 解讀後「繼續聊」(教練式對話)---- #}
       <div id="manual-chat" style="display:none; margin-top:14px;">

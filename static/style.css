@@ -535,6 +535,29 @@ details.mingo-collapse .mingo-body { font-size: 14px; color: #4a4862; }
 }
 .ai-modal-footer .note { margin-top: 0; color: #5b8c5a; font-weight: bold; }
 
+/* AI 解讀結果採接近滿版，標題列與底部關閉鈕固定，內容區獨立捲動。 */
+.reading-modal-content {
+  width: min(96vw, 1180px);
+  height: 94vh;
+  max-width: none;
+  max-height: 94vh;
+}
+.reading-modal-body {
+  display: block;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 768px) {
+  .reading-modal-content {
+    width: calc(100vw - 16px);
+    height: calc(100dvh - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 20px;
+  }
+  .reading-modal-body { padding: 12px; }
+}
+
 /* ============================================================
    手機版(<=768px)— 水墨書卷風
    ============================================================ */
