@@ -131,6 +131,25 @@ class PrivacyDatabaseTests(unittest.TestCase):
                 cur.execute("SELECT count(*) FROM ai_readings WHERE question_id = %s", (qid,))
                 self.assertEqual(cur.fetchone()[0], 0)
 
+    def test_init_db_skips_legacy_backfill_that_would_collide(self):
+        self.assertTrue(db.log_divination(
+            "Privacy Test", 1990, 1, 2, 3, "F", self.uid,
+        ))
+        with db._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO divination_logs
+                         (client_name, gender, input_year, input_month, input_day, input_hour)
+                       VALUES ('Privacy Test', 'F', 1990, 1, 2, 3)
+                       RETURNING id"""
+                )
+                legacy_id = cur.fetchone()[0]
+        self.assertTrue(db.init_db())
+        with db._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT user_id FROM divination_logs WHERE id = %s", (legacy_id,))
+                self.assertIsNone(cur.fetchone()[0])
+
     def test_promotion_is_idempotent_and_has_no_user_link(self):
         digest = uuid.uuid4().hex
         campaign = "welcome_test"

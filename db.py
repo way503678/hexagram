@@ -390,7 +390,32 @@ WITH unique_matches AS (
 UPDATE divination_logs d
 SET user_id = m.matched_user_id
 FROM unique_matches m
-WHERE d.id = m.log_id;
+WHERE d.id = m.log_id
+  -- 已有相同會員命盤時不要把 legacy 列硬改成相同唯一鍵；帳號刪除流程仍會
+  -- 依姓名 + 完整出生時間精確清除這些舊列。
+  AND NOT EXISTS (
+      SELECT 1
+      FROM divination_logs linked
+      WHERE linked.user_id = m.matched_user_id
+        AND linked.client_name = d.client_name
+        AND linked.input_year = d.input_year
+        AND linked.input_month = d.input_month
+        AND linked.input_day = d.input_day
+        AND linked.input_hour = d.input_hour
+  )
+  -- 多筆 legacy 列若會映射到同一會員命盤，全部保留為 legacy，避免回填時互撞。
+  AND NOT EXISTS (
+      SELECT 1
+      FROM unique_matches other
+      JOIN divination_logs od ON od.id = other.log_id
+      WHERE other.matched_user_id = m.matched_user_id
+        AND other.log_id <> m.log_id
+        AND od.client_name = d.client_name
+        AND od.input_year = d.input_year
+        AND od.input_month = d.input_month
+        AND od.input_day = d.input_day
+        AND od.input_hour = d.input_hour
+  );
 """
 
 
