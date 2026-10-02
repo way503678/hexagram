@@ -471,7 +471,8 @@
     for (var i = 0; i < 6; i++) { var el = document.getElementById('hidden_y'+i); yaoVals.push(el ? el.value : '1,0'); }
     var payload = {
       question: question, y: getVal('y'), m: getVal('m'),
-      d: getVal('d'), h: getVal('h'), yao_vals: yaoVals, aspect: 'all'
+      d: getVal('d'), h: getVal('h'), yao_vals: yaoVals, aspect: 'all',
+      record_id: {{ record_id|tojson }}
     };
 
     modal.style.display = 'flex';
@@ -634,7 +635,8 @@
       d: getVal('d'),
       h: getVal('h'),
       yao_vals: yaoVals,
-      aspect: getRadio('aspect') || 'all'
+      aspect: getRadio('aspect') || 'all',
+      record_id: {{ record_id|tojson }}
     };
 
     // 先開窗並顯示產生中

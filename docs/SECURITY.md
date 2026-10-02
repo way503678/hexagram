@@ -2,7 +2,7 @@
 
 > 本文件記錄系統實作的安全機制、設計理由與已知限制。
 > **改動任何安全相關程式前先讀這份**;新增機制後回寫本文件。
-> 最後更新:2026-07-03(各機制皆已實測驗證,見 WORKLOG 對應日期)。
+> 最後更新:2026-10-02(各機制皆已實測驗證,見 WORKLOG 對應日期)。
 
 ---
 
@@ -81,11 +81,20 @@ JWT payload:`{uid, iat, exp, pwv}`。簽章金鑰 = `SECRET_KEY`(見 §四)。
 ### 2. 點數(果實)交易
 - 扣點**原子**:`UPDATE users SET points_balance = points_balance - %s WHERE id=%s AND points_balance >= %s`(db.try_deduct_point)——單句條件更新,併發不會超扣。
 - 每筆增減寫入 `point_ledger`(稽核帳本,餘額異動的真相來源);AI 解讀失敗自動退點(refund)。
+- 卜卦流程採同筆紀錄:`/api/v1/chart` 起卦成功先存 `divination_questions.chart_payload` 並回傳 `record_id`;Prompt／AI 只允許更新「屬於目前會員」的該筆紀錄。
+- 尚未帶 `record_id` 的舊版 App 以「會員＋問題＋六爻＋排盤時間」在 24 小時內精確找回同一次起卦；避免超過舊制 20 秒去重窗後，重看 AI 被誤認成新紀錄而再次扣點。
+- Prompt 由 `get_or_charge_prompt` 在**同一 DB 交易**中鎖定紀錄與會員、檢查既有內容、條件扣 1 點、保存 `prompt_text`、寫帳本；任一步失敗皆不回傳新 Prompt。未過期內容再取用回 `existing`，不重複扣點。
+- AI 解讀先以 `reserve_ai_reading` 鎖定同筆紀錄並預扣；併發第二次請求回 `in_progress`。每次 reservation 有一次性 token，保存與退款都必須 token 相符，避免舊逾時請求誤完成或誤退新請求。生成／保存失敗由 `refund_ai_reading` 原子清除 reservation 並最多退一次。
+- 程序崩潰或資料庫短暫中斷若留下未完成 reservation，會員下一次讀取帳號時會自動清理超過 15 分鐘的預扣並寫入退款帳本；即使當下退款失敗，也不會永久卡住果實。
+- 付費 AI 的 Web SSE 會先在伺服器完整生成並成功保存，之後才送出任何解讀文字；保存失敗時只回錯誤並退款，不會形成「已拿到部分／完整內容又退款」。回應中斷時內容已在歷史，可免費取回。
+- 會員歷史與付費內容回應一律 `Cache-Control: private, no-store` 並依 `Authorization, Cookie` 區分，避免瀏覽器／CDN／共享代理誤快取造成跨會員內容外洩。
+- 歷史詳情 `/api/v1/member/questions/<id>` 僅依 `user_id` 讀取，不呼叫任何扣點函式；因此查看卦象、AI 說明或複製已購 Prompt 都不會新增帳本。
 
 ### 3. 個資
 - 蒐集/利用依 `legal.json`(單一來源)條文;註冊記 `consent_at/consent_version`。
 - 會員可自行刪除帳號(`/member/delete`、`/api/v1/member/delete`)。
 - Email 服務走 Resend(自家已驗證網域 johnsonwebsites.cc,SPF/DKIM 齊)。
+- `chart_payload` 與問題保留在同一筆卜卦紀錄；Prompt／AI 全文分欄保存 30 天，到期清空全文但保留卦象與稽核紀錄。
 
 ---
 

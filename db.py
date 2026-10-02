@@ -12,6 +12,8 @@ PostgreSQL 紀錄存取
 排盤功能不應該因為 DB 掛掉而中斷。
 """
 import os
+import json
+import uuid
 import logging
 import time
 import threading
@@ -44,6 +46,9 @@ PG_CONF = {
 
 # 是否啟用 DB（預設啟用）；想暫時關掉，設環境變數 DB_ENABLED=0
 DB_ENABLED = os.environ.get("DB_ENABLED", "1") == "1"
+AI_RESERVATION_TTL_SECONDS = max(
+    300, int(os.environ.get("AI_RESERVATION_TTL_SECONDS", "900"))
+)
 
 
 def norm_gender(v):
@@ -287,15 +292,38 @@ CREATE TABLE IF NOT EXISTS divination_questions (
     bian_gua      TEXT,                              -- 變卦
     moving_lines  TEXT,                              -- 動爻描述
     yao_vals      TEXT,                              -- 原始六爻 "陰陽,動否" 以 | 連接,供重建完整卦象
-    cast_dt       TEXT                               -- 起卦時間字串(重建卦象用)
+    cast_dt       TEXT,                              -- 起卦時間字串(重建卦象用)
+    chart_payload JSONB,                             -- 完整卦象結果(起卦成功即存)
+    prompt_text   TEXT,                              -- 已付費產生的 Prompt
+    prompt_created_at TIMESTAMPTZ,
+    prompt_expires_at TIMESTAMPTZ,
+    ai_reading    TEXT,                              -- 已付費 AI 說明(與卦象同一筆)
+    ai_model      TEXT,
+    ai_reading_created_at TIMESTAMPTZ,
+    ai_reading_expires_at TIMESTAMPTZ,
+    ai_generation_started_at TIMESTAMPTZ,            -- 防止同一筆併發重複扣點
+    ai_generation_token TEXT                          -- 綁定本次 reservation，防逾時請求互相完成/退款
 );
 -- 舊資料庫升級:補欄位(idempotent)
 ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS yao_vals TEXT;
 ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS cast_dt  TEXT;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS chart_payload JSONB;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS prompt_text TEXT;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS prompt_created_at TIMESTAMPTZ;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS prompt_expires_at TIMESTAMPTZ;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS ai_reading TEXT;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS ai_model TEXT;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS ai_reading_created_at TIMESTAMPTZ;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS ai_reading_expires_at TIMESTAMPTZ;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS ai_generation_started_at TIMESTAMPTZ;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS ai_generation_token TEXT;
 CREATE INDEX IF NOT EXISTS idx_divq_created
     ON divination_questions (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_divq_user
     ON divination_questions (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_divq_ai_pending
+    ON divination_questions (ai_generation_started_at)
+    WHERE ai_generation_started_at IS NOT NULL;
 """
 
 
@@ -317,6 +345,27 @@ CREATE INDEX IF NOT EXISTS idx_ai_readings_user
 CREATE INDEX IF NOT EXISTS idx_ai_readings_expires
     ON ai_readings (expires_at);
 DELETE FROM ai_readings WHERE expires_at <= NOW();
+"""
+
+
+# 把舊版分表的 AI 解讀搬回同一筆卜卦紀錄。保留空的舊表，讓滾動部署期間
+# 尚未更新的 worker 仍可啟動；所有新讀寫都改走 divination_questions 欄位。
+QUESTION_CONTENT_MIGRATION = """
+UPDATE divination_questions q
+SET ai_reading = a.reading,
+    ai_model = a.model,
+    ai_reading_created_at = a.created_at,
+    ai_reading_expires_at = a.expires_at
+FROM ai_readings a
+WHERE a.question_id = q.id
+  AND a.expires_at > NOW()
+  AND (q.ai_reading_created_at IS NULL
+       OR a.created_at > q.ai_reading_created_at);
+DELETE FROM ai_readings a
+USING divination_questions q
+WHERE a.question_id = q.id
+  AND q.ai_reading IS NOT NULL
+  AND q.ai_reading_created_at >= a.created_at;
 """
 
 
@@ -472,6 +521,7 @@ def init_db():
                 cur.execute(MIGRATE_USERS)
                 cur.execute(QUESTIONS_SCHEMA)
                 cur.execute(AI_READINGS_SCHEMA)
+                cur.execute(QUESTION_CONTENT_MIGRATION)
                 cur.execute(REFLECTIONS_SCHEMA)
                 cur.execute(PROMOTIONS_SCHEMA)
         log.info("DB ready: %s@%s/%s",
@@ -838,7 +888,7 @@ def list_users(limit=500):
 
 def log_divination_question(user_id, user_email, login_at, question,
                             ben_gua, bian_gua, moving_lines,
-                            yao_vals=None, cast_dt=None,
+                            yao_vals=None, cast_dt=None, chart_payload=None,
                             dedup_window_seconds=20):
     """寫入一筆卜卦問事紀錄。失敗只記 warning,不影響起卦。
 
@@ -869,17 +919,26 @@ def log_divination_question(user_id, user_email, login_at, question,
                     )
                     existing = cur.fetchone()
                     if existing:
+                        if chart_payload is not None:
+                            cur.execute(
+                                "UPDATE divination_questions SET chart_payload = %s::jsonb "
+                                "WHERE id = %s",
+                                (json.dumps(chart_payload, ensure_ascii=False), existing[0]),
+                            )
                         return existing[0]  # 短時間內的重複,沿用既有紀錄
                 cur.execute(
                     """
                     INSERT INTO divination_questions
                       (user_id, user_email, login_at, question,
-                       ben_gua, bian_gua, moving_lines, yao_vals, cast_dt)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       ben_gua, bian_gua, moving_lines, yao_vals, cast_dt,
+                       chart_payload)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
                     RETURNING id
                     """,
                     (user_id, user_email, login_at, question,
-                     ben_gua, bian_gua, moving_lines, yao_vals, cast_dt),
+                     ben_gua, bian_gua, moving_lines, yao_vals, cast_dt,
+                     json.dumps(chart_payload, ensure_ascii=False)
+                     if chart_payload is not None else None),
                 )
                 return cur.fetchone()[0]
     except Exception as e:
@@ -888,7 +947,228 @@ def log_divination_question(user_id, user_email, login_at, question,
         return None
 
 
-def save_ai_reading(user_id, question_id, reading, model=None,
+def update_divination_question(user_id, question_id, question=None,
+                               chart_payload=None):
+    """更新同一筆卜卦的問題／完整卦象，且必須屬於該會員。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return False
+    try:
+        sets, params = [], []
+        if question is not None:
+            sets.append("question = %s")
+            params.append(str(question).strip()[:500])
+        if chart_payload is not None:
+            sets.append("chart_payload = %s::jsonb")
+            params.append(json.dumps(chart_payload, ensure_ascii=False))
+        if not sets:
+            return False
+        params.extend([int(question_id), int(user_id)])
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    "UPDATE divination_questions SET " + ", ".join(sets)
+                    + " WHERE id = %s AND user_id = %s RETURNING id",
+                    params,
+                )
+                return cur.fetchone() is not None
+    except Exception as e:
+        log.warning("DB update_divination_question failed (%s: %s)",
+                    type(e).__name__, e)
+        return False
+
+
+def find_matching_divination_question(user_id, question, yao_vals, cast_dt,
+                                      max_age_hours=24):
+    """供未帶 record_id 的舊版 App 精確找回同一次卜卦，避免重複扣點。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return None
+    if not yao_vals or not cast_dt:
+        return None
+    try:
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """SELECT id
+                       FROM divination_questions
+                       WHERE user_id = %s
+                         AND question IS NOT DISTINCT FROM %s
+                         AND yao_vals IS NOT DISTINCT FROM %s
+                         AND cast_dt IS NOT DISTINCT FROM %s
+                         AND created_at > NOW() - make_interval(hours => %s)
+                       ORDER BY created_at DESC
+                       LIMIT 1""",
+                    (int(user_id), question, yao_vals, cast_dt,
+                     max(1, int(max_age_hours))),
+                )
+                row = cur.fetchone()
+        return row[0] if row else None
+    except Exception as e:
+        log.warning("DB find_matching_divination_question failed (%s: %s)",
+                    type(e).__name__, e)
+        return None
+
+
+def get_or_charge_prompt(user_id, question_id, prompt, retention_days=30):
+    """同一交易內完成「檢查既有 Prompt → 扣點 → 保存 Prompt」。
+
+    已有且未過期時直接回傳，不重複扣點。只有扣點與保存都成功才 commit，
+    因此不存在沒扣到果實卻取得新 Prompt 的資料庫路徑。
+    回傳 (status, balance, prompt_text, expires_at)。
+    """
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return ("error", None, None, None)
+    text = (prompt or "").strip()
+    if not text:
+        return ("error", None, None, None)
+    try:
+        days = max(1, int(retention_days))
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT q.prompt_text, q.prompt_expires_at, u.points_balance
+                    FROM divination_questions q
+                    JOIN users u ON u.id = q.user_id
+                    WHERE q.id = %s AND q.user_id = %s
+                    FOR UPDATE OF q, u
+                    """,
+                    (int(question_id), int(user_id)),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return ("not_found", None, None, None)
+                existing, existing_expires, balance = row
+                if existing and existing_expires and existing_expires > datetime.now(existing_expires.tzinfo):
+                    return ("existing", balance, existing, existing_expires)
+                cur.execute(
+                    """UPDATE users
+                       SET points_balance = points_balance - 1
+                       WHERE id = %s AND points_balance >= 1
+                       RETURNING points_balance""",
+                    (int(user_id),),
+                )
+                charged = cur.fetchone()
+                if not charged:
+                    return ("insufficient", balance, None, None)
+                balance = charged[0]
+                cur.execute(
+                    """UPDATE divination_questions
+                       SET prompt_text = %s,
+                           prompt_created_at = NOW(),
+                           prompt_expires_at = NOW() + make_interval(days => %s)
+                       WHERE id = %s AND user_id = %s
+                       RETURNING prompt_expires_at""",
+                    (text, days, int(question_id), int(user_id)),
+                )
+                expires_at = cur.fetchone()[0]
+                cur.execute(
+                    """INSERT INTO point_ledger
+                         (user_id, delta, balance_after, reason, ref)
+                       VALUES (%s, -1, %s, 'prompt', %s)""",
+                    (int(user_id), balance, f"question:{int(question_id)}"),
+                )
+                return ("charged", balance, text, expires_at)
+    except Exception as e:
+        log.warning("DB get_or_charge_prompt failed (%s: %s)",
+                    type(e).__name__, e)
+        return ("error", None, None, None)
+
+
+def reserve_ai_reading(user_id, question_id, cost=1):
+    """鎖住同一筆紀錄並預扣 AI 果實，避免併發重複扣款。
+
+    已有未過期解讀時直接回傳 existing，不扣點；五分鐘內正在產生則回
+    in_progress；逾時且尚未保存的舊預扣會先自動退回，再開始新一次。
+    回傳 (status, balance, reading, expires_at, reservation_token)。只有
+    charged 會帶 token，後續保存／退款必須出示同一 token。
+    """
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return ("error", None, None, None, None)
+    try:
+        n = max(1, int(cost))
+        reservation_token = uuid.uuid4().hex
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT q.ai_reading, q.ai_reading_expires_at,
+                           q.ai_generation_started_at, u.points_balance
+                    FROM divination_questions q
+                    JOIN users u ON u.id = q.user_id
+                    WHERE q.id = %s AND q.user_id = %s
+                    FOR UPDATE OF q, u
+                    """,
+                    (int(question_id), int(user_id)),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return ("not_found", None, None, None, None)
+                reading, expires_at, started_at, balance = row
+                now = datetime.now(started_at.tzinfo if started_at else (
+                    expires_at.tzinfo if expires_at else None
+                ))
+                if reading and expires_at and expires_at > now:
+                    return ("existing", balance, reading, expires_at, None)
+                if (started_at and
+                        (now - started_at).total_seconds() < AI_RESERVATION_TTL_SECONDS):
+                    return ("in_progress", balance, None, None, None)
+                if started_at:
+                    # 前次程序中斷且沒有保存內容；退回當時的預扣後再重試。
+                    cur.execute(
+                        "UPDATE users SET points_balance = points_balance + %s "
+                        "WHERE id = %s RETURNING points_balance",
+                        (n, int(user_id)),
+                    )
+                    balance = cur.fetchone()[0]
+                    cur.execute(
+                        """INSERT INTO point_ledger
+                             (user_id, delta, balance_after, reason, ref)
+                           VALUES (%s, %s, %s, 'refund', %s)""",
+                        (int(user_id), n, balance,
+                         f"ai_stale:question:{int(question_id)}"),
+                    )
+                cur.execute(
+                    """UPDATE users SET points_balance = points_balance - %s
+                       WHERE id = %s AND points_balance >= %s
+                       RETURNING points_balance""",
+                    (n, int(user_id), n),
+                )
+                charged = cur.fetchone()
+                if not charged:
+                    cur.execute(
+                        """UPDATE divination_questions
+                           SET ai_generation_started_at = NULL,
+                               ai_generation_token = NULL
+                           WHERE id = %s""",
+                        (int(question_id),),
+                    )
+                    return ("insufficient", balance, None, None, None)
+                balance = charged[0]
+                cur.execute(
+                    """UPDATE divination_questions
+                       SET ai_generation_started_at = NOW(),
+                           ai_generation_token = %s,
+                           ai_reading = NULL, ai_model = NULL,
+                           ai_reading_created_at = NULL,
+                           ai_reading_expires_at = NULL
+                       WHERE id = %s""",
+                    (reservation_token, int(question_id)),
+                )
+                cur.execute(
+                    """INSERT INTO point_ledger
+                         (user_id, delta, balance_after, reason, ref)
+                       VALUES (%s, %s, %s, 'divination', %s)""",
+                    (int(user_id), -n, balance,
+                     f"question:{int(question_id)}"),
+                )
+                return ("charged", balance, None, None, reservation_token)
+    except Exception as e:
+        log.warning("DB reserve_ai_reading failed (%s: %s)",
+                    type(e).__name__, e)
+        return ("error", None, None, None, None)
+
+
+def save_ai_reading(user_id, question_id, reading, reservation_token, model=None,
                     retention_days=30):
     """保存 AI 解讀全文，預設 30 天後到期並實際刪除。
 
@@ -899,31 +1179,28 @@ def save_ai_reading(user_id, question_id, reading, model=None,
     if not DB_ENABLED or not HAS_PSYCOPG:
         return None
     text = (reading or "").strip()
-    if not text:
+    token = (reservation_token or "").strip()
+    if not text or not token:
         return None
     try:
         days = max(1, int(retention_days))
         with _conn() as c:
             with c.cursor() as cur:
-                cur.execute("DELETE FROM ai_readings WHERE expires_at <= NOW()")
                 cur.execute(
                     """
-                    INSERT INTO ai_readings
-                      (user_id, question_id, reading, model, expires_at)
-                    SELECT %s, q.id, %s, %s,
-                           NOW() + make_interval(days => %s)
-                    FROM divination_questions q
-                    WHERE q.id = %s AND q.user_id = %s
-                    ON CONFLICT (question_id) DO UPDATE SET
-                      user_id    = EXCLUDED.user_id,
-                      reading    = EXCLUDED.reading,
-                      model      = EXCLUDED.model,
-                      created_at = NOW(),
-                      expires_at = EXCLUDED.expires_at
-                    RETURNING expires_at
+                    UPDATE divination_questions
+                    SET ai_reading = %s,
+                        ai_model = %s,
+                        ai_reading_created_at = NOW(),
+                        ai_reading_expires_at = NOW() + make_interval(days => %s),
+                        ai_generation_started_at = NULL,
+                        ai_generation_token = NULL
+                    WHERE id = %s AND user_id = %s
+                      AND ai_generation_started_at IS NOT NULL
+                      AND ai_generation_token = %s
+                    RETURNING ai_reading_expires_at
                     """,
-                    (int(user_id), text, model, days,
-                     int(question_id), int(user_id)),
+                    (text, model, days, int(question_id), int(user_id), token),
                 )
                 row = cur.fetchone()
         return row[0] if row else None
@@ -933,15 +1210,76 @@ def save_ai_reading(user_id, question_id, reading, model=None,
         return None
 
 
+def refund_ai_reading(user_id, question_id, reservation_token, points=1,
+                      ref="ai_reading_failed"):
+    """AI 產生／保存失敗時原子退點；同一 reservation 最多退一次。"""
+    if not DB_ENABLED or not HAS_PSYCOPG:
+        return (False, None)
+    try:
+        n = max(1, int(points))
+        token = (reservation_token or "").strip()
+        if not token:
+            return (False, None)
+        with _conn() as c:
+            with c.cursor() as cur:
+                cur.execute(
+                    """UPDATE divination_questions
+                       SET ai_generation_started_at = NULL,
+                           ai_generation_token = NULL
+                       WHERE id = %s AND user_id = %s
+                         AND ai_generation_started_at IS NOT NULL
+                         AND ai_generation_token = %s
+                       RETURNING id""",
+                    (int(question_id), int(user_id), token),
+                )
+                if not cur.fetchone():
+                    return (False, None)
+                cur.execute(
+                    "UPDATE users SET points_balance = points_balance + %s "
+                    "WHERE id = %s RETURNING points_balance",
+                    (n, int(user_id)),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise RuntimeError(f"user {user_id} not found")
+                balance = row[0]
+                cur.execute(
+                    """INSERT INTO point_ledger
+                         (user_id, delta, balance_after, reason, ref)
+                       VALUES (%s, %s, %s, 'refund', %s)""",
+                    (int(user_id), n, balance, str(ref)),
+                )
+                return (True, balance)
+    except Exception as e:
+        log.warning("DB refund_ai_reading failed (%s: %s)",
+                    type(e).__name__, e)
+        return (False, None)
+
+
 def cleanup_expired_ai_readings():
-    """實際刪除已到期的 AI 解讀全文；回傳刪除筆數，失敗回 -1。"""
+    """清空到期 Prompt／AI 全文但保留卦象紀錄；回傳影響筆數。"""
     if not DB_ENABLED or not HAS_PSYCOPG:
         return -1
     try:
         with _conn() as c:
             with c.cursor() as cur:
+                cur.execute(
+                    """UPDATE divination_questions
+                       SET prompt_text = NULL, prompt_created_at = NULL,
+                           prompt_expires_at = NULL
+                       WHERE prompt_expires_at <= NOW()"""
+                )
+                prompt_count = cur.rowcount
+                cur.execute(
+                    """UPDATE divination_questions
+                       SET ai_reading = NULL, ai_model = NULL,
+                           ai_reading_created_at = NULL,
+                           ai_reading_expires_at = NULL
+                       WHERE ai_reading_expires_at <= NOW()"""
+                )
+                reading_count = cur.rowcount
                 cur.execute("DELETE FROM ai_readings WHERE expires_at <= NOW()")
-                return cur.rowcount
+                return prompt_count + reading_count + cur.rowcount
     except Exception as e:
         log.warning("DB cleanup_expired_ai_readings failed (%s: %s)",
                     type(e).__name__, e)
@@ -994,25 +1332,46 @@ def list_divination_questions(limit=200, search=None, start=None, end=None):
         return []
 
 
-def get_divination_question(qid):
-    """依 id 取單筆卜卦問事紀錄，含仍在 30 天期限內的 AI 解讀。"""
+def get_divination_question(qid, user_id=None):
+    """依 id 取單筆紀錄；user_id 有給時直接在 SQL 限制所有權。"""
     if not DB_ENABLED or not HAS_PSYCOPG:
         return None
     try:
         with _conn() as c:
             with c.cursor() as cur:
-                cur.execute("DELETE FROM ai_readings WHERE expires_at <= NOW()")
+                owner_clause = " AND user_id = %s" if user_id is not None else ""
+                update_params = ((int(qid), int(user_id)) if user_id is not None
+                                 else (int(qid),))
+                cur.execute(
+                    """UPDATE divination_questions
+                       SET prompt_text=NULL, prompt_created_at=NULL, prompt_expires_at=NULL
+                       WHERE id = %s AND prompt_expires_at <= NOW()"""
+                    + owner_clause,
+                    update_params,
+                )
+                cur.execute(
+                    """UPDATE divination_questions
+                       SET ai_reading=NULL, ai_model=NULL,
+                           ai_reading_created_at=NULL, ai_reading_expires_at=NULL
+                       WHERE id = %s AND ai_reading_expires_at <= NOW()"""
+                    + owner_clause,
+                    update_params,
+                )
+                owner_clause = " AND q.user_id = %s" if user_id is not None else ""
+                params = ((int(qid), int(user_id)) if user_id is not None
+                          else (int(qid),))
                 cur.execute(
                     """
                     SELECT q.id, q.user_id, q.user_email, q.login_at, q.created_at,
                            q.question, q.ben_gua, q.bian_gua, q.moving_lines,
-                           q.yao_vals, q.cast_dt,
-                           a.reading, a.model, a.created_at, a.expires_at
+                           q.yao_vals, q.cast_dt, q.chart_payload,
+                           q.prompt_text, q.prompt_created_at, q.prompt_expires_at,
+                           q.ai_reading, q.ai_model,
+                           q.ai_reading_created_at, q.ai_reading_expires_at
                     FROM divination_questions q
-                    LEFT JOIN ai_readings a ON a.question_id = q.id
                     WHERE q.id = %s
-                    """,
-                    (int(qid),),
+                    """ + owner_clause,
+                    params,
                 )
                 r = cur.fetchone()
         if not r:
@@ -1022,13 +1381,63 @@ def get_divination_question(qid):
             "created_at": r[4], "question": r[5], "ben_gua": r[6],
             "bian_gua": r[7], "moving_lines": r[8],
             "yao_vals": r[9], "cast_dt": r[10],
-            "ai_reading": r[11], "ai_model": r[12],
-            "ai_reading_created_at": r[13], "ai_reading_expires_at": r[14],
+            "chart_payload": r[11],
+            "prompt_text": r[12], "prompt_created_at": r[13],
+            "prompt_expires_at": r[14],
+            "ai_reading": r[15], "ai_model": r[16],
+            "ai_reading_created_at": r[17], "ai_reading_expires_at": r[18],
         }
     except Exception as e:
         log.warning("DB get_divination_question failed (%s: %s)",
                     type(e).__name__, e)
         return None
+
+
+def get_user_question(user_id, qid):
+    """只在紀錄屬於會員時回傳完整內容；歷史查看不做任何扣點。"""
+    return get_divination_question(qid, user_id=user_id)
+
+
+def _refund_stale_ai_reservations_cur(cur, user_id):
+    """在既有交易內退回逾時且未完成的 AI 預扣，每筆最多一次。"""
+    cur.execute(
+        """SELECT id, ai_generation_token
+           FROM divination_questions
+           WHERE user_id = %s
+             AND ai_generation_started_at IS NOT NULL
+             AND ai_generation_started_at <=
+                 NOW() - make_interval(secs => %s)
+           FOR UPDATE""",
+        (int(user_id), AI_RESERVATION_TTL_SECONDS),
+    )
+    stale = cur.fetchall()
+    for question_id, token in stale:
+        cur.execute(
+            """UPDATE divination_questions
+               SET ai_generation_started_at = NULL,
+                   ai_generation_token = NULL
+               WHERE id = %s AND user_id = %s
+                 AND ai_generation_token IS NOT DISTINCT FROM %s
+               RETURNING id""",
+            (question_id, int(user_id), token),
+        )
+        if not cur.fetchone():
+            continue
+        cur.execute(
+            """UPDATE users SET points_balance = points_balance + 1
+               WHERE id = %s RETURNING points_balance""",
+            (int(user_id),),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise RuntimeError(f"user {user_id} not found")
+        cur.execute(
+            """INSERT INTO point_ledger
+                 (user_id, delta, balance_after, reason, ref)
+               VALUES (%s, 1, %s, 'refund', %s)""",
+            (int(user_id), row[0], f"ai_stale:question:{question_id}"),
+        )
+    return len(stale)
 
 
 def get_user(user_id):
@@ -1038,6 +1447,7 @@ def get_user(user_id):
     try:
         with _conn() as c:
             with c.cursor() as cur:
+                _refund_stale_ai_reservations_cur(cur, int(user_id))
                 cur.execute(
                     """
                     SELECT id, auth_provider, auth_id, display_name, email,
@@ -1307,15 +1717,29 @@ def list_user_questions(user_id, limit=100):
     try:
         with _conn() as c:
             with c.cursor() as cur:
-                # 每次讀取都實際清除到期全文，不只用查詢條件隱藏。
-                cur.execute("DELETE FROM ai_readings WHERE expires_at <= NOW()")
+                # 每次讀取都實際清空到期全文，不只用查詢條件隱藏。
+                cur.execute(
+                    """UPDATE divination_questions
+                       SET prompt_text=NULL, prompt_created_at=NULL, prompt_expires_at=NULL
+                       WHERE user_id = %s AND prompt_expires_at <= NOW()""",
+                    (int(user_id),),
+                )
+                cur.execute(
+                    """UPDATE divination_questions
+                       SET ai_reading=NULL, ai_model=NULL,
+                           ai_reading_created_at=NULL, ai_reading_expires_at=NULL
+                       WHERE user_id = %s AND ai_reading_expires_at <= NOW()""",
+                    (int(user_id),),
+                )
                 cur.execute(
                     """
                     SELECT q.id, q.created_at, q.question, q.ben_gua,
                            q.bian_gua, q.moving_lines,
-                           a.reading, a.model, a.created_at, a.expires_at
+                           q.chart_payload, q.prompt_text,
+                           q.prompt_created_at, q.prompt_expires_at,
+                           q.ai_reading, q.ai_model,
+                           q.ai_reading_created_at, q.ai_reading_expires_at
                     FROM divination_questions q
-                    LEFT JOIN ai_readings a ON a.question_id = q.id
                     WHERE q.user_id = %s
                     ORDER BY q.created_at DESC LIMIT %s
                     """,
@@ -1325,8 +1749,11 @@ def list_user_questions(user_id, limit=100):
         return [{
             "id": r[0], "created_at": r[1], "question": r[2],
             "ben_gua": r[3], "bian_gua": r[4], "moving_lines": r[5],
-            "ai_reading": r[6], "ai_model": r[7],
-            "ai_reading_created_at": r[8], "ai_reading_expires_at": r[9],
+            "chart_payload": r[6],
+            "prompt_text": r[7], "prompt_created_at": r[8],
+            "prompt_expires_at": r[9],
+            "ai_reading": r[10], "ai_model": r[11],
+            "ai_reading_created_at": r[12], "ai_reading_expires_at": r[13],
         } for r in rows]
     except Exception as e:
         log.warning("DB list_user_questions failed (%s: %s)", type(e).__name__, e)

@@ -72,6 +72,16 @@ def _api_cors(resp):
         resp.headers["Access-Control-Allow-Origin"] = "*"
         resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    # 會員歷史與付費內容不得被瀏覽器／CDN／共享代理快取；否則即使 API
+    # 有驗證，錯誤的快取規則仍可能把上一位會員的內容送給下一位。
+    private_prefixes = (
+        "/api/v1/member/", "/api/v1/prompt", "/api/v1/reading",
+        "/manual/ai_prompt", "/manual/ai_reading", "/member/history",
+    )
+    if request.path.startswith(private_prefixes):
+        resp.headers["Cache-Control"] = "private, no-store, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Vary"] = "Authorization, Cookie"
     return resp
 
 # 管理員身分:由 ADMIN_EMAILS 環境變數列出(逗號分隔)。
@@ -449,7 +459,7 @@ def _login_at_from_request():
 
 
 def _log_question_event(user, data, chart_payload=None):
-    """記一筆卜卦問事紀錄。只在「使用 AI」(產生 Prompt / AI 解盤)時呼叫。
+    """記一筆卜卦問事紀錄；起卦成功時即呼叫，AI 階段只更新同一筆。
 
     data 需含 y/m/d/h/yao_vals/aspect/question(與排盤 API 相同格式)。
     chart_payload:呼叫端若已算好卦象可傳入,避免重算;None 則自行計算。
@@ -473,11 +483,53 @@ def _log_question_event(user, data, chart_payload=None):
             moving_lines=(chart.get("動爻") or {}).get("描述"),
             yao_vals=yao_str,
             cast_dt=(chart_payload or {}).get("排盤時間"),
+            chart_payload=chart_payload,
         )
     except Exception as e:  # 記錄失敗絕不影響主流程
         app.logger.warning("log question event failed (%s: %s)",
                            type(e).__name__, e)
         return None
+
+
+def _ensure_question_record(user, data, chart_payload=None):
+    """取得並驗證本次卜卦紀錄 id；新版用 record_id，舊版則相容建立。"""
+    if not user:
+        return None
+    record_id = data.get("record_id")
+    if record_id not in (None, ""):
+        try:
+            record_id = int(record_id)
+        except (TypeError, ValueError):
+            return None
+        record = db.get_user_question(user["id"], record_id)
+        if not record:
+            return None
+        # record_id 只可指向起卦時保存的同一題／同一組爻／同一排盤時間；
+        # 付費端點不能讓客戶端用舊 id 覆寫卦象後沿用既有付費內容。
+        question = (data.get("question") or "").strip()[:500]
+        yao_vals = data.get("yao_vals") or []
+        yao_str = "|".join(str(v) for v in yao_vals)
+        cast_dt = (chart_payload or {}).get("排盤時間")
+        if (record.get("question") or "") != question:
+            return None
+        if record.get("yao_vals") and record["yao_vals"] != yao_str:
+            return None
+        if record.get("cast_dt") and cast_dt and record["cast_dt"] != cast_dt:
+            return None
+        return record_id
+    # 相容尚未更新、未帶 record_id 的 App：先用完整起卦指紋找回原紀錄；
+    # 不只靠 20 秒去重，避免隔一段時間重按又建立新列、再次扣果實。
+    question = (data.get("question") or "").strip()[:500]
+    yao_vals = data.get("yao_vals") or []
+    yao_str = "|".join(str(v) for v in yao_vals)
+    cast_dt = (chart_payload or {}).get("排盤時間")
+    existing_id = db.find_matching_divination_question(
+        user["id"], question, yao_str, cast_dt, max_age_hours=24,
+    )
+    if existing_id:
+        return existing_id
+    # 第一次付費前仍建立紀錄，維持已上架舊版 App 相容。
+    return _log_question_event(user, data, chart_payload=chart_payload)
 
 
 def _public_user(user):
@@ -850,6 +902,7 @@ def manual():
 
     result = None
     aspects_result = None
+    record_id = None
     error = None
     if has_yao_input:
         try:
@@ -879,6 +932,22 @@ def manual():
                 gender=gender or None,
                 aspect_choice=aspect,
             )
+
+            # 會員起卦成功且有填問題時立即保存完整卦象。之後 Prompt／AI
+            # 都只用 record_id 回寫同一筆，不會再新增重複紀錄。
+            user = current_user()
+            if user and question:
+                chart_payload = _enrich_chart_payload(result, dt_obj, aspect)
+                record_id = _log_question_event(
+                    user,
+                    {
+                        "y": dt_obj.year, "m": dt_obj.month,
+                        "d": dt_obj.day, "h": dt_obj.hour,
+                        "yao_vals": yao_vals, "aspect": aspect,
+                        "question": question,
+                    },
+                    chart_payload=chart_payload,
+                )
         except ValueError as e:
             error = f"輸入格式錯誤({e})"
         except KeyError as e:
@@ -886,8 +955,6 @@ def manual():
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
 
-    # 注意:起卦(排盤)本身不記錄;只有實際「使用 AI」(產生 Prompt / AI 解盤)
-    # 才會在對應端點寫紀錄,見 _log_question_event。
     return render_template(
         "manual.html",
         mode="manual",
@@ -897,6 +964,7 @@ def manual():
         gender=gender,
         aspect_choice=aspect,
         question=question,
+        record_id=record_id,
         y=y or str(default_y), m=m or str(default_m),
         d=d or str(default_d), h=(h if h != "" else str(default_h)),
         default_y=default_y, default_m=default_m,
@@ -1402,19 +1470,33 @@ def _build_manual_reading(data):
 
 
 def _prompt_and_charge(user, data):
-    """產生 AI 解讀 Prompt:驗證 → 扣 1 點 → 記錄 → 回 prompt。web 與 api 共用。
-    回傳 (body_dict, status_code);成功 body = {"prompt", "balance"}。"""
+    """產生 Prompt：驗證紀錄 → 原子扣點並保存 → 回傳。
+
+    同一筆未過期 Prompt 再取用時不扣點；扣點與寫入在同一 DB 交易內。
+    """
     system_text, user_text, chart_payload, err = _build_manual_reading(data)
     if err:
         return err  # (error_dict, status_code)
-    ok, bal, msg = db.try_deduct_point(user["id"], 1, "prompt")
-    if not ok:
-        if msg == "insufficient":
-            return ({"error": "點數不足,請先儲值",
-                     "balance": user.get("points_balance", 0)}, 402)
-        return ({"error": "系統忙線,請稍後再試"}, 503)
-    _log_question_event(user, data, chart_payload=chart_payload)  # 使用 AI → 記錄
-    return ({"prompt": system_text + "\n\n---\n\n" + user_text, "balance": bal}, 200)
+    question_id = _ensure_question_record(user, data, chart_payload=chart_payload)
+    if not question_id:
+        return ({"error": "找不到本次卦象紀錄，請重新起卦後再試"}, 409)
+    prompt = system_text + "\n\n---\n\n" + user_text
+    status, bal, saved_prompt, expires_at = db.get_or_charge_prompt(
+        user["id"], question_id, prompt, retention_days=30,
+    )
+    if status in ("charged", "existing"):
+        return ({
+            "prompt": saved_prompt,
+            "balance": bal,
+            "record_id": question_id,
+            "charged": status == "charged",
+            "saved_until": expires_at.isoformat() if expires_at else None,
+        }, 200)
+    if status == "insufficient":
+        return ({"error": "果實不足,請先儲值", "balance": bal}, 402)
+    if status == "not_found":
+        return ({"error": "找不到本次卦象紀錄，請重新起卦後再試"}, 409)
+    return ({"error": "系統忙線,請稍後再試"}, 503)
 
 
 # ============================================================
@@ -1771,6 +1853,18 @@ def api_member_questions():
             if hasattr(r["created_at"], "isoformat") else r["created_at"],
         "question": r["question"], "ben_gua": r["ben_gua"],
         "bian_gua": r["bian_gua"], "moving_lines": r["moving_lines"],
+        "has_chart": bool(r["chart_payload"]),
+        "has_prompt": bool(r["prompt_text"]),
+        "prompt_created_at": (
+            r["prompt_created_at"].isoformat()
+            if hasattr(r["prompt_created_at"], "isoformat")
+            else r["prompt_created_at"]
+        ),
+        "prompt_expires_at": (
+            r["prompt_expires_at"].isoformat()
+            if hasattr(r["prompt_expires_at"], "isoformat")
+            else r["prompt_expires_at"]
+        ),
         "ai_reading": r["ai_reading"], "ai_model": r["ai_model"],
         "ai_reading_created_at": (
             r["ai_reading_created_at"].isoformat()
@@ -1784,6 +1878,59 @@ def api_member_questions():
         ),
     } for r in rows]
     return jsonify({"questions": items})
+
+
+@app.route("/api/v1/member/questions/<int:question_id>", methods=["GET"])
+def api_member_question_detail(question_id):
+    """讀取自己的完整卦象／Prompt／AI 解讀；純查詢，永不扣果實。"""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "未登入或登入已逾期"}), 401
+    row = db.get_user_question(user["id"], question_id)
+    if not row:
+        return jsonify({"error": "找不到這筆卜卦紀錄"}), 404
+
+    def _iso(value):
+        return value.isoformat() if hasattr(value, "isoformat") else value
+
+    chart_payload = row["chart_payload"]
+    # 舊紀錄只有六爻與時間；第一次查看時免費重建完整卦象並回存。
+    if not chart_payload and row.get("yao_vals") and row.get("cast_dt"):
+        try:
+            cast_dt = datetime.fromisoformat(row["cast_dt"])
+            chart_payload, chart_err = _compute_chart({
+                "y": cast_dt.year, "m": cast_dt.month,
+                "d": cast_dt.day, "h": cast_dt.hour,
+                "yao_vals": row["yao_vals"].split("|"),
+                "aspect": "all",
+            })
+            if chart_err:
+                chart_payload = None
+            elif chart_payload:
+                db.update_divination_question(
+                    user["id"], question_id, chart_payload=chart_payload,
+                )
+        except (TypeError, ValueError):
+            chart_payload = None
+
+    return jsonify({
+        "id": row["id"],
+        "created_at": _iso(row["created_at"]),
+        "question": row["question"],
+        "ben_gua": row["ben_gua"],
+        "bian_gua": row["bian_gua"],
+        "moving_lines": row["moving_lines"],
+        "has_chart": bool(chart_payload),
+        "has_prompt": bool(row["prompt_text"]),
+        "chart_payload": chart_payload,
+        "prompt_text": row["prompt_text"],
+        "prompt_created_at": _iso(row["prompt_created_at"]),
+        "prompt_expires_at": _iso(row["prompt_expires_at"]),
+        "ai_reading": row["ai_reading"],
+        "ai_model": row["ai_model"],
+        "ai_reading_created_at": _iso(row["ai_reading_created_at"]),
+        "ai_reading_expires_at": _iso(row["ai_reading_expires_at"]),
+    })
 
 
 @app.route("/api/v1/chart", methods=["POST"])
@@ -1804,6 +1951,13 @@ def api_chart():
     if err:
         body, code = err
         return jsonify(body), code
+    question = (data.get("question") or "").strip()
+    user = current_user()
+    if user and question:
+        record_id = _log_question_event(user, data, chart_payload=payload)
+        if not record_id:
+            return jsonify({"error": "卦象保存失敗，請稍後再試"}), 503
+        payload["record_id"] = record_id
     return jsonify(payload)
 
 
@@ -2016,51 +2170,83 @@ def _stream_claude_reading(system_text, user_text):
 
 
 def _stream_reading_response(uid, system_text, user_text, bal,
-                            refund_points, refund_ref, question_id=None):
-    """共用的 SSE 串流解讀回應:逐段吐 Claude 文字,失敗自動退點。
+                            refund_points, refund_ref, question_id=None,
+                            reservation_token=None):
+    """共用 SSE 回應：AI 完成（且卦象解讀保存）後才向客戶端吐文字。
 
-    事件:delta(逐段文字)/ done(附最新餘額)/ error(已退點)。
+    先在伺服器緩衝可避免「前端已拿到部分／完整內容，最後保存失敗卻退點」；
+    事件仍維持 delta / done / error，相容既有 Web 前端。
     扣點請由呼叫端先做好,bal 為扣完後餘額;失敗時退回 refund_points 點。
     """
     def _sse(event, payload):
         return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
+    def _refund(ref):
+        if question_id is not None:
+            return db.refund_ai_reading(
+                uid, question_id, reservation_token, refund_points, ref=ref,
+            )
+        return db.add_points(uid, refund_points, "refund", ref=ref)
+
     def generate():
-        got_any = False
-        chunks = []
         try:
-            for chunk in _stream_claude_reading(system_text, user_text):
-                got_any = True
-                chunks.append(chunk)
-                yield _sse("delta", {"t": chunk})
-            if not got_any:
+            # 付費內容在確認生成／保存完成前不可離開伺服器。
+            chunks = list(_stream_claude_reading(system_text, user_text))
+            reading = "".join(chunks).strip()
+            if not reading:
                 raise RuntimeError("AI 回傳空內容")
             done_payload = {"balance": bal}
             if question_id is not None:
                 expires_at = db.save_ai_reading(
-                    uid, question_id, "".join(chunks), model=_AI_READING_MODEL,
+                    uid, question_id, reading, reservation_token,
+                    model=_AI_READING_MODEL,
                     retention_days=30,
                 )
                 if not expires_at:
-                    db.add_points(uid, refund_points, "refund", ref="reading_save_failed")
+                    _refund("reading_save_failed")
                     yield _sse("error", {
                         "error": "解讀已產生但儲存失敗，已退還點數，請先複製內容",
                     })
                     return
                 done_payload["saved_until"] = expires_at.isoformat()
+            # 到這裡才可把內容送出；即使回應途中斷線，卦象解讀已保存，
+            # 使用者重試或開歷史都能免費取回。
+            for chunk in chunks:
+                yield _sse("delta", {"t": chunk})
+            done_payload["charged"] = True
+            if question_id is not None:
+                done_payload["record_id"] = question_id
             yield _sse("done", done_payload)
         except Exception as e:  # 串流途中任何失敗都退點
-            db.add_points(uid, refund_points, "refund", ref=refund_ref)
+            _refund(refund_ref)
             app.logger.warning("AI reading stream failed (%s: %s)",
                                type(e).__name__, e)
             yield _sse("error", {"error": "解讀產生失敗,已退還點數,請稍後再試"})
 
     headers = {
         "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "private, no-store, max-age=0",
         "X-Accel-Buffering": "no",  # 若前方有 nginx,關閉其緩衝以確保即時串流
     }
     return Response(stream_with_context(generate()), headers=headers)
+
+
+def _stored_reading_response(reading, balance, question_id, expires_at):
+    """用 SSE 回傳已保存的 AI 解讀；歷史重看／重按不扣點。"""
+    def generate():
+        yield ("event: delta\ndata: "
+               + json.dumps({"t": reading}, ensure_ascii=False) + "\n\n")
+        yield ("event: done\ndata: " + json.dumps({
+            "balance": balance,
+            "record_id": question_id,
+            "charged": False,
+            "saved_until": expires_at.isoformat() if expires_at else None,
+        }, ensure_ascii=False) + "\n\n")
+    return Response(stream_with_context(generate()), headers={
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "private, no-store, max-age=0",
+        "X-Accel-Buffering": "no",
+    })
 
 
 @app.route("/manual/ai_prompt", methods=["POST"])
@@ -2094,24 +2280,25 @@ def manual_ai_reading():
         body, code = err
         return jsonify(body), code
 
-    # 先原子扣點(餘額不足直接擋)
-    ok, bal, msg = db.try_deduct_point(user["id"], 1, "divination")
-    if not ok:
-        if msg == "insufficient":
-            return jsonify({
-                "error": "點數不足,請先儲值",
-                "balance": user.get("points_balance", 0),
-            }), 402
-        return jsonify({"error": "系統忙線,請稍後再試"}), 503
-
-    question_id = _log_question_event(
-        user, data, chart_payload=chart_payload,
-    )  # 使用 AI(解盤)→ 記錄
+    question_id = _ensure_question_record(user, data, chart_payload=chart_payload)
     if not question_id:
-        db.add_points(user["id"], 1, "refund", ref="reading_log_failed")
-        return jsonify({"error": "無法建立解讀紀錄，已退還點數，請稍後再試"}), 503
+        return jsonify({"error": "找不到本次卦象紀錄，請重新起卦後再試"}), 409
+    status, bal, existing, expires_at, reservation_token = db.reserve_ai_reading(
+        user["id"], question_id, cost=1,
+    )
+    if status == "existing":
+        return _stored_reading_response(existing, bal, question_id, expires_at)
+    if status == "in_progress":
+        return jsonify({"error": "這筆 AI 解讀正在產生中，請稍候"}), 409
+    if status == "insufficient":
+        return jsonify({"error": "果實不足,請先儲值", "balance": bal}), 402
+    if status == "not_found":
+        return jsonify({"error": "找不到本次卦象紀錄，請重新起卦後再試"}), 409
+    if status != "charged":
+        return jsonify({"error": "系統忙線,請稍後再試"}), 503
     return _stream_reading_response(user["id"], system_text, user_text, bal,
-                                    1, "ai_reading_failed", question_id=question_id)
+                                    1, "ai_reading_failed", question_id=question_id,
+                                    reservation_token=reservation_token)
 
 
 # ============================================================
@@ -2149,37 +2336,53 @@ def api_fortune_reading():
 
 
 def _reading_and_charge(user, data):
-    """即時 AI 解讀(非串流,供 App 用):驗證 → 扣 1 點 → 呼叫 Claude → 回完整解讀。
-    失敗自動退點。回傳 (body_dict, status_code);成功 body = {"reading","balance"}。"""
+    """App AI 解讀：鎖定同筆紀錄、預扣一次、完成後回寫；重看不扣點。"""
     system_text, user_text, chart_payload, err = _build_manual_reading(data)
     if err:
         return err
-    ok, bal, msg = db.try_deduct_point(user["id"], 1, "divination")
-    if not ok:
-        if msg == "insufficient":
-            return ({"error": "點數不足,請先儲值",
-                     "balance": user.get("points_balance", 0)}, 402)
-        return ({"error": "系統忙線,請稍後再試"}, 503)
-    question_id = _log_question_event(user, data, chart_payload=chart_payload)
+    question_id = _ensure_question_record(user, data, chart_payload=chart_payload)
     if not question_id:
-        db.add_points(user["id"], 1, "refund", ref="reading_log_failed")
-        return ({"error": "無法建立解讀紀錄，已退還點數，請稍後再試"}, 503)
+        return ({"error": "找不到本次卦象紀錄，請重新起卦後再試"}, 409)
+    status, bal, existing, existing_expires, reservation_token = db.reserve_ai_reading(
+        user["id"], question_id, cost=1,
+    )
+    if status == "existing":
+        return ({
+            "reading": existing, "balance": bal, "record_id": question_id,
+            "charged": False,
+            "saved_until": existing_expires.isoformat() if existing_expires else None,
+        }, 200)
+    if status == "in_progress":
+        return ({"error": "這筆 AI 解讀正在產生中，請稍候"}, 409)
+    if status == "insufficient":
+        return ({"error": "果實不足,請先儲值", "balance": bal}, 402)
+    if status == "not_found":
+        return ({"error": "找不到本次卦象紀錄，請重新起卦後再試"}, 409)
+    if status != "charged":
+        return ({"error": "系統忙線,請稍後再試"}, 503)
     try:
         reading = _call_claude_reading(system_text, user_text)
         if not (reading or "").strip():
             raise RuntimeError("AI 回傳空內容")
     except Exception as e:  # noqa: BLE001
-        db.add_points(user["id"], 1, "refund", ref="reading_failed")
+        db.refund_ai_reading(
+            user["id"], question_id, reservation_token, 1, ref="reading_failed",
+        )
         app.logger.warning("AI reading failed (%s: %s)", type(e).__name__, e)
         return ({"error": "解讀產生失敗,已退還點數,請稍後再試"}, 502)
     expires_at = db.save_ai_reading(
-        user["id"], question_id, reading, model=_AI_READING_MODEL,
+        user["id"], question_id, reading, reservation_token,
+        model=_AI_READING_MODEL,
         retention_days=30,
     )
     if not expires_at:
-        db.add_points(user["id"], 1, "refund", ref="reading_save_failed")
+        db.refund_ai_reading(
+            user["id"], question_id, reservation_token, 1,
+            ref="reading_save_failed",
+        )
         return ({"error": "解讀儲存失敗，已退還點數，請稍後再試"}, 503)
-    return ({"reading": reading, "balance": bal,
+    return ({"reading": reading, "balance": bal, "record_id": question_id,
+             "charged": True,
              "saved_until": expires_at.isoformat()}, 200)
 
 

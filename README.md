@@ -18,7 +18,7 @@ hexagram_data.py    # 64 卦完整資料（卦名、卦辭、卦宮、世應、�
 hexagram_engine.py  # 排盤引擎（起卦邏輯 + 手動排卦四面向呼叫）
 fortune_engine.py   # 流年排盤引擎（瘦身版，只負責時間軸協調）
 fortune_data.py     # 節氣、合沖、三合等資料
-db.py               # PostgreSQL(users/point_ledger/divination_questions/growth_reflections)
+db.py               # PostgreSQL(users/point_ledger/divination_questions:卦象+Prompt+AI/growth_reflections)
 legal.json          # 個資同意書+免責聲明(單一來源,web 註冊頁與 App 共用)
 
 divination/         # 【新】判讀核心包
@@ -77,7 +77,7 @@ docker compose up -d --build hexagram   # 標準方式(改完程式/模板/promp
 |----|------|
 | 網頁 | `/`(landing)、`/almanac`、`/cast`、`/fortune`、`/manual`(+`/ai_prompt`、`/ai_reading` SSE) |
 | 會員 | `/register` `/login` `/logout` `/forgot` `/reset`、`/member`(+history/profile/password/delete) |
-| API(App/Web 共用) | `/api/v1/*`:auth、member、chart/cast、almanac、daily、fortune、prompt/reading/chat、reflection、legal、health |
+| API(App/Web 共用) | `/api/v1/*`:auth、member(含 questions/<id> 只讀詳情)、chart/cast、almanac、daily、fortune、prompt/reading/chat、reflection、legal、health |
 | 管理 | `/admin/history*`、`/admin/members`、`/admin/questions*`(一般 `/login` + `ADMIN_EMAILS` 判定,無獨立管理登入) |
 
 ---

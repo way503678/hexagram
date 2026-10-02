@@ -24,12 +24,61 @@
           </td>
           <td style="color:#a02020;">{{ r.moving_lines or '—' }}</td>
         </tr>
+        {% if r.chart_payload %}
+          <tr>
+            <td colspan="4" style="padding:8px 12px 14px; background:#fcfbf8;">
+              <details>
+                <summary style="cursor:pointer; color:var(--primary); font-weight:600;">
+                  查看完整卦象（不扣果實）
+                </summary>
+                {% set c = r.chart_payload.get('卦象', {}) %}
+                <div style="line-height:1.75; margin-top:10px;">
+                  <div>排盤時間：{{ r.chart_payload.get('排盤時間', '') }}</div>
+                  <div>四柱：{% for k, v in c.get('四柱', {}).items() %}{{ k }}{{ v }}{% if not loop.last %}、{% endif %}{% endfor %}</div>
+                  <div>旬空：{{ r.chart_payload.get('旬空', [])|join('、') or '—' }}</div>
+                  <table class="history-table" style="width:100%; margin-top:8px;">
+                    <thead><tr><th>爻位</th><th>六神</th><th>六親</th><th>干支</th><th>狀態</th></tr></thead>
+                    <tbody>
+                      {% for yao in r.chart_payload.get('對六爻', [])|reverse %}
+                        <tr>
+                          <td>{{ yao.get('爻序名', '') }}</td>
+                          <td>{{ yao.get('六神', '') }}</td>
+                          <td>{{ yao.get('六親', '') }}</td>
+                          <td>{{ yao.get('干支', '') }}</td>
+                          <td>{% if yao.get('世') %}世 {% endif %}{% if yao.get('應') %}應 {% endif %}{% if yao.get('動爻') %}動{% endif %}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </td>
+          </tr>
+        {% endif %}
+        {% if r.prompt_text %}
+          <tr>
+            <td colspan="4" style="padding:8px 12px 14px; background:#f8fbff;">
+              <details>
+                <summary style="cursor:pointer; color:var(--primary); font-weight:600;">
+                  查看已購 Prompt（不扣果實）
+                  {% if r.prompt_expires_at %}
+                    <span style="font-weight:normal; color:#888; font-size:12px;">
+                      （保存至 {{ r.prompt_expires_at.strftime('%Y-%m-%d %H:%M') }}）
+                    </span>
+                  {% endif %}
+                </summary>
+                <button type="button" style="margin:10px 0;" onclick="navigator.clipboard.writeText(document.getElementById('saved-prompt-{{ r.id }}').value)">複製 Prompt</button>
+                <textarea id="saved-prompt-{{ r.id }}" readonly style="width:100%; min-height:220px;">{{ r.prompt_text }}</textarea>
+              </details>
+            </td>
+          </tr>
+        {% endif %}
         {% if r.ai_reading %}
           <tr>
             <td colspan="4" style="padding:8px 12px 14px; background:#faf8ff;">
               <details>
                 <summary style="cursor:pointer; color:var(--primary); font-weight:600;">
-                  查看 AI 解讀
+                  查看 AI 解讀（不扣果實）
                   {% if r.ai_reading_expires_at %}
                     <span style="font-weight:normal; color:#888; font-size:12px;">
                       （保存至 {{ r.ai_reading_expires_at.strftime('%Y-%m-%d %H:%M') }}）
@@ -47,6 +96,6 @@
 {% else %}
   <p>你還沒有任何卜卦紀錄。到
     <a href="/manual" style="color:var(--primary);">卜卦問事</a>
-    並使用 AI（產生 Prompt / 解盤）後就會留下紀錄。</p>
+    完成起卦後就會留下紀錄。</p>
 {% endif %}
 {% endblock %}
