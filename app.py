@@ -477,7 +477,7 @@ def _log_question_event(user, data, chart_payload=None):
             user_id=user["id"],
             user_email=user.get("email"),
             login_at=_login_at_from_request(),
-            question=(data.get("question") or "").strip()[:500],
+            question=db.normalize_question(data.get("question"))[:500],
             ben_gua=(chart.get("本卦") or {}).get("卦名"),
             bian_gua=(chart.get("變卦") or {}).get("卦名"),
             moving_lines=(chart.get("動爻") or {}).get("描述"),
@@ -506,11 +506,11 @@ def _ensure_question_record(user, data, chart_payload=None):
             return None
         # record_id 只可指向起卦時保存的同一題／同一組爻／同一排盤時間；
         # 付費端點不能讓客戶端用舊 id 覆寫卦象後沿用既有付費內容。
-        question = (data.get("question") or "").strip()[:500]
+        question = db.normalize_question(data.get("question"))[:500]
         yao_vals = data.get("yao_vals") or []
         yao_str = "|".join(str(v) for v in yao_vals)
         cast_dt = (chart_payload or {}).get("排盤時間")
-        if (record.get("question") or "") != question:
+        if db.normalize_question(record.get("question")) != question:
             return None
         if record.get("yao_vals") and record["yao_vals"] != yao_str:
             return None
@@ -519,7 +519,7 @@ def _ensure_question_record(user, data, chart_payload=None):
         return record_id
     # 相容尚未更新、未帶 record_id 的 App：先用完整起卦指紋找回原紀錄；
     # 不只靠 20 秒去重，避免隔一段時間重按又建立新列、再次扣果實。
-    question = (data.get("question") or "").strip()[:500]
+    question = db.normalize_question(data.get("question"))[:500]
     yao_vals = data.get("yao_vals") or []
     yao_str = "|".join(str(v) for v in yao_vals)
     cast_dt = (chart_payload or {}).get("排盤時間")
@@ -888,7 +888,7 @@ def manual():
         aspect = "all"
 
     # 所問之事(管理員先填、擲卦後保留供 AI 解讀使用)
-    question = (_get_field("question", "") or "").strip()
+    question = db.normalize_question(_get_field("question", ""))
     if len(question) > 500:
         question = question[:500]
 
@@ -1448,7 +1448,7 @@ def _build_manual_reading(data):
     if _MANUAL_AI_PROMPT is None:
         return None, None, None, ({"error": "伺服器未載入 prompt 檔案,請聯絡管理員"}, 500)
 
-    question = (data.get("question") or "").strip()
+    question = db.normalize_question(data.get("question"))
     if not question:
         return None, None, None, ({"error": "請輸入所問之事"}, 400)
     if len(question) > 500:

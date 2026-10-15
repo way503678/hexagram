@@ -886,6 +886,11 @@ def list_users(limit=500):
         return []
 
 
+def normalize_question(question):
+    """表單使用 CRLF、textarea/JSON 使用 LF；同一問題統一以 LF 保存及比對。"""
+    return (question or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
 def log_divination_question(user_id, user_email, login_at, question,
                             ben_gua, bian_gua, moving_lines,
                             yao_vals=None, cast_dt=None, chart_payload=None,
@@ -899,6 +904,7 @@ def log_divination_question(user_id, user_email, login_at, question,
     """
     if not DB_ENABLED or not HAS_PSYCOPG:
         return None
+    question = normalize_question(question)
     try:
         with _conn() as c:
             with c.cursor() as cur:
@@ -907,7 +913,8 @@ def log_divination_question(user_id, user_email, login_at, question,
                         """
                         SELECT id FROM divination_questions
                         WHERE user_id      IS NOT DISTINCT FROM %s
-                          AND question     IS NOT DISTINCT FROM %s
+                          AND replace(replace(question, chr(13) || chr(10), chr(10)),
+                                      chr(13), chr(10)) IS NOT DISTINCT FROM %s
                           AND ben_gua      IS NOT DISTINCT FROM %s
                           AND bian_gua     IS NOT DISTINCT FROM %s
                           AND moving_lines IS NOT DISTINCT FROM %s
@@ -991,13 +998,14 @@ def find_matching_divination_question(user_id, question, yao_vals, cast_dt,
                     """SELECT id
                        FROM divination_questions
                        WHERE user_id = %s
-                         AND question IS NOT DISTINCT FROM %s
+                         AND replace(replace(question, chr(13) || chr(10), chr(10)),
+                                     chr(13), chr(10)) IS NOT DISTINCT FROM %s
                          AND yao_vals IS NOT DISTINCT FROM %s
                          AND cast_dt IS NOT DISTINCT FROM %s
                          AND created_at > NOW() - make_interval(hours => %s)
                        ORDER BY created_at DESC
                        LIMIT 1""",
-                    (int(user_id), question, yao_vals, cast_dt,
+                    (int(user_id), normalize_question(question), yao_vals, cast_dt,
                      max(1, int(max_age_hours))),
                 )
                 row = cur.fetchone()

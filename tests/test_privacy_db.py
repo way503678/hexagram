@@ -4,9 +4,11 @@ Run only against a disposable PostgreSQL database, for example:
   PG_DATABASE=hexagram_privacy_test python -m unittest tests.test_privacy_db
 """
 import os
+import re
 import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 import db
 
@@ -299,6 +301,74 @@ class PrivacyDatabaseTests(unittest.TestCase):
             with conn.cursor() as cur:
                 cur.execute("SELECT user_id FROM divination_logs WHERE id = %s", (legacy_id,))
                 self.assertIsNone(cur.fetchone()[0])
+
+    def test_multiline_web_question_can_generate_prompt_and_reading(self):
+        import app as web
+
+        question = "下週工作會順利嗎？\r\n我應該留意什麼？"
+        yao_vals = ["1,0", "0,0", "1,1", "0,1", "1,0", "0,0"]
+        form = dict(y="2026", m="10", d="15", h="17", aspect="all",
+                    question=question, csrf_token="test-csrf")
+        form.update({f"y{i}": v for i, v in enumerate(yao_vals)})
+        self.assertEqual(db.add_points(self.uid, 3, "test_topup"), (True, 3))
+        user = dict(db.get_user(self.uid), is_admin=False)
+
+        with web.app.test_client() as client, \
+                patch.object(web, "current_user", return_value=user), \
+                patch.object(web, "_stream_claude_reading",
+                             return_value=iter(["測試解讀內容"])) as ai:
+            with client.session_transaction() as sess:
+                sess["csrf_token"] = "test-csrf"
+            page = client.post("/manual", data=form)
+            self.assertEqual(page.status_code, 200)
+            qid = int(re.search(r"record_id:\s*(\d+)", page.text).group(1))
+            self.assertEqual(db.get_user_question(self.uid, qid)["question"],
+                             question.replace("\r\n", "\n"))
+            # Browsers normalize textarea values to LF before JSON.stringify.
+            payload = {k: form[k] for k in ("y", "m", "d", "h", "aspect")}
+            payload.update(question=question.replace("\r\n", "\n"),
+                           yao_vals=yao_vals, record_id=qid)
+            headers = {"X-CSRF-Token": "test-csrf"}
+            prompt = client.post("/manual/ai_prompt", json=payload, headers=headers)
+            self.assertEqual(prompt.status_code, 200, prompt.text)
+            self.assertTrue(prompt.json["charged"])
+            reading = client.post("/manual/ai_reading", json=payload, headers=headers)
+            self.assertEqual(reading.status_code, 200)
+            self.assertIn("event: done", reading.text)
+            saved = db.get_user_question(self.uid, qid)
+            self.assertEqual(saved["ai_reading"], "測試解讀內容")
+            self.assertTrue(saved["ai_reading_expires_at"])
+            self.assertTrue(saved["prompt_text"])
+
+            # Older web records contain CRLF. Both explicit ids and legacy
+            # clients without an id must recover the same paid content for free.
+            with db._conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("UPDATE divination_questions SET question = %s WHERE id = %s",
+                                (question, qid))
+            for include_id in (True, False):
+                retry = dict(payload)
+                if not include_id:
+                    retry.pop("record_id")
+                prompt = client.post("/manual/ai_prompt", json=retry, headers=headers)
+                self.assertEqual(prompt.status_code, 200, prompt.text)
+                self.assertFalse(prompt.json["charged"])
+                self.assertEqual(prompt.json["record_id"], qid)
+                reading = client.post("/manual/ai_reading", json=retry, headers=headers)
+                self.assertEqual(reading.status_code, 200)
+                self.assertIn('"charged": false', reading.text)
+            ai.assert_called_once()
+            self.assertEqual(db.get_user(self.uid)["points_balance"], 1)
+            self.assertEqual(len(db.list_user_questions(self.uid)), 1)
+
+            # Canonicalization must not allow a different question, chart or
+            # cast time to reuse the original record's paid content.
+            for change in ({"question": "另一個問題"}, {"h": "18"},
+                           {"yao_vals": ["0,0"] * 6}):
+                for endpoint in ("/manual/ai_prompt", "/manual/ai_reading"):
+                    denied = client.post(endpoint, json=dict(payload, **change), headers=headers)
+                    self.assertEqual(denied.status_code, 409)
+            self.assertEqual(db.get_user(self.uid)["points_balance"], 1)
 
     def test_promotion_is_idempotent_and_has_no_user_link(self):
         digest = uuid.uuid4().hex
