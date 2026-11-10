@@ -524,6 +524,9 @@ def init_db():
                 cur.execute(QUESTION_CONTENT_MIGRATION)
                 cur.execute(REFLECTIONS_SCHEMA)
                 cur.execute(PROMOTIONS_SCHEMA)
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_bonus_eligible BOOLEAN NOT NULL DEFAULT FALSE")
+                from fortune_store import SCHEMA as FORTUNE_SCHEMA
+                cur.execute(FORTUNE_SCHEMA)
         log.info("DB ready: %s@%s/%s",
                  PG_CONF["user"], PG_CONF["host"], PG_CONF["dbname"])
         _ensure_search_indexes()
@@ -801,9 +804,9 @@ def create_email_user(email, password_hash, display_name=None, consent_version=N
                 cur.execute(
                     """
                     INSERT INTO users (auth_provider, auth_id, display_name, email,
-                                       password_hash, consent_at, consent_version, email_verified)
+                                       password_hash, consent_at, consent_version, email_verified, registration_bonus_eligible)
                     VALUES ('email', %s, %s, %s, %s,
-                            CASE WHEN %s::text IS NOT NULL THEN NOW() ELSE NULL END, %s, FALSE)
+                            CASE WHEN %s::text IS NOT NULL THEN NOW() ELSE NULL END, %s, FALSE, TRUE)
                     ON CONFLICT (auth_provider, auth_id) DO NOTHING
                     RETURNING id, auth_provider, auth_id, display_name, email, points_balance, created_at
                     """,
@@ -1453,6 +1456,8 @@ def get_user(user_id):
     if not DB_ENABLED or not HAS_PSYCOPG:
         return None
     try:
+        from fortune_store import refund_stale_for_user
+        refund_stale_for_user(int(user_id))
         with _conn() as c:
             with c.cursor() as cur:
                 _refund_stale_ai_reservations_cur(cur, int(user_id))
@@ -1461,7 +1466,7 @@ def get_user(user_id):
                     SELECT id, auth_provider, auth_id, display_name, email,
                            points_balance, created_at,
                            birth_y, birth_m, birth_d, birth_h, gender,
-                           email_verified
+                           email_verified, registration_bonus_eligible
                     FROM users WHERE id = %s
                     """,
                     (int(user_id),),
@@ -1476,6 +1481,7 @@ def get_user(user_id):
             "birth_y": r[7], "birth_m": r[8], "birth_d": r[9], "birth_h": r[10],
             "gender": r[11],
             "email_verified": bool(r[12]),
+            "registration_bonus_eligible": bool(r[13]),
         }
     except Exception as e:
         log.warning("DB get_user failed (%s: %s)", type(e).__name__, e)
@@ -1668,7 +1674,7 @@ def delete_user(user_id):
         return False
 
 
-def claim_promotion(user_id, identifier_hash, campaign, points, retention_days):
+def claim_promotion(user_id, identifier_hash, campaign, points, retention_days, once_per_user=False):
     """原子領取一次性促銷並加點。
 
     promo_redemptions 不保存 user_id；會員關聯只存在本次交易記憶體中。
@@ -1682,6 +1688,14 @@ def claim_promotion(user_id, identifier_hash, campaign, points, retention_days):
         days = max(1, int(retention_days))
         with _conn() as c:
             with c.cursor() as cur:
+                if once_per_user:
+                    cur.execute("SELECT points_balance FROM users WHERE id=%s FOR UPDATE", (uid,))
+                    user_row = cur.fetchone()
+                    if not user_row:
+                        raise ValueError("會員不存在")
+                    cur.execute("SELECT 1 FROM point_ledger WHERE user_id=%s AND reason='welcome_bonus' LIMIT 1", (uid,))
+                    if cur.fetchone():
+                        return False, user_row[0], "already_redeemed"
                 # 到期紀錄已不再用於資格判定，順手最小化保存量。
                 cur.execute("DELETE FROM promo_redemptions WHERE expires_at <= NOW()")
                 cur.execute(

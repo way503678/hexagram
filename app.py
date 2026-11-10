@@ -75,7 +75,7 @@ def _api_cors(resp):
     # 會員歷史與付費內容不得被瀏覽器／CDN／共享代理快取；否則即使 API
     # 有驗證，錯誤的快取規則仍可能把上一位會員的內容送給下一位。
     private_prefixes = (
-        "/api/v1/member/", "/api/v1/prompt", "/api/v1/reading",
+        "/api/v1/member/", "/api/v1/prompt", "/api/v1/reading", "/api/v1/fortune",
         "/manual/ai_prompt", "/manual/ai_reading", "/member/history",
     )
     if request.path.startswith(private_prefixes):
@@ -106,8 +106,8 @@ def _email_is_admin(email):
 #   不需額外套件。token 內只放 user id 與到期時間,驗章 + 未過期即視為有效。
 # ============================================================
 # 新會員註冊時贈送的點數(方便在 App 上實測解盤流程;設 0 可關閉)
-NEW_USER_BONUS = int(os.environ.get("NEW_USER_BONUS", "3"))
-# 新戶禮資格只由 Apple AppTransaction 判定，不再由可重建的 Email 判定。
+NEW_USER_BONUS = int(os.environ.get("NEW_USER_BONUS", "2"))
+# 舊版 Apple 新戶禮保留相容；新註冊改為 Email 驗證後一次入帳。
 WELCOME_CAMPAIGN = os.environ.get("WELCOME_CAMPAIGN", "welcome_bonus_2026")
 PROMO_RETENTION_DAYS = int(os.environ.get("PROMO_RETENTION_DAYS", "730"))
 # 密碼最短長度(政策:至少 8 碼、且英數混合)
@@ -121,7 +121,7 @@ with open(os.path.join(os.path.dirname(__file__), "legal.json"), encoding="utf-8
 # 條文版本(改版時更新 legal.json 的 version,會記在會員的 consent_version)
 CONSENT_VERSION = os.environ.get("CONSENT_VERSION", LEGAL.get("version", "2026-06-17"))
 # 流年宜忌解讀(進階功能)每次扣的點數
-FORTUNE_AI_COST = int(os.environ.get("FORTUNE_AI_COST", "1"))
+FORTUNE_AI_COST = int(os.environ.get("FORTUNE_AI_COST", "2"))
 # 解讀後「繼續聊」每則訊息扣的點數(教練式對話;0 = 免費)
 CHAT_AI_COST = int(os.environ.get("CHAT_AI_COST", "1"))
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -544,6 +544,7 @@ def _public_user(user):
         "email": user.get("email"),
         "points_balance": user.get("points_balance", 0),
         "email_verified": bool(user.get("email_verified")),
+        "registration_bonus_eligible": bool(user.get("registration_bonus_eligible")),
         "is_admin": _email_is_admin(user.get("email")),
         "gender": user.get("gender"),
         "birth_y": user.get("birth_y"), "birth_m": user.get("birth_m"),
@@ -1502,7 +1503,7 @@ def _prompt_and_charge(user, data):
 # ============================================================
 # 流年宜忌解讀(進階、扣點):引擎算四面向斷語 → AI 翻成白話宜忌
 # ============================================================
-def _build_fortune_reading(data):
+def _build_fortune_reading(data, result=None):
     """從 data(出生 y/m/d/h + year + gender)算流年,組出 (系統規則, 流年JSON文字, err)。
 
     把引擎的「流年 + 四面向 + 12 流月四面向斷語」抽成精簡 JSON 餵給 AI;
@@ -1521,7 +1522,8 @@ def _build_fortune_reading(data):
         year = datetime.now().year
     gender = db.norm_gender((data.get("gender") or "").strip().upper())
     try:
-        result = analyze_fortune(datetime(y, m, d, h, 0), year, gender=gender)
+        if result is None:
+            result = analyze_fortune(datetime(y, m, d, h, 0), year, gender=gender)
     except Exception as e:
         return None, None, ({"error": f"流年分析失敗:{type(e).__name__}: {e}"}, 500)
 
@@ -1551,17 +1553,76 @@ def _build_fortune_reading(data):
 
 
 def _fortune_prompt_and_charge(user, data):
-    """流年「產生 Prompt」:算流年 → 扣點 → 回 prompt。web 與 api 共用。"""
-    system_text, user_text, err = _build_fortune_reading(data)
-    if err:
-        return err
-    ok, bal, msg = db.try_deduct_point(user["id"], FORTUNE_AI_COST, "fortune")
-    if not ok:
-        if msg == "insufficient":
-            return ({"error": "點數不足,請先儲值",
-                     "balance": user.get("points_balance", 0)}, 402)
-        return ({"error": "系統忙線,請稍後再試"}, 503)
-    return ({"prompt": system_text + "\n\n---\n\n" + user_text, "balance": bal}, 200)
+    """Legacy prompt clients share the complete saved forecast entitlement."""
+    return _unlock_fortune(user, data)
+
+
+def _unlock_fortune(user, data):
+    import fortune_store
+    try:
+        inputs, key = fortune_store.normalize(data)
+    except ValueError as exc:
+        return {'error': str(exc)}, 400
+    try:
+        status, result, token = fortune_store.reserve(user['id'], key, inputs, FORTUNE_AI_COST)
+    except Exception:
+        app.logger.exception('fortune reservation failed')
+        return {'error': '系統忙線，請稍後再試'}, 503
+    if status == 'existing':
+        return result, 200
+    if status == 'in_progress':
+        return {**result, 'error': '這份流年正在產生中，請稍候'}, 409
+    if status == 'insufficient':
+        return {**result, 'error': '果實不足，完整流年需要 2 顆果實'}, 402
+    try:
+        forecast = analyze_fortune(datetime(inputs['y'], inputs['m'], inputs['d'], inputs['h']), inputs['year'], gender=inputs['gender'])
+        system_text, user_text, error = _build_fortune_reading(inputs, result=forecast)
+        if error:
+            raise RuntimeError(error[0]['error'])
+        reading = _call_claude_reading(system_text, user_text)
+        prompt = system_text + '\n\n---\n\n' + user_text
+        saved_until = fortune_store.save(user['id'], result['fortune_id'], token, forecast, prompt, reading, _AI_READING_MODEL)
+    except Exception:
+        app.logger.exception('fortune generation/save failed')
+        try:
+            balance = fortune_store.refund(user['id'], result['fortune_id'], token)
+            # A commit may have succeeded even if the connection lost its acknowledgement.
+            saved = fortune_store.access(user['id'], key, FORTUNE_AI_COST)
+            if saved['ready']:
+                saved['charged'] = result['charged']
+                return saved, 200
+        except Exception:
+            app.logger.exception('fortune refund deferred to stale-reservation recovery')
+            return {'error': '流年產生未完成，稍後重新整理確認果實餘額'}, 503
+        return {'error': '流年產生失敗，已退回預扣果實，請稍後再試', 'balance': balance}, 502
+    result.update(fortune=forecast, reading=reading, prompt=prompt, saved_until=saved_until,
+                  unlocked=True, ready=True, pending=False)
+    return result, 200
+
+
+@app.route('/api/v1/fortune/access', methods=['GET'])
+def api_fortune_access():
+    import fortune_store
+    user = current_user()
+    if not user:
+        return jsonify({'error': '請先登入會員'}), 401
+    try:
+        _, key = fortune_store.normalize(request.args)
+        return jsonify(fortune_store.access(user['id'], key, FORTUNE_AI_COST))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception:
+        app.logger.exception('fortune access failed')
+        return jsonify({'error': '流年載入失敗，請稍後再試'}), 503
+
+
+@app.route('/api/v1/fortune/unlock', methods=['POST'])
+def api_fortune_unlock():
+    user = current_user()
+    if not user:
+        return jsonify({'error': '請先登入會員'}), 401
+    body, code = _unlock_fortune(user, request.get_json(silent=True) or {})
+    return jsonify(body), code
 
 
 # ============================================================
@@ -1572,6 +1633,11 @@ def api_health():
     """健康檢查 / app 連線測試。"""
     # Docker 每分鐘呼叫 health；順便讓 30 天到期的 AI 解讀準時實際刪除。
     db.cleanup_expired_ai_readings()
+    try:
+        import fortune_store
+        fortune_store.cleanup()
+    except Exception:
+        app.logger.exception('fortune cleanup failed')
     return jsonify({"status": "ok", "service": "hexagram", "version": 1})
 
 
@@ -1640,7 +1706,7 @@ def _login_member(email, password):
         return (None, "locked" if now_locked else "bad")
     if row.get("failed_logins"):
         db.reset_login_failures(row["id"])
-    return (db.get_user(row["id"]) or row, "ok")
+    return (_claim_registration_bonus(db.get_user(row["id"]) or row), "ok")
 
 
 def _parse_birthday(get):
@@ -1728,6 +1794,7 @@ def api_auth_me():
     user = current_user()
     if not user:
         return jsonify({"error": "未登入或登入已逾期"}), 401
+    user = _claim_registration_bonus(user)
     return jsonify({"user": _public_user(user)})
 
 
@@ -2079,29 +2146,14 @@ def api_daily_internal():
 
 @app.route("/api/v1/fortune", methods=["GET"])
 def api_fortune():
-    """流年分析(免費、免登入):?y&m&d&h&gender&year。
-
-    依出生 y/m/d/h + 性別,分析目標 year 的流年 + 12 流月 + 白話斷語。
-    """
-    now = datetime.now()
-    try:
-        y_i = int(request.args["y"])
-        m_i = int(request.args["m"])
-        d_i = int(request.args["d"])
-        h_i = int(request.args["h"])
-    except (KeyError, TypeError, ValueError):
-        return jsonify({"error": "缺少出生年月日時(y/m/d/h)"}), 400
-    try:
-        year_i = int(request.args.get("year", now.year))
-    except ValueError:
-        year_i = now.year
-    gender = (request.args.get("gender", "") or "").strip().upper()
-    gender = db.norm_gender(gender)
-    try:
-        fortune = analyze_fortune(datetime(y_i, m_i, d_i, h_i, 0), year_i, gender=gender)
-    except Exception as e:
-        return jsonify({"error": f"流年分析失敗:{type(e).__name__}: {e}"}), 500
-    return jsonify(fortune)
+    """Legacy deterministic-result endpoint: return saved unlocked content only."""
+    response = api_fortune_access()
+    if isinstance(response, tuple):
+        return response
+    body = response.get_json()
+    if not body['ready']:
+        return jsonify({'error': '請先解鎖完整流年', 'cost': FORTUNE_AI_COST}), 402
+    return jsonify(body['fortune'])
 
 
 @app.route("/api/v1/prompt", methods=["POST"])
@@ -2316,23 +2368,21 @@ def api_fortune_prompt():
 
 @app.route("/api/v1/fortune/reading", methods=["POST"])
 def api_fortune_reading():
-    """流年「AI 解讀」:扣點 → 串流(SSE)即時產生白話宜忌。失敗自動退點。"""
+    """Legacy SSE clients receive the same persisted package without another charge."""
     user = current_user()
     if not user:
-        return jsonify({"error": "請先登入會員"}), 401
-    data = request.get_json(silent=True) or {}
-    system_text, user_text, err = _build_fortune_reading(data)
-    if err:
-        body, code = err
+        return jsonify({'error': '請先登入會員'}), 401
+    body, code = _unlock_fortune(user, request.get_json(silent=True) or {})
+    if code != 200:
         return jsonify(body), code
-    ok, bal, msg = db.try_deduct_point(user["id"], FORTUNE_AI_COST, "fortune")
-    if not ok:
-        if msg == "insufficient":
-            return jsonify({"error": "點數不足,請先儲值",
-                            "balance": user.get("points_balance", 0)}), 402
-        return jsonify({"error": "系統忙線,請稍後再試"}), 503
-    return _stream_reading_response(user["id"], system_text, user_text, bal,
-                                    FORTUNE_AI_COST, "fortune_reading_failed")
+    def generate():
+        yield 'event: delta\ndata: ' + json.dumps({'t': body['reading']}, ensure_ascii=False) + '\n\n'
+        metadata = {k: body[k] for k in ('balance', 'charged', 'fortune_id', 'saved_until')}
+        yield 'event: done\ndata: ' + json.dumps(metadata, ensure_ascii=False) + '\n\n'
+    return Response(stream_with_context(generate()), headers={
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'private, no-store, max-age=0', 'X-Accel-Buffering': 'no',
+    })
 
 
 def _reading_and_charge(user, data):
@@ -2831,14 +2881,31 @@ def _verify_result_page(ok, message):
 </div></body></html>""", (200 if ok else 400)
 
 
+def _claim_registration_bonus(user):
+    if not user or not user.get('email_verified') or not user.get('registration_bonus_eligible'):
+        return user
+    import member_rewards
+    secret = os.environ.get('PROMO_HMAC_SECRET') or app.config['SECRET_KEY']
+    identifier = hmac.new(secret.encode(), ('registration-email:' + user['email'].strip().lower()).encode(), hashlib.sha256).hexdigest()
+    try:
+        member_rewards.claim_registration(user['id'], identifier, NEW_USER_BONUS, PROMO_RETENTION_DAYS)
+        return db.get_user(user['id']) or user
+    except Exception:
+        app.logger.exception('registration gift deferred for retry')
+        return user
+
+
 @app.route("/verify", methods=["GET"])
 def verify_email():
-    """Email 驗證。新戶禮另由已驗證的 Apple AppTransaction 判定。"""
+    """Verify email and atomically grant the new-registration gift once."""
     uid = verify_verify_token((request.args.get("token") or "").strip())
     if not uid:
         return _verify_result_page(False, "驗證連結無效或已過期(24 小時)。<br>請登入後到會員中心重寄驗證信。")
     db.set_email_verified(uid)
-    return _verify_result_page(True, "Email 已完成驗證。")
+    user = _claim_registration_bonus(db.get_user(uid))
+    if not user or not user.get('email_verified'):
+        return _verify_result_page(False, '驗證暫時無法完成，請稍後重試。')
+    return _verify_result_page(True, "Email 已完成驗證。<br>新註冊會員的 2 顆果實會自動入帳，請返回 App 重新整理。")
 
 
 @app.route("/api/v1/promotions/welcome", methods=["POST"])
@@ -2868,6 +2935,7 @@ def api_claim_welcome_promotion():
         WELCOME_CAMPAIGN,
         NEW_USER_BONUS,
         PROMO_RETENTION_DAYS,
+        once_per_user=True,
     )
     if reason in ("db_error", "db_unavailable"):
         return jsonify({"error": "系統忙線,請稍後再試"}), 503

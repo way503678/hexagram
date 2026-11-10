@@ -318,3 +318,12 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 - 新增 GET /api/v1/daily_internal(X-Internal-Key 驗證,env INTERNAL_API_KEY;公網 403)。
   依 y/m/d/h 生日參數算 analyze_daily,與會員版同引擎。供 selftools 首頁「生活摘要」內網呼叫。
 - 驗證:無鑰 403 ✓、有鑰 200 ✓;SELFTOOLS 首頁運勢卡輸出與 App 截圖一致。
+
+## 2026-11-10 流年完整解鎖與新註冊贈送（尚未部署）
+
+- App 的完整流年／12 流月／AI／Prompt 共用一次 2 顆果實的解鎖。資格鍵為會員＋正規化出生年月日時、性別、目標年份；GET 查詢絕不扣款，切換年份不購買。
+- `fortune_store.py` 管理獨立 `fortune_readings`，以會員鎖、預扣 token、保存後回傳、失敗一次退款及逾時恢復防止重複扣款。AI／Prompt／結果保存 30 天，清除內容後保留解鎖資格，同份可在零餘額時免費重新產生。刪除帳號以 FK cascade 移除所有流年個資及資格。
+- 新增 GET `/api/v1/fortune/access`、POST `/api/v1/fortune/unlock`。舊 `/fortune/prompt`、`/fortune/reading` 共用完整解鎖；GET `/api/v1/fortune` 只回傳已購保存結果，會員付費 API 加 no-store。公開網頁原有的基礎排盤範圍維持。
+- 只有此版起新建 Email 會員標記新戶資格，驗證 Email 後由 `member_rewards.py` 原子贈送 2 顆；驗證重開、登入、`auth/me` 重試不重發，舊 Apple 領取路徑也以會員帳本防重送。既有會員不補發、不更動既有餘額。Email HMAC 活動紀錄最長 730 天，避免刪帳後同信箱重領，條文版本更新為 2026-11-10。
+- 驗證：隔離 PostgreSQL `tests.test_privacy_db`＋`tests.test_fortune_unlock` 共 21 項通過（並行／退款／保存失敗／commit 回應遺失／零餘額重看與到期重算／跨會員隔離／刪帳／驗證與新舊贈點防重複）；Python compile 通過。AI 供應商採 mock，不使用正式會員或寄出真實信件。
+- 對應 App：`/opt/hexagram-app-fortune-20261110`，分支 `feature/fortune-unlock`。尚未部署後端、未建立或上傳新的 TestFlight。發佈時先部署後端與冪等 DDL，再發新版 App；不要包入主 App 工作目錄既有 LayoutPreview／黃曆草稿。

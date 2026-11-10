@@ -81,9 +81,10 @@
        data-year="{{ fortune_year }}" data-gender="{{ chart_gender or '' }}">
     {% if current_user %}
       <button type="button" class="ai-btn export-btn" id="fortune-ai-btn"
-              style="background:#5E548E;">🔮 流年宜忌 AI 解讀(扣 {{ fortune_ai_cost }} 點)</button>
+              style="background:#5E548E;">🔮 流年與 AI 解讀（首次解鎖 {{ fortune_ai_cost }} 顆果實）</button>
       <button type="button" class="ai-btn export-btn" id="fortune-prompt-btn"
-              style="margin-left:8px;">🤖 產生流年 Prompt(扣 {{ fortune_ai_cost }} 點)</button>
+              style="margin-left:8px;">🤖 流年 Prompt（共用解鎖，不重複扣款）</button>
+      <p class="note">首次使用任一功能會解鎖同份流年、AI 解讀與 Prompt；之後重看不再扣果實。</p>
       <span id="fortune-ai-msg" style="font-size:13px; color:#666; margin-left:8px;"></span>
       <div id="fortune-ai-out" style="display:none; white-space:pre-wrap; line-height:1.8;
            margin-top:10px; padding:12px; border:1px solid #ddd; border-radius:6px; background:#F3F1F8;"></div>

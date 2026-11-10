@@ -16,6 +16,8 @@ services:
       PG_PASSWORD: postgres
       PG_DATABASE: hexagram
       DB_ENABLED: "1"
+      NEW_USER_BONUS: "2"
+      FORTUNE_AI_COST: "2"
       # 管理員名單（email，多個用逗號分隔；值放在 .env，不進 git）
       ADMIN_EMAILS: "${ADMIN_EMAILS:-}"
       # 內部服務共享密鑰（SELFTOOLS 首頁今日指引用；值放 .env）
