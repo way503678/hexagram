@@ -327,4 +327,4 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 - 只有此版起新建 Email 會員標記新戶資格，驗證 Email 後由 `member_rewards.py` 原子贈送 2 顆；驗證重開、登入、`auth/me` 重試不重發，舊 Apple 領取路徑也以會員帳本防重送。既有會員不補發、不更動既有餘額。Email HMAC 活動紀錄最長 730 天，避免刪帳後同信箱重領，條文版本更新為 2026-11-10。
 - 驗證：隔離 PostgreSQL `tests.test_privacy_db`＋`tests.test_fortune_unlock` 共 21 項通過（並行／退款／保存失敗／commit 回應遺失／零餘額重看與到期重算／跨會員隔離／刪帳／驗證與新舊贈點防重複）；Python compile 通過。AI 供應商採 mock，不使用正式會員或寄出真實信件。
 - 依使用者「先發布吧」已於 2026-11-10 23:46（台北）部署 `0b8d9dc`，GitHub main 同步，Docker healthy，公開 health 正常。新映像重跑 21 項測試通過。真實公開 API＋Claude Sonnet 5.5 驗證：驗證新戶贈送 2、完整解鎖扣 2、12 流月與 1,809 字 AI 保存、餘額 0 時重看及取得 Prompt 不再扣；更換年份僅查詢不購買。測試帳號、流年與測試 HMAC 資格紀錄均已刪除。
-- 對應 App：`/opt/hexagram-app-fortune-20261110`，iOS 1.0.0（20）已排定 TestFlight 建置與自動提交；完成狀態記於 App WORKLOG。保留主 App 目錄既有 LayoutPreview／黃曆草稿。舊後端映像另存 `hexagram:before-fortune-20261110`。
+- 對應 App：`/opt/hexagram-app-fortune-20261110`，iOS 1.0.0（20）於 2026-11-11 00:38（台北）完成 TestFlight 提交，build `9177b6e4-220c-483c-9ddc-ba2776fa118d` 與 submission `7cf5ae9b-d1fa-4215-8584-52439b4000ce` 均為 FINISHED，workflow SUCCESS；Apple 處理後可安裝，未提交公開 App Store 審查。保留主 App 目錄既有 LayoutPreview／黃曆草稿。舊後端映像另存 `hexagram:before-fortune-20261110`。
