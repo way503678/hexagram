@@ -32,8 +32,10 @@ from hexagram_engine import (
 from fortune_engine import analyze_fortune
 from core_data import BRANCH_ELEMENT
 import db
+import prompt_cache
 
-# 啟動時初始化 DB
+# 啟動時先驗證快取設定，再初始化 DB
+prompt_cache.cache_ttl()
 db.init_db()
 
 app = Flask(__name__)
@@ -2178,17 +2180,17 @@ def _call_claude_reading(system_text, user_text):
     成功回傳解讀文字;失敗丟例外(由呼叫端決定退點)。
     """
     import anthropic
+    ttl = prompt_cache.cache_ttl()
+    started_at = time.monotonic()
     client = anthropic.Anthropic()  # 讀環境變數 ANTHROPIC_API_KEY
     resp = client.messages.create(
         model=_AI_READING_MODEL,
         max_tokens=4096,
-        system=[{
-            "type": "text",
-            "text": system_text,
-            "cache_control": {"type": "ephemeral"},  # 規則固定,開快取省 token
-        }],
+        system=prompt_cache.system_blocks(system_text, ttl=ttl),
         messages=[{"role": "user", "content": user_text}],
     )
+    prompt_cache.record_usage(resp, operation="reading", system_text=system_text,
+                              ttl=ttl, started_at=started_at)
     text = "\n".join(
         b.text for b in resp.content if getattr(b, "type", "") == "text"
     ).strip()
@@ -2205,20 +2207,25 @@ def _stream_claude_reading(system_text, user_text):
     生成失敗丟例外(由呼叫端決定退點)。
     """
     import anthropic
+    ttl = prompt_cache.cache_ttl()
+    started_at = time.monotonic()
     client = anthropic.Anthropic()  # 讀環境變數 ANTHROPIC_API_KEY
     with client.messages.stream(
         model=_AI_READING_MODEL,
         max_tokens=4096,
-        system=[{
-            "type": "text",
-            "text": system_text,
-            "cache_control": {"type": "ephemeral"},  # 規則固定,開快取省 token
-        }],
+        system=prompt_cache.system_blocks(system_text, ttl=ttl),
         messages=[{"role": "user", "content": user_text}],
     ) as stream:
         for chunk in stream.text_stream:
             if chunk:
                 yield chunk
+
+        try:
+            final_message = stream.get_final_message()
+        except Exception:
+            final_message = None  # Usage inspection must not invalidate a completed reading.
+        prompt_cache.record_usage(final_message, operation="reading_stream",
+                                  system_text=system_text, ttl=ttl, started_at=started_at)
 
 
 def _stream_reading_response(uid, system_text, user_text, bal,
@@ -2490,17 +2497,17 @@ def _build_chat(data):
 def _call_claude_chat(system_text, messages):
     """多輪對話呼叫 Claude;回傳回覆文字,失敗丟例外。"""
     import anthropic
+    ttl = prompt_cache.cache_ttl()
+    started_at = time.monotonic()
     client = anthropic.Anthropic()
     resp = client.messages.create(
         model=_AI_READING_MODEL,
         max_tokens=1024,
-        system=[{
-            "type": "text",
-            "text": system_text,
-            "cache_control": {"type": "ephemeral"},
-        }],
+        system=prompt_cache.system_blocks(system_text, ttl=ttl),
         messages=messages,
     )
+    prompt_cache.record_usage(resp, operation="chat", system_text=system_text,
+                              ttl=ttl, started_at=started_at)
     text = "\n".join(
         b.text for b in resp.content if getattr(b, "type", "") == "text"
     ).strip()

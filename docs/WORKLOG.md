@@ -328,3 +328,14 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 - 驗證：隔離 PostgreSQL `tests.test_privacy_db`＋`tests.test_fortune_unlock` 共 21 項通過（並行／退款／保存失敗／commit 回應遺失／零餘額重看與到期重算／跨會員隔離／刪帳／驗證與新舊贈點防重複）；Python compile 通過。AI 供應商採 mock，不使用正式會員或寄出真實信件。
 - 依使用者「先發布吧」已於 2026-11-10 23:46（台北）部署 `0b8d9dc`，GitHub main 同步，Docker healthy，公開 health 正常。新映像重跑 21 項測試通過。真實公開 API＋Claude Sonnet 5.5 驗證：驗證新戶贈送 2、完整解鎖扣 2、12 流月與 1,809 字 AI 保存、餘額 0 時重看及取得 Prompt 不再扣；更換年份僅查詢不購買。測試帳號、流年與測試 HMAC 資格紀錄均已刪除。
 - 對應 App：`/opt/hexagram-app-fortune-20261110`，iOS 1.0.0（20）於 2026-11-11 00:38（台北）完成 TestFlight 提交，build `9177b6e4-220c-483c-9ddc-ba2776fa118d` 與 submission `7cf5ae9b-d1fa-4215-8584-52439b4000ce` 均為 FINISHED，workflow SUCCESS；Apple 處理後可安裝，未提交公開 App Store 審查。保留主 App 目錄既有 LayoutPreview／黃曆草稿。舊後端映像另存 `hexagram:before-fortune-20261110`。
+
+## 2026-11-12 固定卜卦規則快取與用量紀錄
+
+- 固定的 `_MANUAL_AI_PROMPT`／`_FORTUNE_AI_PROMPT` 保持原文、順序及全部命理規則。每次的問題、卦象 JSON、既有解讀與追問都在共享 system 前綴之外。固定規則不需要經由額外的 Agent Skills／工具讀檔回合載入。
+- `prompt_cache.py` 共用 system 快取區塊與紀錄；JSON 解讀、SSE 解讀及追問共用相同邊界。`AI_PROMPT_CACHE_TTL` 支援 `5m`／`1h`，預設維持 `5m`，設定錯誤於啟動時拒絕，避免扣款後才遇設定錯誤。近 7 天付費解讀紀錄稀少，沒有資料支持逕改成寫入費較高的 1h。
+- 每次完成記錄 `ai_usage` JSON：固定規則 SHA256、模式、模型、TTL、未快取輸入、快取寫入、快取讀取、輸出及耗時。總輸入為 input＋cache writes＋cache reads；沒有 usage 時標示 unknown，不偽報 0 或命中。日誌不含會員 ID、生日、問題、卦象、解讀或 Prompt 原文。紀錄失敗不影響付費結果／退款。
+- `scripts/verify_prompt_cache.py` 用兩筆不同的合成 user 訊息、同一份完整卜卦 system 規則，各最多產生 1 token，確認第二筆 `cache_read_input_tokens > 0`。不建立會員／交易、不扣果實；此診斷仍有供應商快取寫入／讀取費，不排程定期暖機。
+- 驗證：Python compile；`tests.test_prompt_cache`＋`tests.test_privacy_db`＋`tests.test_fortune_unlock`，隔離 PostgreSQL 30 項通過。App 不需重新打包。
+- 設定方式：在部署 `.env` 選擇 `AI_PROMPT_CACHE_TTL=1h` 或 `5m`，再 `docker compose up -d --force-recreate`。1h 的首次快取寫入費較高，應依 `ai_usage` 的實際請求間隔與命中情形決定。
+- 官方依據：https://platform.claude.com/docs/en/build-with-claude/prompt-caching （固定前綴、TTL、usage 計數）；https://platform.claude.com/docs/en/build-with-claude/skills-guide （原生 Skills 另需 code execution）。
+- 新 Docker 映像真實 Claude 實測：固定手動卜卦規則 17,088 字元，首筆寫入 17,998 tokens，第二筆不同合成 user 訊息讀取快取 17,998 tokens、未快取輸入 33 tokens、輸出 1 token。第二筆未再寫入，證明共用固定前綴確實命中。這不是正式卦象 JSON 的總成本或節省比例。
