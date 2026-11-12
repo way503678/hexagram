@@ -339,3 +339,4 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 - 設定方式：在部署 `.env` 選擇 `AI_PROMPT_CACHE_TTL=1h` 或 `5m`，再 `docker compose up -d --force-recreate`。1h 的首次快取寫入費較高，應依 `ai_usage` 的實際請求間隔與命中情形決定。
 - 官方依據：https://platform.claude.com/docs/en/build-with-claude/prompt-caching （固定前綴、TTL、usage 計數）；https://platform.claude.com/docs/en/build-with-claude/skills-guide （原生 Skills 另需 code execution）。
 - 新 Docker 映像真實 Claude 實測：固定手動卜卦規則 17,088 字元，首筆寫入 17,998 tokens，第二筆不同合成 user 訊息讀取快取 17,998 tokens、未快取輸入 33 tokens、輸出 1 token。第二筆未再寫入，證明共用固定前綴確實命中。這不是正式卦象 JSON 的總成本或節省比例。
+- 已部署 `240f8ca` 並 push GitHub main；Docker healthy、公開 `/api/v1/health` 為 ok，線上 `app.py`／`prompt_cache.py` SHA256 與來源一致，實際 TTL=5m。原後端映像保留為 `hexagram:before-prompt-cache-20261112`。這次僅更新後端，iOS／Android 無需重裝。
