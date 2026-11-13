@@ -350,3 +350,9 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 - 驗證：`tests.test_prompt_cache`、`tests.test_privacy_db`、`tests.test_fortune_unlock`、`tests.test_reading_email` 在一次性 PostgreSQL `hexagram_draft_cache_test_20261113` 共 40 項通過。Python compile 與 diff check 通過。AI／Email 供應商全部 mock，未使用正式會員、未產生真實 AI 費用、未寄出真實信件。
 - 對應 App 草稿位於 `/opt/hexagram-app-draft-20261113`。App 解讀結果及個人紀錄加入明確點擊寄送入口；其餘 UI／返回修整見該工作樹 `WORKLOG.md`。
 - 正式環境仍為 main `3b74e5e`、原 Docker image `sha256:398b0e1cd0a6316584fe878a6abef400b313604a0cd0f771df95681b4318bf13`，本次不調整線上 5m 設定。收到發佈指示後才整合乾淨分支、確認正式設定為 off、部署及做受控驗證；目前不執行發佈命令。
+
+## 2026-11-13 本批次發布授權
+
+- 使用者已授權發布本批次，並要求 iOS／Android 同步更新；先前草稿暫停發布的指示已由本次明確授權解除。
+- 從乾淨 `/opt/hexagram-release-20261113` 發布低頻預設 off 快取及免費保存解讀 Email API；固定規則、30 天保存、既有付費／退款資格維持。正式 `.env` 沒有額外指定 AI_PROMPT_CACHE_TTL，將採新版 compose 的 off 預設。
+- 發布前 40 項隔離測試通過；已建立可回復的舊映像 `hexagram:before-reading-email-20261113`。部署完成後記錄實際映像、健康狀態與安全的隔離帳號驗證結果。
