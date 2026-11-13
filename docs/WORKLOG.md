@@ -356,3 +356,10 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 - 使用者已授權發布本批次，並要求 iOS／Android 同步更新；先前草稿暫停發布的指示已由本次明確授權解除。
 - 從乾淨 `/opt/hexagram-release-20261113` 發布低頻預設 off 快取及免費保存解讀 Email API；固定規則、30 天保存、既有付費／退款資格維持。正式 `.env` 沒有額外指定 AI_PROMPT_CACHE_TTL，將採新版 compose 的 off 預設。
 - 發布前 40 項隔離測試通過；已建立可回復的舊映像 `hexagram:before-reading-email-20261113`。部署完成後記錄實際映像、健康狀態與安全的隔離帳號驗證結果。
+
+### 2026-11-13 後端上線完成
+
+- 已部署並 push `f0aca46`，正式映像 `sha256:3cb26eb15bf1ff3c3f76e825873cef5691da34094dfb078294fb0a92cd01aeb7`。Docker healthy，公開 `/api/v1/health` 為 ok；線上 app.py／db.py／prompt_cache.py SHA256 與發布來源一致，實際快取 TTL=off，既有郵件供應商設定存在。
+- 新映像用隔離 DB 跑完 40 項測試（只掛入測試及診斷腳本，應用程式使用映像內版本）。正式 DB 的合成臨時帳號驗證：保存解讀經公開 HTTPS 可讀、no-store、生效的 Email API 免費且防重送、零餘額不再扣款、匿名寄送 401。寄送傳輸使用 mock，未寄出真實信件、未呼叫 AI 供應商。
+- 首次 Python 預設 User-Agent 的公開請求被邊緣服務拒絕，合成帳號已清除；改用明確 MINGO 驗證 User-Agent 後同一公開讀取與驗證通過。兩次合成帳號及內容均已刪除，隔離 DB `hexagram_release_test_20261113` 已移除。
+- iOS build 21 / Android versionCode 16 已送 EAS 建置與自動提交，商店最終結果見 App WORKLOG；未把排隊／建置中視為完成。
