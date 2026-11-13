@@ -21,17 +21,19 @@ logger.propagate = False
 
 
 def cache_ttl():
-    value = os.environ.get('AI_PROMPT_CACHE_TTL', '5m').strip().lower()
-    if value not in ('5m', '1h'):
-        raise ValueError('AI_PROMPT_CACHE_TTL must be 5m or 1h')
+    value = os.environ.get('AI_PROMPT_CACHE_TTL', 'off').strip().lower()
+    if value not in ('off', '5m', '1h'):
+        raise ValueError('AI_PROMPT_CACHE_TTL must be off, 5m or 1h')
     return value
 
 
 def system_blocks(system_text, ttl=None):
     """Keep instruction bytes/order unchanged across generation modes and users."""
     selected = cache_ttl() if ttl is None else ttl
+    if selected == 'off':
+        return [{'type': 'text', 'text': system_text}]
     if selected not in ('5m', '1h'):
-        raise ValueError('cache TTL must be 5m or 1h')
+        raise ValueError('cache TTL must be off, 5m or 1h')
     return [{'type': 'text', 'text': system_text,
              'cache_control': {'type': 'ephemeral', 'ttl': selected}}]
 

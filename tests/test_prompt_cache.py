@@ -1,5 +1,6 @@
 """Cache boundaries and usage accounting; no provider calls or member content logs."""
 import json
+import runpy
 import os
 import time
 import unittest
@@ -19,6 +20,19 @@ class PromptCacheTests(unittest.TestCase):
         with patch.dict(os.environ, {'AI_PROMPT_CACHE_TTL': 'never'}):
             with self.assertRaises(ValueError):
                 prompt_cache.cache_ttl()
+
+    def test_low_frequency_default_and_off_keep_rules_without_cache_marker(self):
+        with patch.dict(os.environ):
+            os.environ.pop('AI_PROMPT_CACHE_TTL', None)
+            self.assertEqual(prompt_cache.cache_ttl(), 'off')
+            self.assertEqual(prompt_cache.system_blocks('規則\r\n'), [{'type': 'text', 'text': '規則\r\n'}])
+        self.assertEqual(prompt_cache.system_blocks('規則', ttl='off'), [{'type': 'text', 'text': '規則'}])
+
+    def test_disabled_diagnostic_cannot_create_provider_client(self):
+        with patch.dict(os.environ, {'AI_PROMPT_CACHE_TTL': 'off'}), patch('anthropic.Anthropic') as provider:
+            with self.assertRaisesRegex(SystemExit, 'disabled'):
+                runpy.run_path('scripts/verify_prompt_cache.py', run_name='__main__')
+            provider.assert_not_called()
 
     def test_usage_counts_cached_input_in_total_without_leaking_content(self):
         response = SimpleNamespace(model='test-model', secret='private reading', usage=SimpleNamespace(
@@ -90,6 +104,22 @@ class ClaudeCacheIntegrationTests(unittest.TestCase):
         self.assertEqual(len(hashes), 1)
         for private in (private_question, '個人解讀', '個人追問', fixed):
             self.assertNotIn(private, '\n'.join(logs.output))
+
+    def test_off_applies_to_reading_chat_and_stream_with_usage_preserved(self):
+        fake = MagicMock()
+        fake.messages.create.return_value = self.response()
+        stream = fake.messages.stream.return_value.__enter__.return_value
+        stream.text_stream = iter(['完整解讀'])
+        stream.get_final_message.return_value = self.response()
+        with patch.dict(os.environ, {'AI_PROMPT_CACHE_TTL': 'off'}), patch('anthropic.Anthropic', return_value=fake):
+            with self.assertLogs(prompt_cache.logger, 'INFO') as logs:
+                self.web._call_claude_reading('fixed', 'q')
+                self.web._call_claude_chat('fixed', [{'role': 'user', 'content': 'q'}])
+                list(self.web._stream_claude_reading('fixed', 'q'))
+        for call in fake.messages.create.call_args_list + fake.messages.stream.call_args_list:
+            self.assertEqual(call.kwargs['system'], [{'type': 'text', 'text': 'fixed'}])
+        self.assertEqual(len(logs.output), 3)
+        self.assertTrue(all(json.loads(line.split(':', 2)[2])['cache_ttl'] == 'off' for line in logs.output))
 
     def test_provider_failure_propagates_for_existing_refund_flow(self):
         fake = MagicMock()

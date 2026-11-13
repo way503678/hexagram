@@ -317,6 +317,7 @@ ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS ai_reading_created_at 
 ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS ai_reading_expires_at TIMESTAMPTZ;
 ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS ai_generation_started_at TIMESTAMPTZ;
 ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS ai_generation_token TEXT;
+ALTER TABLE divination_questions ADD COLUMN IF NOT EXISTS ai_email_requested_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_divq_created
     ON divination_questions (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_divq_user
@@ -1407,6 +1408,29 @@ def get_divination_question(qid, user_id=None):
 def get_user_question(user_id, qid):
     """只在紀錄屬於會員時回傳完整內容；歷史查看不做任何扣點。"""
     return get_divination_question(qid, user_id=user_id)
+
+
+def claim_reading_email(user_id, qid):
+    """Atomically allow one email attempt per saved reading per minute.
+
+    Persisted across workers/restarts; no billing or generation side effects.
+    Failed delivery also waits a minute to avoid repeated provider attempts.
+    """
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""UPDATE divination_questions
+                    SET ai_email_requested_at = NOW()
+                    WHERE id = %s AND user_id = %s
+                      AND ai_reading IS NOT NULL AND ai_reading <> ''
+                      AND ai_reading_expires_at > NOW()
+                      AND (ai_email_requested_at IS NULL
+                           OR ai_email_requested_at <= NOW() - INTERVAL '60 seconds')
+                    RETURNING id""", (int(qid), int(user_id)))
+                return cur.fetchone() is not None
+    except Exception:
+        log.warning("DB reading email reservation failed")
+        return None
 
 
 def _refund_stale_ai_reservations_cur(cur, user_id):

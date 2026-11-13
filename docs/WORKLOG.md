@@ -340,3 +340,13 @@ docker compose up -d --build hexagram   # 改完程式/模板/prompt 後重建�
 - 官方依據：https://platform.claude.com/docs/en/build-with-claude/prompt-caching （固定前綴、TTL、usage 計數）；https://platform.claude.com/docs/en/build-with-claude/skills-guide （原生 Skills 另需 code execution）。
 - 新 Docker 映像真實 Claude 實測：固定手動卜卦規則 17,088 字元，首筆寫入 17,998 tokens，第二筆不同合成 user 訊息讀取快取 17,998 tokens、未快取輸入 33 tokens、輸出 1 token。第二筆未再寫入，證明共用固定前綴確實命中。這不是正式卦象 JSON 的總成本或節省比例。
 - 已部署 `240f8ca` 並 push GitHub main；Docker healthy、公開 `/api/v1/health` 為 ok，線上 `app.py`／`prompt_cache.py` SHA256 與來源一致，實際 TTL=5m。原後端映像保留為 `hexagram:before-prompt-cache-20261112`。這次僅更新後端，iOS／Android 無需重裝。
+
+## 2026-11-13 低頻快取與解讀 Email（草稿，未發佈）
+
+- 使用者明確要求「先改不發佈，我說發佈再發佈」。所有修改留在 `/opt/hexagram-draft-20261113` 的 `draft/low-frequency-cache-20261113`；未 push、未改 main、未修改正式環境或重啟服務。
+- `AI_PROMPT_CACHE_TTL` 新增 `off` 並設為程式及 compose 預設；關閉時完全不送 `cache_control`。保留手動 `5m`／`1h`、用量紀錄、固定規則原文與 30 天已購結果重用。診斷腳本遇 off 會在載入 App／建立 AI client 前停止，避免無快取仍付費探測。
+- POST `/api/v1/member/questions/<id>/email` 免費寄送已儲存的卜卦 AI 解讀。僅登入本人、本人已驗證信箱、本人未過期紀錄可寄；忽略客戶端提供的收件人或內文；不重新呼叫 AI、不扣果實。內容含問題、卦象、起卦時間及完整解讀。
+- 新增 `divination_questions.ai_email_requested_at`，以單一條件 UPDATE 保護跨 worker／並行寄送，每筆紀錄 60 秒最多一次嘗試；失敗仍保留原解讀且不扣款。後續正常啟動時的 idempotent schema 升級會補欄位，本次只在隔離測試資料庫套用。
+- 驗證：`tests.test_prompt_cache`、`tests.test_privacy_db`、`tests.test_fortune_unlock`、`tests.test_reading_email` 在一次性 PostgreSQL `hexagram_draft_cache_test_20261113` 共 40 項通過。Python compile 與 diff check 通過。AI／Email 供應商全部 mock，未使用正式會員、未產生真實 AI 費用、未寄出真實信件。
+- 對應 App 草稿位於 `/opt/hexagram-app-draft-20261113`。App 解讀結果及個人紀錄加入明確點擊寄送入口；其餘 UI／返回修整見該工作樹 `WORKLOG.md`。
+- 正式環境仍為 main `3b74e5e`、原 Docker image `sha256:398b0e1cd0a6316584fe878a6abef400b313604a0cd0f771df95681b4318bf13`，本次不調整線上 5m 設定。收到發佈指示後才整合乾淨分支、確認正式設定為 off、部署及做受控驗證；目前不執行發佈命令。

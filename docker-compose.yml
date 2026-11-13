@@ -18,8 +18,8 @@ services:
       DB_ENABLED: "1"
       NEW_USER_BONUS: "2"
       FORTUNE_AI_COST: "2"
-      # 固定規則前綴快取：5m 或 1h；低頻使用先保留較低寫入費的 5m
-      AI_PROMPT_CACHE_TTL: "${AI_PROMPT_CACHE_TTL:-5m}"
+      # 固定規則前綴快取：低頻預設 off；可手動啟用 5m 或 1h
+      AI_PROMPT_CACHE_TTL: "${AI_PROMPT_CACHE_TTL:-off}"
       # 管理員名單（email，多個用逗號分隔；值放在 .env，不進 git）
       ADMIN_EMAILS: "${ADMIN_EMAILS:-}"
       # 內部服務共享密鑰（SELFTOOLS 首頁今日指引用；值放 .env）

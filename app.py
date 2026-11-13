@@ -2002,6 +2002,43 @@ def api_member_question_detail(question_id):
     })
 
 
+@app.route("/api/v1/member/questions/<int:question_id>/email", methods=["POST"])
+def api_email_reading(question_id):
+    """Email only an owned, unexpired saved result to the verified account email."""
+    user = current_user()
+    if not user:
+        return jsonify({"error": "未登入或登入已逾期"}), 401
+    if not user.get("email_verified") or not _EMAIL_RE.match(user.get("email") or ""):
+        return jsonify({"error": "請先至「我的」完成 Email 驗證，再寄送解讀。"}), 403
+    row = db.get_user_question(user["id"], question_id)
+    if not row:
+        return jsonify({"error": "找不到這筆卜卦紀錄"}), 404
+    if not (row.get("ai_reading") or "").strip():
+        return jsonify({"error": "這筆紀錄沒有可寄送的 AI 解讀，可能尚未產生或已超過保存期限。"}), 409
+    claimed = db.claim_reading_email(user["id"], question_id)
+    if claimed is None:
+        return jsonify({"error": "暫時無法寄送，請稍後再試。"}), 503
+    if not claimed:
+        return jsonify({"error": "請等候 60 秒後再寄送；若解讀已過期，請返回紀錄確認。"}), 429
+    gua = row.get("ben_gua") or "—"
+    if row.get("bian_gua"):
+        gua += " → " + row["bian_gua"]
+    body = ("命果 MINGO｜你的 AI 解讀結果\n\n"
+            f"所問之事：{row.get('question') or '—'}\n"
+            f"卦象：{gua}\n"
+            f"起卦時間：{row.get('cast_dt') or row.get('created_at') or '—'}\n\n"
+            f"{row['ai_reading']}\n\n"
+            "這是你已保存的解讀，寄送不會扣果實。\n"
+            "卦象是參考，最後如何選擇，由你決定。\n")
+    try:
+        sent = _send_mail(user["email"], "命果 MINGO｜你的 AI 解讀結果", body)
+    except Exception:
+        sent = False
+    if not sent:
+        return jsonify({"error": "寄送失敗，解讀仍保留在 App。請等候 60 秒後再試。"}), 502
+    return jsonify({"ok": True, "email": user["email"]})
+
+
 @app.route("/api/v1/chart", methods=["POST"])
 def api_chart():
     """排盤:日期時間 + 六爻 → 卦象 JSON(確定性、免費、免登入)。
